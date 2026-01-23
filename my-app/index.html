@@ -1,13 +1,105 @@
+<!-- Made by Alexangelo Orozco Gutierrez on January 23, 2026 -->
+
 <!doctype html>
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Hello World!</title>
-
+    <title>Pareidolia Desktop</title>
+    <link rel="stylesheet" href="css/index.css">
   </head>
+
   <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
+
+    <div class="container">
+      <!-- JS function turns on and off which page is visible -->
+      <main class="content">
+        <!-- Logo/Main Menu -->
+        <div id="home" class="page active">
+          <!-- Logo made by Alexangelo Orozco Gutierrez on January 22, 2026 
+           Last Revised on January 23, 2026 -->
+          <img src="assets/logoRevised.png" alt="App Logo" width="400" />
+
+          <!-- URGENT - Font change at some point I don't like this one -->
+          <p style="text-align:center; width:100%; margin-top:1rem; font-size: 4rem; font-family:cursive;">Pareidolia</p>
+        </div>
+        <!-- Project Buttons when project is clicked on -->
+        <div id="project-view" class="page">
+          <h1 id="project-name"></h1>
+          <div class="project-buttons-grid">
+            <button class="project-grid-btn">Images</button>
+            <button class="project-grid-btn">Train</button>
+            <button class="project-grid-btn">Settings</button>
+
+          </div>
+        </div>
+      </main>
+      
+      <!-- Right Sidebar -->
+      <aside class="right-sidebar">
+        <!-- Add Project Button -->
+        <button class="add-project-btn">+ Add Project</button>
+
+        <div class="projects-section">
+          <h3>Projects</h3>
+          <!-- Dummy Projects, to be replaced-->
+          <ul class="projects-list">
+            <li class="project-card">
+              <button class="project-open-btn" value="Project 1">Project 1</button>
+            </li>
+            <li class="project-card">
+              <button class="project-open-btn" value="Project 2">Project 2</button>
+            </li>
+            <li class="project-card">
+              <button class="project-open-btn" value="Project 3">Project 3</button>
+            </li>
+
+          </ul>
+        </div>
+      </aside>
+
+    </div>
+
+
+
     <script type="module" src="/src/renderer.js"></script>
-  </body>
+    <script>
+      // Query selectors
+      const addProjectBtn = document.querySelector('.add-project-btn');
+      const projectOpenBtns = document.querySelectorAll('.project-open-btn');
+      const rightSidebar = document.querySelector('.right-sidebar');
+      const contentArea = document.querySelector('.content');
+      const homeView = document.getElementById('home');
+      const projectView = document.getElementById('project-view');
+      const projectNameDisplay = document.getElementById('project-name');
+
+      // Functions to show/hide views
+      // Works by adding/removing 'active' class
+      function showHome() {
+        homeView.classList.add('active');
+        projectView.classList.remove('active');
+      }
+      // Show project view with name, flip flop of showHome
+      function showProject(projectName) {
+        homeView.classList.remove('active');
+        projectView.classList.add('active');
+        projectNameDisplay.textContent = projectName;
+      }
+
+      // Project buttons click - show project view
+      projectOpenBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const projectName = btn.textContent;
+          showProject(projectName);
+        });
+      });
+
+      // Sidebar click (outside buttons) - return to home
+      rightSidebar.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('project-open-btn') && !e.target.classList.contains('add-project-btn')) {
+          showHome();
+        }
+      });
+
+    </script>
 </html>
