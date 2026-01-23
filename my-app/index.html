@@ -2,12 +2,215 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Hello World!</title>
+    <title>Pareidolia Desktop</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+      }
 
+      .container {
+        display: flex;
+        height: 100vh;
+      }
+
+      .content {
+        flex: 1;
+        padding: 2rem;
+        overflow-y: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* RIGHT SIDEBAR STYLES */
+      .right-sidebar {
+        width: 250px;
+        background-color: #f5f5f5;
+        border-left: 1px solid #ddd;
+        padding: 1.5rem 1rem;
+        overflow-y: auto;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        border-top-left-radius: 24px;
+        border-bottom-left-radius: 24px;
+      }
+
+      .projects-section h3 {
+        font-size: 0.95rem;
+        color: #333;
+        margin-bottom: 0.75rem;
+      }
+
+      .projects-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .project-card {
+        margin-bottom: 0.5rem;
+      }
+
+      /* ADD PROJECT BUTTON STYLES */
+      .add-project-btn {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background-color: #007acc;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+      }
+
+      .add-project-btn:hover {
+        background-color: #005a9e;
+      }
+
+      /* PROJECT BUTTONS STYLES (in sidebar) */
+      .project-open-btn {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        cursor: pointer;
+        text-align: left;
+        transition: background-color 0.2s;
+      }
+
+      .project-open-btn:hover {
+        background-color: #f0f0f0;
+      }
+
+      /* PAGE VISIBILITY STYLES */
+      .page {
+        display: none;
+      }
+
+      .page.active {
+        display: block;
+      }
+
+      /* PROJECT VIEW TITLE */
+      #project-view h1 {
+        font-size: 2.5rem;
+        margin-bottom: 2rem;
+        color: #333;
+      }
+
+      /* GRID LAYOUT BUTTON STYLES */
+      .project-buttons-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        max-width: 500px;
+        margin: 0 auto;
+      }
+
+      /* GRID BUTTONS */
+      .project-grid-btn {
+        padding: 1rem;
+        background-color: #007acc;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.95rem;
+        transition: background-color 0.2s, transform 0.2s;
+      }
+
+      .project-grid-btn:hover {
+        background-color: #005a9e;
+        transform: translateY(-2px);
+      }
+
+    </style>
   </head>
   <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
+    <div class="container">
+
+      <main class="content">
+        <div id="home" class="page active">
+          <img src="assets/logo.png" alt="App Logo" width="400" />
+          <p style="text-align:center; width:100%; margin-top:1rem; font-size: 4rem; font-family:cursive;">Pareidolia</p>
+        </div>
+        <div id="project-view" class="page">
+          <h1 id="project-name"></h1>
+          <div class="project-buttons-grid">
+            <button class="project-grid-btn">Images</button>
+            <button class="project-grid-btn">Train</button>
+            <button class="project-grid-btn">Settings</button>
+
+          </div>
+        </div>
+      </main>
+      
+      <!-- Right Sidebar -->
+      <aside class="right-sidebar">
+        <button class="add-project-btn">+ Add Project</button>
+        <div class="projects-section">
+          <h3>Projects</h3>
+          <ul class="projects-list">
+            <li class="project-card">
+              <button class="project-open-btn" value="Project 1">Project 1</button>
+            </li>
+            <li class="project-card">
+              <button class="project-open-btn" value="Project 2">Project 2</button>
+            </li>
+            <li class="project-card">
+              <button class="project-open-btn" value="Project 3">Project 3</button>
+            </li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+
+
     <script type="module" src="/src/renderer.js"></script>
-  </body>
+    <script>
+      const addProjectBtn = document.querySelector('.add-project-btn');
+      const projectOpenBtns = document.querySelectorAll('.project-open-btn');
+      const rightSidebar = document.querySelector('.right-sidebar');
+      const contentArea = document.querySelector('.content');
+      const homeView = document.getElementById('home');
+      const projectView = document.getElementById('project-view');
+      const projectNameDisplay = document.getElementById('project-name');
+
+      function showHome() {
+        homeView.classList.add('active');
+        projectView.classList.remove('active');
+      }
+
+      function showProject(projectName) {
+        homeView.classList.remove('active');
+        projectView.classList.add('active');
+        projectNameDisplay.textContent = projectName;
+      }
+
+      // Project buttons click - show project view
+      projectOpenBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const projectName = btn.textContent;
+          showProject(projectName);
+        });
+      });
+
+      // Sidebar click (outside buttons) - return to home
+      rightSidebar.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('project-open-btn') && !e.target.classList.contains('add-project-btn')) {
+          showHome();
+        }
+      });
+
+      // Add Project button click
+      addProjectBtn.addEventListener('click', (e) => {
+        showPopup(e, ['New Project', 'Import Project', 'Open Recent']);
+      });
+    </script>
 </html>
