@@ -26,7 +26,7 @@
         <div id="project-view" class="page">
           <h1 id="project-name"></h1>
           <div class="project-buttons-grid">
-            <button class="project-grid-btn">Images</button>
+            <button id="images-btn" class="project-grid-btn">Images</button>
             <button class="project-grid-btn">Train</button>
             <button class="project-grid-btn">Settings</button>
 
@@ -41,36 +41,86 @@
 
         <div class="projects-section">
           <h3>Projects</h3>
-          <!-- Dummy Projects, to be replaced-->
-          <ul class="projects-list">
-            <li class="project-card">
-              <button class="project-open-btn" value="Project 1">Project 1</button>
-            </li>
-            <li class="project-card">
-              <button class="project-open-btn" value="Project 2">Project 2</button>
-            </li>
-            <li class="project-card">
-              <button class="project-open-btn" value="Project 3">Project 3</button>
-            </li>
-
+          <!-- Projects will be loaded dynamically -->
+          <ul class="projects-list" id="projects-list">
           </ul>
         </div>
       </aside>
 
     </div>
 
-
+    <!-- Create Project Modal -->
+    <div id="create-project-modal" class="modal">
+      <div class="modal-content">
+        <h2>Create New Project</h2>
+        <input type="text" id="project-name-input" placeholder="Enter project name" />
+        <div class="modal-buttons">
+          <button id="create-project-confirm" class="btn-primary">Create</button>
+          <button id="create-project-cancel" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="/src/renderer.js"></script>
     <script>
+      // Store current project
+      let currentProject = null;
+
       // Query selectors
       const addProjectBtn = document.querySelector('.add-project-btn');
-      const projectOpenBtns = document.querySelectorAll('.project-open-btn');
       const rightSidebar = document.querySelector('.right-sidebar');
       const contentArea = document.querySelector('.content');
       const homeView = document.getElementById('home');
       const projectView = document.getElementById('project-view');
       const projectNameDisplay = document.getElementById('project-name');
+      const modal = document.getElementById('create-project-modal');
+      const projectNameInput = document.getElementById('project-name-input');
+      const createConfirmBtn = document.getElementById('create-project-confirm');
+      const createCancelBtn = document.getElementById('create-project-cancel');
+      const projectsList = document.getElementById('projects-list');
+
+      // Function to create project button element
+      function createProjectButton(projectData) {
+        const li = document.createElement('li');
+        li.className = 'project-card';
+        const btn = document.createElement('button');
+        btn.className = 'project-open-btn';
+        btn.dataset.project = JSON.stringify(projectData);
+        btn.textContent = projectData.name;
+        
+        // Add click event
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          currentProject = JSON.parse(btn.dataset.project);
+          showProject(currentProject.name);
+        });
+        
+        li.appendChild(btn);
+        return li;
+      }
+
+      // Load existing projects on page load
+      async function loadProjects() {
+        try {
+          const result = await window.electronAPI.loadProjects();
+          
+          if (result.success && result.projects.length > 0) {
+            // Clear the list first
+            projectsList.innerHTML = '';
+            
+            // Add each project to the list
+            result.projects.forEach(projectData => {
+              const projectElement = createProjectButton(projectData);
+              projectsList.appendChild(projectElement);
+            });
+          }
+        } catch (error) {
+          console.error('Error loading projects:', error);
+        }
+      }
+
+      // Load projects when page loads
+      loadProjects();
 
       // Functions to show/hide views
       // Works by adding/removing 'active' class
@@ -85,19 +135,80 @@
         projectNameDisplay.textContent = projectName;
       }
 
-      // Project buttons click - show project view
-      projectOpenBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const projectName = btn.textContent;
-          showProject(projectName);
-        });
-      });
-
       // Sidebar click (outside buttons) - return to home
       rightSidebar.addEventListener('click', (e) => {
         if (!e.target.classList.contains('project-open-btn') && !e.target.classList.contains('add-project-btn')) {
           showHome();
+        }
+      });
+
+      // Images button click - navigate to images.html with project data
+      const imagesBtn = document.getElementById('images-btn');
+      imagesBtn.addEventListener('click', () => {
+        if (currentProject) {
+          // Store project data in sessionStorage
+          sessionStorage.setItem('currentProject', JSON.stringify(currentProject));
+          window.location.href = 'images.html';
+        }
+      });
+
+      // Add Project Button - Show Modal
+      addProjectBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        modal.style.display = 'flex';
+        projectNameInput.value = '';
+        projectNameInput.focus();
+      });
+
+      // Cancel Button - Close Modal
+      createCancelBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+      });
+
+      // Close modal when clicking outside
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+        }
+      });
+
+      // Create Project Button
+      createConfirmBtn.addEventListener('click', async () => {
+        const projectName = projectNameInput.value.trim();
+        
+        if (!projectName) {
+          alert('Please enter a project name');
+          return;
+        }
+
+        try {
+          // Call the Electron API to create the project
+          const result = await window.electronAPI.createProject(projectName);
+          
+          if (result.success) {
+            // Add new project to the list
+            const newProjectData = {
+              name: projectName,
+              directory: result.directory
+            };
+            
+            const projectElement = createProjectButton(newProjectData);
+            projectsList.appendChild(projectElement);
+            
+            modal.style.display = 'none';
+            alert(`Project "${projectName}" created successfully!`);
+          } else {
+            alert('Error creating project: ' + result.error);
+          }
+        } catch (error) {
+          alert('Error creating project: ' + error.message);
+        }
+      });
+
+      // Allow Enter key to create project
+      projectNameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          createConfirmBtn.click();
         }
       });
 

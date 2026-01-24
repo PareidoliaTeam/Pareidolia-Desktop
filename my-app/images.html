@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Images</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .project-info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .info-item {
+            margin: 10px 0;
+        }
+        .label {
+            font-weight: bold;
+            color: #333;
+        }
+        .value {
+            color: #666;
+            margin-left: 10px;
+        }
+        pre {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="project-title">Images</h1>
+    
+    <div class="project-info">
+        <h2>Project Information</h2>
+        <div class="info-item">
+            <span class="label">Name:</span>
+            <span class="value" id="project-name"></span>
+        </div>
+        <div class="info-item">
+            <span class="label">Directory:</span>
+            <span class="value" id="project-directory"></span>
+        </div>
+        <div class="info-item">
+            <span class="label">Full JSON:</span>
+            <pre id="project-json"></pre>
+        </div>
+        <br>
+        <button onclick="window.location.href='index.html'">Back to Project View</button>
+    </div>
+    
+    <script>
+        // Get project data from sessionStorage
+        const projectData = sessionStorage.getItem('currentProject');
+        
+        if (projectData) {
+            const project = JSON.parse(projectData);
+            
+            // Update page title
+            document.getElementById('project-title').textContent = `${project.name} - Images`;
+            
+            // Display project information
+            document.getElementById('project-name').textContent = project.name;
+            document.getElementById('project-directory').textContent = project.directory;
+            document.getElementById('project-json').textContent = JSON.stringify(project, null, 2);
+        } else {
+            document.getElementById('project-title').textContent = 'No Project Selected';
+            document.getElementById('project-name').textContent = 'N/A';
+            document.getElementById('project-directory').textContent = 'N/A';
+            document.getElementById('project-json').textContent = 'No project data available';
+        }
+    </script>
+</body>
+</html>
