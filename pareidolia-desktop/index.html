@@ -1,0 +1,81 @@
+<!-- Made by Alexangelo Orozco Gutierrez on January 23, 2026 -->
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pareidolia Desktop</title>
+    <link rel="stylesheet" href="css/index.css">
+  </head>
+
+  <body>
+
+    <div class="container">
+      <!-- JS function turns on and off which page is visible -->
+      <main class="content">
+        <!-- Logo/Main Menu -->
+        <div id="home" class="page active">
+          <!-- Logo made by Alexangelo Orozco Gutierrez on January 22, 2026 
+           Last Revised on January 23, 2026 -->
+          <img src="assets/logoRevised.png" alt="App Logo" width="400" />
+
+          <!-- URGENT - Font change at some point I don't like this one -->
+          <p style="text-align:center; width:100%; margin-top:1rem; font-size: 4rem; font-family:cursive;">Pareidolia</p>
+        </div>
+        
+        <!-- Project Buttons when project is clicked on -->
+        <div id="project-view" class="page">
+          <h1 id="project-name"></h1>
+          <div class="project-buttons-grid">
+            <!-- 3 buttons. Images, Train, and Settings -->
+            <button class="project-grid-btn" data-page="images" data-image="assets/imageButton.png" value="Images">Images</button>
+            <button class="project-grid-btn" data-page="train" data-image="" value="Train">Train</button>
+            <button class="project-grid-btn" data-page="settings" data-image="" value="Settings">Settings</button>
+          </div>
+        </div>
+      </main>
+
+
+      <!-- Right Sidebar -->
+      <aside class="right-sidebar">
+        <!-- Add Project Button -->
+        <button class="add-project-btn">+ Add Project</button>
+
+        <div class="projects-section">
+          <h3>Projects</h3>
+          <!-- Projects will be dynamically loaded from the Pareidolia folder -->
+          <ul class="projects-list">
+            <!-- Dummy Projects, to be replaced with dynamic loading
+            <li class="project-card">
+              <button class="project-open-btn" value="Apple">Project 1</button>
+            </li>
+            <li class="project-card">
+              <button class="project-open-btn" value="Orange">Project 2</button>
+            </li>
+            <li class="project-card">
+              <button class="project-open-btn" value="Human Face">Project 3</button>
+            </li>
+            -->
+          </ul>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- Add Project Modal -->
+    <div id="add-project-modal" class="modal">
+      <div class="modal-content">
+        <span class="modal-close">&times;</span>
+        <h2>Create New Project</h2>
+        <input type="text" id="project-name-input" placeholder="Enter project name" />
+        <div class="modal-buttons">
+          <button id="modal-create-btn" class="modal-btn modal-create">Create</button>
+          <button id="modal-cancel-btn" class="modal-btn modal-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/renderer.js"></script>
+    <script src="js/index.js"></script>
+  </body>
+</html>

@@ -1,0 +1,269 @@
+/* Made by Alexangelo Orozco Gutierrez on January 23, 2026 */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  display: flex;
+  height: 100vh;
+}
+
+.content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ------------------------- */
+
+/* RIGHT SIDEBAR STYLES */
+.right-sidebar {
+  width: 250px;
+  background-color: #f5f5f5;
+  border-left: 1px solid #ddd;
+  padding: 1.5rem 1rem;
+  overflow-y: auto;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  border-top-left-radius: 24px;
+  border-bottom-left-radius: 24px;
+}
+
+.projects-section h3 {
+  font-size: 0.95rem;
+  color: #333;
+  margin-bottom: 0.75rem;
+}
+
+.projects-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.project-card {
+  margin-bottom: 0.5rem;
+}
+
+/* ADD PROJECT BUTTON STYLES */
+.add-project-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: #697782;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.add-project-btn:hover {
+  background-color: #4a555c;
+}
+
+/* PROJECT BUTTONS STYLES (in sidebar) */
+.project-open-btn {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s;
+}
+
+.project-open-btn:hover {
+  background-color: #f0f0f0;
+}
+
+/* ------------------------- */
+
+
+/* PAGE VISIBILITY STYLES */
+.page {
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+/* PROJECT VIEW TITLE */
+#project-view h1 {
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  color: #333;
+}
+
+/* ------------------------- */
+
+/* GRID LAYOUT BUTTON STYLES */
+.project-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  max-width: 500px;
+  margin: 0 auto;
+  perspective: 1000px;
+}
+
+/* GRID BUTTONS */
+.project-grid-btn {
+  width: 120px;
+  height: 120px;
+  padding: 0;
+  background-color: #007acc;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: background-color 0.2s;
+  animation: buttonDistort 6s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  text-align: center;
+  padding: 0.5rem;
+  box-sizing: border-box;
+}
+
+.project-grid-btn[data-image=""] {
+  background-color: #007acc;
+}
+
+.project-grid-btn[data-image]:not([data-image=""]) {
+  background-color: #007acc;
+}
+
+.project-grid-btn:hover {
+  background-color: #005a9e;
+}
+
+/* ========================= */
+/* MODAL STYLES */
+/* ========================= */
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+  width: 90%;
+  position: relative;
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+.modal-close {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  font-size: 28px;
+  font-weight: bold;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  color: #000;
+}
+
+#project-name-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+  margin-bottom: 1.5rem;
+}
+
+#project-name-input:focus {
+  outline: none;
+  border-color: #007acc;
+  box-shadow: 0 0 5px rgba(0, 122, 204, 0.3);
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: background-color 0.2s;
+}
+
+.modal-create {
+  background-color: #007acc;
+  color: white;
+}
+
+.modal-create:hover {
+  background-color: #005a9e;
+}
+
+.modal-cancel {
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+.modal-cancel:hover {
+  background-color: #d0d0d0;
+}
+/* ========================= */
+  /* transform: translateY(-2px); */
+
+
+/* BUTTON DISTORTION KEYFRAMES */
+@keyframes buttonDistort {
+  0% {
+    transform: rotateY(-15deg);
+  }
+  50% {
+    transform: rotateY(15deg);
+  }
+  100% {
+    transform: rotateY(-15deg);
+  }
+}
+/* ------------------------- */
