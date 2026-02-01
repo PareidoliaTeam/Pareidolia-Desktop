@@ -14,6 +14,7 @@ const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1000,
     height: 800,
+    autoHideMenuBar: true, // remove top bar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
