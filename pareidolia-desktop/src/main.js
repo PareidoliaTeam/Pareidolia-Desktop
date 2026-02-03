@@ -3,7 +3,6 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -198,49 +197,4 @@ ipcMain.handle('create-project-folder', async (event, projectName) => {
  */
 ipcMain.handle('get-pareidolia-path', async () => {
   return await ensurePareidoliaFolder();
-});
-
-/**
- * Handle calling Python scripts via IPC from renderer process
- * @param {string} command - The command to pass to the Python script
- */
-ipcMain.handle('call-python', async (event, command) => {
-  return new Promise((resolve, reject) => {
-    // Get the path to the Python script - use app.getAppPath() for correct base path
-    const basePath = app.isPackaged 
-      ? path.dirname(app.getPath('exe'))
-      : app.getAppPath();
-    const scriptPath = path.join(basePath, 'python', 'train_api.py');
-    
-    // Spawn Python process
-    const pythonProcess = spawn('python3', [scriptPath, command]);
-    
-    let stdout = '';
-    let stderr = '';
-    
-    pythonProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    
-    pythonProcess.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-    
-    pythonProcess.on('close', (code) => {
-      if (code === 0) {
-        try {
-          const result = JSON.parse(stdout.trim());
-          resolve(result);
-        } catch (parseError) {
-          resolve({ success: false, error: 'Failed to parse Python output', raw: stdout });
-        }
-      } else {
-        resolve({ success: false, error: stderr || `Python exited with code ${code}` });
-      }
-    });
-    
-    pythonProcess.on('error', (error) => {
-      resolve({ success: false, error: `Failed to start Python: ${error.message}` });
-    });
-  });
 });
