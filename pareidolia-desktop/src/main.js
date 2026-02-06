@@ -16,6 +16,8 @@ const createWindow = () => {
     height: 800,
     autoHideMenuBar: true, // remove top bar
     webPreferences: {
+      // MUST CHANGE LATER ONLY FOR TESTING
+      webSecurity: false,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
@@ -173,6 +175,32 @@ async function getProjectsList() {
     throw error;
   }
 }
+/**
+ * Gets all images in a selected project.
+ * @param {string} projectPath - the filepath to the project folder
+ * @returns
+ */
+async function getProjectImages(projectPath) {
+  try {
+    // Read all files in path
+    const files = fs.readdirSync(projectPath);
+
+    // Filter for only images
+    const imageExtensions = ['.jpg', '.jpeg', '.png'];
+    const images = files.filter(file => imageExtensions.includes(path.extname(file).toLowerCase())).map(file=> {
+      // Return an object
+      return {
+        name: file,
+        url: `file://${path.join(projectPath, file)}`
+      };
+    });
+
+    return images;
+  } catch(error) {
+    console.error("Failed to read directory:", error);
+    return [];
+  }
+}
 
 
 // ============================================
@@ -198,4 +226,10 @@ ipcMain.handle('create-project-folder', async (event, projectName) => {
  */
 ipcMain.handle('get-pareidolia-path', async () => {
   return await ensurePareidoliaFolder();
+});
+/**
+ * Handle getting the images in a selected project
+ */
+ipcMain.handle('get-project-images', async (event, projectPath) => {
+  return await getProjectImages(projectPath);
 });

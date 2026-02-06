@@ -215,7 +215,7 @@
 
         <div class="image-buttons">
         <button id="import-btn" class="navbar-btn">Import</button>
-        <button class="navbar-btn">View</button>
+        <button id="view-btn" class="navbar-btn" data-page="image-viewer" data-image="" value="View">View</button>
         <button class="navbar-btn">Augment</button>
         </div>
     </div>
@@ -290,6 +290,22 @@
         setTimeout(() => {
           carousel.style.animation = '';
         }, 10);
+      });
+
+      // Open image gallery page
+      const viewBtn = document.getElementById('view-btn');
+
+      viewBtn.addEventListener('click', (e)=> {
+          e.stopPropagation();
+          const page = viewBtn.getAttribute('data-page');
+
+
+          if(page) {
+              sessionStorage.setItem('projectName', projectName);
+              sessionStorage.setItem('projectPath', projectPath);
+              // redirect to page
+              window.location.href = `${page}.html`;
+          }
       });
     </script>
 
