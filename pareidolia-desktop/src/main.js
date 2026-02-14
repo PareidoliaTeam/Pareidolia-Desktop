@@ -201,6 +201,50 @@ async function getProjectImages(projectPath) {
     return [];
   }
 }
+/**
+ * Converts a video file into split images
+ * @returns {string} path to video file
+ */
+
+const {dialog} = require("electron");
+async function convertVideo(projectPath){
+  // open a dialog window for the user to convert a video
+  const result = await dialog.showOpenDialog({
+    title: 'Select a video to convert',
+    properties: ['openFile'],
+    filters: [{ name: 'Videos', extensions: ['mp4', 'mov'] }],
+  });
+
+  if(result.canceled) {
+    return null;
+  } else {
+    const videoPath = result.filePaths[0];
+
+    // run conversion
+    console.log("Converting...")
+    runConversion(videoPath, projectPath);
+    return videoPath;
+  }
+}
+/**
+ * Gets all images in a selected project.
+ * @param {string} videoPath - the filepath to the video
+ * @param {string} projectPath - the filepath to the project
+ * @returns
+ */
+const { PythonShell } = require('python-shell');
+function runConversion(videoPath, projectPath){
+  let options = {
+    mode: 'text',
+    pythonOptions: ['-u'],
+    scriptPath: path.join(app.getAppPath(), 'py'),
+    args: [videoPath, projectPath]
+  };
+  PythonShell.run('extract_images.py', options).then(messages =>{
+    console.log('Conversion complete:', messages);
+  });
+}
+
 
 
 // ============================================
@@ -233,3 +277,9 @@ ipcMain.handle('get-pareidolia-path', async () => {
 ipcMain.handle('get-project-images', async (event, projectPath) => {
   return await getProjectImages(projectPath);
 });
+/**
+ * Handle converting a video file to an image
+ */
+ipcMain.handle('convert-video', async (event, projectPath) => {
+  return await convertVideo(projectPath);
+})
