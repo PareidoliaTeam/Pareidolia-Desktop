@@ -21,7 +21,10 @@ const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1000,
     height: 800,
+    autoHideMenuBar: true, // remove top bar
     webPreferences: {
+      // MUST CHANGE LATER ONLY FOR TESTING
+      webSecurity: false,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
@@ -212,6 +215,78 @@ async function getProjectsList() {
     throw error;
   }
 }
+/**
+ * Gets all images in a selected project.
+ * @param {string} projectPath - the filepath to the project folder
+ * @returns {string<Array>} images - an array of urls to specified images
+ */
+async function getProjectImages(projectPath) {
+  try {
+    // Read all files in path
+    const files = fs.readdirSync(projectPath);
+
+    // Filter for only images
+    const imageExtensions = ['.jpg', '.jpeg', '.png'];
+    const images = files.filter(file => imageExtensions.includes(path.extname(file).toLowerCase())).map(file=> {
+      // Return an object
+      return {
+        name: file,
+        url: `file://${path.join(projectPath, file)}`
+      };
+    });
+
+    return images;
+  } catch(error) {
+    console.error("Failed to read directory:", error);
+    return [];
+  }
+}
+/**
+ * Converts a video file into split images
+ * @param {string} projectPath - the filepath to the project
+ * @returns {string} path to video file
+ */
+
+const {dialog} = require("electron");
+async function convertVideo(projectPath){
+  // open a dialog window for the user to convert a video
+  const result = await dialog.showOpenDialog({
+    title: 'Select a video to convert',
+    properties: ['openFile'],
+    filters: [{ name: 'Videos', extensions: ['mp4', 'mov'] }],
+  });
+
+  if(result.canceled) {
+    return null;
+  } else {
+    const videoPath = result.filePaths[0];
+    const venvPath = getVenvPath();
+    // run conversion
+    console.log("Converting...")
+    return await executePythonScript('py/extract_images.py', [
+      videoPath,
+      projectPath,
+    ], venvPath);
+  }
+}
+/**
+ * Calls extract_images.py and exports images.
+ * @param {string} videoPath - the filepath to the video
+ * @param {string} projectPath - the filepath to the project
+ */
+const { PythonShell } = require('python-shell');
+function runConversion(videoPath, projectPath){
+  let options = {
+    mode: 'text',
+    pythonOptions: ['-u'],
+    scriptPath: path.join(app.getAppPath(), 'py'),
+    args: [videoPath, projectPath]
+  };
+  PythonShell.run('extract_images.py', options).then(messages =>{
+    console.log('Conversion complete:', messages);
+  });
+}
+
 
 
 // ============================================
@@ -519,3 +594,15 @@ ipcMain.handle('execute-train', async (event, params) => {
     epochs.toString()
   ], venvPath);
 });
+/**
+ * Handle getting the images in a selected project
+ */
+ipcMain.handle('get-project-images', async (event, projectPath) => {
+  return await getProjectImages(projectPath);
+});
+/**
+ * Handle converting a video file to an image
+ */
+ipcMain.handle('convert-video', async (event, projectPath) => {
+  return await convertVideo(projectPath);
+})

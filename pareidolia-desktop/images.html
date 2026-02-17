@@ -177,46 +177,15 @@
         <!-- Carousel Effect, continous image  -->
         <div class="carousel-container">
             <div class="carousel-wrapper">
-                <div class="carousel">
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 1" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 2" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 3" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 4" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 5" />
-                    </div>
-                    <!-- Duplicate items for seamless looping -->
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 1" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 2" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 3" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 4" />
-                    </div>
-                    <div class="carousel-item">
-                        <img src="" alt="Project Image 5" />
-                    </div>
-                </div>
+                <div class="carousel"></div>
             </div>
         </div>
 
         <div class="image-buttons">
         <button id="import-btn" class="navbar-btn">Import</button>
-        <button class="navbar-btn">View</button>
+        <button id="view-btn" class="navbar-btn" data-page="image-viewer" value="View">View</button>
         <button class="navbar-btn">Augment</button>
+        <button id="manual-import" class="navbar-btn" data-page="manual-import" value="manual-import">Manual Import</button>
         </div>
     </div>
 
@@ -233,65 +202,8 @@
             <p style="font-size: 0.8rem; color: #888;">Project: <span id="modal-project-name"></span></p>
         </div>
     </div>
-    
-    <script>
-      // Get project name, page value, and project path from sessionStorage
-      const projectName = sessionStorage.getItem('projectName') || 'Project';
-      const pageValue = sessionStorage.getItem('pageValue') || 'Page';
-      const projectPath = sessionStorage.getItem('projectPath') || 'No path';
-      
-      // Display in navbar
-      document.getElementById('navbar-name').textContent = projectName;
-      document.getElementById('navbar-path').textContent = projectPath;
-      
-      // Log the project path for verification
-      console.log('Project Name:', projectName);
-      console.log('Page Value:', pageValue);
-      console.log('Project Path:', projectPath);
 
-      // Modal Logic
-      const modal = document.getElementById('qr-modal');
-      const importBtn = document.getElementById('import-btn');
-      const closeBtn = document.getElementById('close-modal');
-      const qrContainer = document.getElementById('qr-container');
-      const modalProjectName = document.getElementById('modal-project-name');
-
-      function openQRModal() {
-        modal.classList.add('show');
-        modalProjectName.textContent = projectName;
-        
-        // Generate a sample QR code using qrserver.com
-        // In a real app, this would be a link to a mobile upload page
-        const qrContent = `PareidoliaProject:${projectName}:${projectPath}`;
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrContent)}`;
-        
-        qrContainer.innerHTML = `<img src="${qrUrl}" alt="QR Code">`;
-      }
-
-      importBtn.addEventListener('click', openQRModal);
-      
-      closeBtn.addEventListener('click', () => {
-        modal.classList.remove('show');
-      });
-
-      window.addEventListener('click', (event) => {
-        if (event.target == modal) {
-          modal.classList.remove('show');
-        }
-      });
-
-      // Handle carousel looping
-      const carousel = document.querySelector('.carousel');
-      const carouselWrapper = document.querySelector('.carousel-wrapper');
-      
-      carousel.addEventListener('animationiteration', () => {
-        // Reset carousel position for seamless looping
-        carousel.style.animation = 'none';
-        setTimeout(() => {
-          carousel.style.animation = '';
-        }, 10);
-      });
-    </script>
+    <script src="js/images.js"></script>
 
 </body>
 </html>

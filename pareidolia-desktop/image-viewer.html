@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Images</title>
+    <link rel="stylesheet" href="src/index.css">
+    <style>
+        /* Navbar Styles - Unique to images.html */
+        .navbar {
+            background-color: #f5f5f5;
+            color: #333;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-bottom: 1px solid #ddd;
+        }
+
+        .navbar-left {
+            flex: 1;
+        }
+
+        .navbar-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .navbar-path {
+            font-size: 0.85rem;
+            color: #666;
+            word-break: break-all;
+            font-family: monospace;
+            max-width: 60%;
+        }
+
+        .navbar-right {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        /* Main Content */
+        .container {
+            padding: 2rem;
+        }
+
+        .header {
+            padding: 60px;
+            text-align: center;
+            background: #f5f5f5;
+            color: #333;
+            font-size: 30px;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .path-info {
+            padding: 1.5rem;
+            background-color: #f5f5f5;
+            border-left: 4px solid #1abc9c;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .path-info h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .path-info p {
+            margin: 0.5rem 0;
+            color: #555;
+            word-break: break-all;
+            font-family: monospace;
+            background-color: white;
+            padding: 0.5rem;
+            border-radius: 3px;
+        }
+
+        /* Gallery Styles - Unique to image-viewer.html */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            padding:20px;
+        }
+
+        .gallery-item {
+            height: 150px;
+            width: 200px;
+            object-fit: cover;
+            object-position: center;
+            border-radius: 12px;
+            box-shadow: 0 10px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease-in-out;
+            overflow: hidden;
+        }
+
+        .gallery-item:hover {
+            transform: scale(1.1);
+            cursor: pointer;
+        }
+
+        /* Modal Styles - Unique to image-viewer.html */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 9999;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content.side-by-side{
+            background-color: white;
+            display: flex;
+            flex-direction: row;
+            border-radius: 12px;
+            position: relative;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-left {
+            flex: auto;
+            background-color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #modal-preview-img {
+            max-width: 500px;
+            object-fit: cover;
+        }
+
+        .modal-right {
+            flex: auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+            background: white;
+            position: relative;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .action-btn {
+            background-color: #697782;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+            margin-bottom: 1rem;
+        }
+        .modal-title {
+            font-size: 1.5rem;
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .delete { background: #ff4d4d; color: white; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-left">
+            <div class="navbar-title" id="navbar-name">Project</div>
+            <div class="navbar-path" id="navbar-path">Loading...</div>
+        </div>
+        <div class="navbar-right">
+            <button class="navbar-btn" onclick="window.location.href='images.html'">← Back</button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+
+        <!-- Gallery  -->
+        <div class="gallery-grid"></div>
+    </div>
+
+    <!-- Image Options Modal -->
+    <div id="options-modal" class="modal">
+        <div class="modal-content side-by-side">
+            <span class="close-btn" id="close-modal">&times;</span>
+            <div class="modal-left">
+                <img id="modal-preview-img" src="" alt="Preview">
+            </div>
+            <div class="modal-right">
+                <h2 class="modal-title">Image Options</h2>
+                <label for="label">Classification Label:</label>
+                <select name="label" id="label">
+                    <option value="volvo">None</option>
+                    <option value="saab">Apple</option>
+                </select>
+                <div class="modal-actions">
+                    <button class="action-btn">Open in Folder</button>
+                    <button class="action-btn">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="js/image-viewer.js"></script>
+</body>
+</html>
