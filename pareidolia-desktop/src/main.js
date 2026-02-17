@@ -301,7 +301,10 @@ async function setupPythonVenv() {
     console.log('Creating virtual environment at:', venvPath);
     
     // Create venv using Python 3.11
-    const createVenvProcess = spawn('python3.11', ['-m', 'venv', venvPath]);
+    const platform = process.platform;
+    const pythonCommand = platform === 'win32' ? 'py' : 'python3.11';
+    const pythonArgs = platform === 'win32' ? ['-3.11', '-m', 'venv', venvPath] : ['-m', 'venv', venvPath];
+    const createVenvProcess = spawn(pythonCommand, pythonArgs);
     
     let venvError = '';
     
