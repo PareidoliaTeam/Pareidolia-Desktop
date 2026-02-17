@@ -1,0 +1,53 @@
+<!-- Created by Alexangelo Orozco Gutierrez on 2-10-2026
+This is the main page for the training section
+Currently it has an Epochs slider and a train button.
+
+Future implementations will include a sohpisticated "stack" system where a user can preconfigure layers
+with different variable options in order to create a custom model. Users will also be able to select
+spesific datasets to use in the model.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Train</title>
+    <link rel="stylesheet" href="src/index.css">
+    <link rel="stylesheet" href="css/train.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-left">
+            <div class="navbar-title" id="navbar-name">Model</div>
+            <div class="navbar-path" id="navbar-path">Loading...</div>
+        </div>
+        <div class="navbar-right">
+            <button class="navbar-btn" onclick="window.location.href='index.html'">← Back to Models</button>
+        </div>
+    </nav>
+
+    <!-- Training Menu -->
+    <div class="train-container">
+        <div class="train-menu">
+            <h2>Training Configuration</h2>
+            
+            <!-- Contain the box with the title, slider, and Train button -->
+            <div class="menu-section">
+                <label for="epoch-slider">Epochs</label>
+                <div class="slider-container">
+                    <input type="range" id="epoch-slider" class="epoch-slider" min="1" max="100" value="10">
+                    <span id="epoch-display" class="epoch-display">10</span>
+                </div>
+            </div>
+            <p>Training Results: <span id="random-number"></span></p>
+            <br>
+
+            <button id="train-btn" class="train-btn">Train</button>
+        </div>
+    </div>
+    
+    <script src="js/train.js"></script>
+</body>
+</html>

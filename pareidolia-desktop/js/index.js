@@ -223,3 +223,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 
+window.electronAPI.invoke('setup-python-venv')
