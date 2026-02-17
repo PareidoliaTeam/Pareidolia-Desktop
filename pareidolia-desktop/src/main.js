@@ -260,11 +260,13 @@ async function convertVideo(projectPath){
     return null;
   } else {
     const videoPath = result.filePaths[0];
-
+    const venvPath = getVenvPath();
     // run conversion
     console.log("Converting...")
-    runConversion(videoPath, projectPath);
-    return videoPath;
+    return await executePythonScript('py/extract_images.py', [
+      videoPath,
+      projectPath,
+    ], venvPath);
   }
 }
 /**
