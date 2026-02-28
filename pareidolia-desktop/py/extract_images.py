@@ -1,6 +1,7 @@
 import cv2
 import sys
 import os
+from datetime import date
 
 def video_to_frames(video_path, output_folder):
     # create ouput folder if not already present
@@ -11,9 +12,11 @@ def video_to_frames(video_path, output_folder):
     video_capture = cv2.VideoCapture(video_path)
     # get fps to calculate 1/2 second intervals
     fps = video_capture.get(cv2.CAP_PROP_FPS)
-    save_interval = int (round(fps/2)) if fps > 0 else 15
+    save_interval = int (round(fps/4))
     frame_count = 0
     saved_count = 0
+    video_name_f = os.path.basename(video_path)
+    video_name = os.path.splitext(video_name_f)[0]
     success = True
 
     while success:
@@ -23,7 +26,7 @@ def video_to_frames(video_path, output_folder):
         if success:
             if frame_count % save_interval == 0:
                 # create file name
-                file_name = f"frame_{frame_count}.jpg"
+                file_name = f"{video_name}_frame_{frame_count}.jpg"
                 file_path = os.path.join(output_folder, file_name)
             
                 # create jpeg

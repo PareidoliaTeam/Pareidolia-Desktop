@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { execSync } from 'node:child_process';
+import createServer from './express.js';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -44,6 +45,7 @@ const createWindow = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  createServer();
   createWindow();
 
   // On OS X it's common to re-create a window in the app when the
@@ -96,10 +98,28 @@ function getDocumentsPath() {
 }
 
 /**
+ * Gets the local IP address of the machine.
+ * Returns the first non-loopback IPv4 address found.
+ * @returns {string|null} The local IP address or null if not found
+ */
+export function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip internal and non-IPv4 interfaces
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Gets the Pareidolia projects folder path based on the current OS.
  * @returns {string} The full path to the PareidoliaApp folder
  */
-function getPareidoliaFolderPath() {
+export function getPareidoliaFolderPath() {
   const documentsPath = getDocumentsPath();
   return path.join(documentsPath, 'PareidoliaApp');
 }
@@ -146,7 +166,7 @@ async function ensurePareidoliaFolder() {
  * @param {string} projectName - The name of the project folder to create
  * @returns {Promise<string>} The full path to the created project folder
  */
-async function createProjectFolder(projectName) {
+export async function createProjectFolder(projectName) {
   try {
     const pareidoliaPath = await ensurePareidoliaFolder();
     const datasetsPath = path.join(pareidoliaPath, 'datasets');
@@ -172,7 +192,6 @@ async function createProjectFolder(projectName) {
       fs.mkdirSync(negativesPath, { recursive: true });
       console.log(`Created negatives folder at: ${negativesPath}`);
     }
-
     return projectPath;
   } catch (error) {
     console.error(`Error creating project folder: ${error.message}`);
@@ -184,7 +203,7 @@ async function createProjectFolder(projectName) {
  * Gets a list of all project folders in the datasets folder within Pareidolia.
  * @returns {Promise<Array>} Array of objects with name and path properties
  */
-async function getProjectsList() {
+export async function getDatasetsList() {
   try {
     const pareidoliaPath = getPareidoliaFolderPath();
     const datasetsPath = path.join(pareidoliaPath, 'datasets');
@@ -215,12 +234,48 @@ async function getProjectsList() {
     throw error;
   }
 }
+
+/**
+ * Gets a list of all model folders in the models folder within Pareidolia.
+ * @returns {Promise<Array>} Array of objects with name and path properties
+ */
+export async function getModelsList() {
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const modelsPath = path.join(pareidoliaPath, 'models');
+    
+    if (!fs.existsSync(modelsPath)) {
+      return [];
+    }
+
+    const files = fs.readdirSync(modelsPath);
+    const models = [];
+
+    for (const file of files) {
+      const filePath = path.join(modelsPath, file);
+      const stats = fs.statSync(filePath);
+      
+      // Only include directories
+      if (stats.isDirectory()) {
+        models.push({
+          name: file,
+          path: filePath
+        });
+      }
+    }
+
+    return models;
+  } catch (error) {
+    console.error(`Error getting models list: ${error.message}`);
+    throw error;
+  }
+}
 /**
  * Gets all images in a selected project.
  * @param {string} projectPath - the filepath to the project folder
  * @returns {string<Array>} images - an array of urls to specified images
  */
-async function getProjectImages(projectPath) {
+export async function getProjectImages(projectPath) {
   try {
     // Read all files in path
     const files = fs.readdirSync(projectPath);
@@ -294,10 +349,24 @@ function runConversion(videoPath, projectPath){
 // ============================================
 
 /**
- * Handle getting the projects list via IPC from renderer process
+ * Handle getting the datasets list via IPC from renderer process
  */
-ipcMain.handle('get-projects-list', async () => {
-  return await getProjectsList();
+ipcMain.handle('get-datasets-list', async () => {
+  return await getDatasetsList();
+});
+
+/**
+ * Handle getting the models list via IPC from renderer process
+ */
+ipcMain.handle('get-models-list', async () => {
+  return await getModelsList();
+});
+
+/**
+ * Handle getting the local IP address via IPC from renderer process
+ */
+ipcMain.handle('get-local-ip', () => {
+  return getLocalIP();
 });
 
 /**
@@ -324,7 +393,7 @@ ipcMain.handle('get-pareidolia-path', async () => {
  * Used in setUpPythonVenv and executePythonScript functions to ensure the correct Python environment is used.
  * @returns {string} The full path to the venv folder
  */
-function getVenvPath() {
+export function getVenvPath() {
   const pareidoliaPath = getPareidoliaFolderPath();
   return path.join(pareidoliaPath, 'venv');
 }
@@ -480,7 +549,7 @@ ipcMain.handle('setup-python-venv', async () => {
  * However, it is encouraged to make your own IPC handler and use this function within it instead of a
  * general purpose IPC handler for all Python scripts due to spesific needs on the images and train pages.
  */
-function executePythonScript(pythonPath, args = [], venvPath = null) {
+export function executePythonScript(pythonPath, args = [], venvPath = null) {
   return new Promise((resolve) => {
     // Determine which Python executable to use
     let pythonExecutable = 'python3';

@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
+    "express": "^5.2.1",
     "python-shell": "^5.0.0"
   }
 }

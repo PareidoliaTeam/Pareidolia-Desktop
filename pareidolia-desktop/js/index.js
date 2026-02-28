@@ -10,6 +10,7 @@ const projectView = document.getElementById('project-view');
 const projectNameDisplay = document.getElementById('project-name');
 const gridBtns = document.querySelectorAll('.project-grid-btn');
 const projectsList = document.querySelector('.projects-list');
+const qrCodeContainer = document.getElementById('qr-code-container');
 
 // Modal elements
 const addProjectModal = document.getElementById('add-project-modal');
@@ -21,6 +22,45 @@ const modalClose = document.querySelector('.modal-close');
 // ============================================================
 // Functions
 // ============================================================
+
+/**
+ * Generates and displays a QR code for the local server connection.
+ * The QR code contains the local IP address and port 3001.
+ */
+async function generateQRCode() {
+  try {
+    // Get the local IP address from the main process
+    const localIP = await window.electronAPI.invoke('get-local-ip');
+    
+    if (!localIP) {
+      console.error('Could not determine local IP address');
+      qrCodeContainer.textContent = 'Unable to generate QR code';
+      return;
+    }
+    
+    // Construct the server URL
+    const serverURL = `http://${localIP}:3001`;
+    console.log('Generating QR code for:', serverURL);
+    
+    // Clear the container
+    qrCodeContainer.innerHTML = '';
+    
+    // Generate QR code using qrcodejs library
+    new QRCode(qrCodeContainer, {
+      text: serverURL,
+      width: 180,
+      height: 180,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    
+    console.log('QR code generated successfully');
+  } catch (error) {
+    console.error('Error in generateQRCode:', error);
+    qrCodeContainer.textContent = 'Error: ' + error.message;
+  }
+}
 
 /**
  * Shows the home view and hides the project view.
@@ -57,17 +97,16 @@ async function handleAddProject() {
   try {
     const projectPath = await window.electronAPI.invoke('create-project-folder', projectName);
     console.log('Project created at:', projectPath);
-    alert(`Project "${projectName}" created successfully!`);
     
     // Reset input and close modal
     projectNameInput.value = '';
     closeAddProjectModal();
+
     
     // Reload the projects list
     await loadProjectsFromFolder();
   } catch (error) {
     console.error('Error creating project:', error);
-    alert(`Error creating project: ${error.message}`);
   }
 }
 
@@ -100,8 +139,8 @@ async function loadProjectsFromFolder() {
     // Clear existing project buttons
     projectsList.innerHTML = '';
 
-    // Call a new IPC handler to get the list of projects
-    const projects = await window.electronAPI.invoke('get-projects-list');
+    // Call a new IPC handler to get the list of datasets
+    const projects = await window.electronAPI.invoke('get-datasets-list');
     
     // Create buttons for each project
     projects.forEach(projectInfo => {
@@ -220,6 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   await loadProjectsFromFolder();
+  await generateQRCode();
 });
 
 

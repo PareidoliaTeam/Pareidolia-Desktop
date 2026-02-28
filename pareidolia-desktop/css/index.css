@@ -47,6 +47,32 @@
   margin-bottom: 0.5rem;
 }
 
+/* QR CODE SECTION */
+.qr-section {
+  margin-top: 2rem;
+  border-top: 1px solid #ddd;
+  padding-top: 1rem;
+}
+
+.qr-section h3 {
+  font-size: 0.95rem;
+  color: #333;
+  margin-bottom: 0.75rem;
+}
+
+#qr-code-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 0;
+}
+
+
 /* PROJECT BUTTONS STYLES (in sidebar) */
 .project-open-btn {
   width: 100%;
