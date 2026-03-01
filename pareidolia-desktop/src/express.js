@@ -116,7 +116,7 @@ const createServer = () => {
             if (!fs.existsSync(modelFilePath)) {
                 return res.status(404).json({ error: 'Error, no model created' });
             }
-            res.sendFile(modelFilePath);
+            res.download(modelFilePath, 'model.tflite');
         } catch (error) {
             console.error('Error downloading model:', error);
             res.status(500).json({ error: 'Error downloading model', message: error.message });
