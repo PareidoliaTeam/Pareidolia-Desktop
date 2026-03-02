@@ -200,14 +200,14 @@ async function loadProjectsFromFolder() {
     const projects = await window.electronAPI.invoke('get-datasets-list');
     
     // Create buttons for each project
-    projects.forEach(projectInfo => {
+    Object.entries(projects).forEach(([projectName, projectInfo]) => {
       const li = document.createElement('li');
       li.classList.add('project-card');
       
       const button = document.createElement('button');
       button.classList.add('project-open-btn');
       button.value = projectInfo.path;
-      button.textContent = projectInfo.name;
+      button.textContent = projectName;
       button.addEventListener('click', (e) => {
         e.stopPropagation();
         const projectPath = button.getAttribute('value');
@@ -220,7 +220,7 @@ async function loadProjectsFromFolder() {
       projectsList.appendChild(li);
     });
 
-    console.log(`Loaded ${projects.length} projects`);
+    console.log(`Loaded ${Object.keys(projects).length} projects`);
   } catch (error) {
     console.error('Error loading projects:', error);
   }

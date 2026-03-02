@@ -262,7 +262,7 @@ export async function getDatasetsList() {
     }
 
     const files = fs.readdirSync(datasetsPath);
-    const projects = [];
+    const datasets = {};
 
     for (const file of files) {
       const filePath = path.join(datasetsPath, file);
@@ -270,14 +270,13 @@ export async function getDatasetsList() {
       
       // Only include directories
       if (stats.isDirectory()) {
-        projects.push({
-          name: file,
+        datasets[file] = {
           path: filePath
-        });
+        };
       }
     }
 
-    return projects;
+    return datasets;
   } catch (error) {
     console.error(`Error getting projects list: ${error.message}`);
     throw error;
@@ -298,7 +297,7 @@ export async function getModelsList() {
     }
 
     const files = fs.readdirSync(modelsPath);
-    const models = [];
+    const models = {};
 
     for (const file of files) {
       const filePath = path.join(modelsPath, file);
@@ -306,10 +305,9 @@ export async function getModelsList() {
       
       // Only include directories
       if (stats.isDirectory()) {
-        models.push({
-          name: file,
+        models[file] = {
           path: filePath
-        });
+        };
       }
     }
 
