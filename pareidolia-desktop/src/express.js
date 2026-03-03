@@ -80,7 +80,7 @@ const createServer = () => {
      * Query param: name (model name)
      * Example: GET /download-model-mobile?modelName=Flowers
      */
-    app.get('/download-model-mobile', (req, res) => {
+    app.get('/download-model-to-mobile', (req, res) => {
         const modelName = req.query.modelName;
 
         // Validate that modelName was provided
