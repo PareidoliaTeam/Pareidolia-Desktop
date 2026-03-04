@@ -4,6 +4,29 @@ Created by Aleaxngelo Orozco Gutierrez on 2-10-2026
 Currently is supposed to use file paths to get image training data and export a working model
 However, until a virtual envoirment is made with the nseecery packages, it currently returns an error.
 Future work will allow the python function to execute successfully and allow flexible model creation options
+
+--- CONSOLE TESTING ---
+Usage:
+    python train_model.py '<labels_json>' <model_output_path> <epochs>
+
+Arguments:
+    labels_json       - JSON string mapping label names to arrays of folder paths.
+                        Each folder should contain .jpg / .jpeg / .png image files.
+    model_output_path - Full path where model.keras (and model.tflite) will be saved.
+                        The parent directory will be created if it does not exist.
+    epochs            - Integer number of training epochs.
+
+Example (macOS / Linux) — replace the paths with your own folders:
+    python train_model.py '{"Apple": ["/Users/you/images/apples"], "Orange": ["/Users/you/images/oranges"]}' /Users/you/models/fruit/model.keras 10
+
+    python train_model.py '{"Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/positives"], "Not Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/negatives", "/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Orange/positives"]}' /Users/alexangeloorozco/Documents/PareidoliaApp/models/Round/models 3
+
+Example (Windows) — use double-quotes around the JSON and escape inner quotes:
+    python train_model.py "{\"Apple\": [\"C:/images/apples\"], \"Orange\": [\"C:/images/oranges\"]}" C:/models/fruit/model.keras 10
+
+Multiple folders per label are supported:
+    python train_model.py '{"Apple": ["/path/batch1", "/path/batch2"], "Orange": ["/path/oranges"]}' /Users/you/models/fruit/model.keras 20
+-----------------------
 """
 import sys
 import os
@@ -17,12 +40,14 @@ from tensorflow.keras import layers, models
 IMG_HEIGHT = 224
 IMG_WIDTH = 224
 IMG_CHANNELS = 3
-# THIS WILL NEED CHANGING depending on how many labels the user will want to make, so it will not always remain 2 as it appears now
-NUM_CLASSES = 2  # Binary classification: thing present or not present
+# NUM_CLASSES is now determined dynamically from the labels JSON at runtime
 LEARNING_RATE = 0.001
 
-def create_cnn_model():
-    """Creates a CNN model for image classification."""
+def create_cnn_model(num_classes):
+    """Creates a CNN model for image classification.
+    
+    @param num_classes: Number of output classes, determined from labels JSON
+    """
     model = models.Sequential([
         layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)),
         
@@ -52,7 +77,7 @@ def create_cnn_model():
         
         layers.Dense(32, activation='relu'),
         
-        layers.Dense(NUM_CLASSES, activation='softmax')
+        layers.Dense(num_classes, activation='softmax')
     ])
     
     model.compile(
@@ -63,50 +88,57 @@ def create_cnn_model():
     
     return model
 
-def load_images_from_folders(positives_path, negatives_path):
-    """Load images from separate positive and negative folders."""
+def load_images_from_json(labels_json):
+    """Load images from a JSON mapping of label names to arrays of folder paths.
+    
+    @param labels_json: JSON string (or dict) mapping label names to lists of folder paths.
+                        Example: {"Apple": ["/path/to/folder1"], "Orange": ["/path/a", "/path/b"]}
+    @returns: (images, labels, num_classes, label_names)
+              images      - float32 numpy array normalized to [0, 1]
+              labels      - one-hot encoded label array
+              num_classes - number of unique labels found
+              label_names - ordered list of label names (index matches one-hot position)
+    """
+    import json
+
+    if isinstance(labels_json, str):
+        labels_dict = json.loads(labels_json)
+    else:
+        labels_dict = labels_json
+
+    label_names = list(labels_dict.keys())
+    num_classes = len(label_names)
+
     images = []
     labels = []
-    
-    # Load negative images (label 0)
-    if os.path.exists(negatives_path):
-        for img_file in os.listdir(negatives_path):
-            if img_file.lower().endswith(('.jpg', '.jpeg', '.png')):
-                img_path = os.path.join(negatives_path, img_file)
-                
-                img = cv2.imread(img_path)
-                if img is None:
-                    continue
-                    
-                img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                
-                images.append(img)
-                labels.append(0)  # Negative class
-    
-    # Load positive images (label 1)
-    if os.path.exists(positives_path):
-        for img_file in os.listdir(positives_path):
-            if img_file.lower().endswith(('.jpg', '.jpeg', '.png')):
-                img_path = os.path.join(positives_path, img_file)
-                
-                img = cv2.imread(img_path)
-                if img is None:
-                    continue
-                    
-                img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                
-                images.append(img)
-                labels.append(1)  # Positive class
-    
+
+    for label_index, label_name in enumerate(label_names):
+        folder_paths = labels_dict[label_name]
+        for folder_path in folder_paths:
+            if not os.path.exists(folder_path):
+                print(f"Warning: folder not found, skipping: {folder_path}")
+                continue
+            for img_file in os.listdir(folder_path):
+                if img_file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    img_path = os.path.join(folder_path, img_file)
+
+                    img = cv2.imread(img_path)
+                    if img is None:
+                        continue
+
+                    img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                    images.append(img)
+                    labels.append(label_index)
+
     if len(images) == 0:
-        return None, None
-    
+        return None, None, 0, []
+
     images = np.array(images, dtype='float32') / 255.0
-    labels = keras.utils.to_categorical(labels, NUM_CLASSES)
-    
-    return images, labels
+    labels = keras.utils.to_categorical(labels, num_classes)
+
+    return images, labels, num_classes, label_names
 
 def preprocess_frame(frame):
     """Preprocess a frame for prediction."""
@@ -200,37 +232,36 @@ def convert_model_to_tflite(model, X_train, model_folder):
             'error': str(e)
         }
 
-# in the future, multiple paths will be nesecery. a list of paths may be the implementation later on.
-# functions are declared above and used here
+# Functions are declared above and used here
 if __name__ == "__main__":
     # Check for required arguments
-    if len(sys.argv) < 5:
+    # Usage: python train_model.py <labels_json> <model_path> <epochs>
+    #   labels_json - JSON string mapping label names to arrays of folder paths
+    #                 e.g. '{"Apple": ["/path/to/apples"], "Orange": ["/path/a", "/path/b"]}'
+    if len(sys.argv) < 4:
         print("Error: Missing required arguments")
-        print("Usage: python train_model.py <positives_path> <negatives_path> <model_path> <epochs>")
+        print('Usage: python train_model.py <labels_json> <model_path> <epochs>')
         sys.exit(1)
     
     # Get command line arguments
-    positives_path = sys.argv[1]
-    negatives_path = sys.argv[2]
-    model_path = sys.argv[3]
-    epochs = int(sys.argv[4])
+    labels_json_str = sys.argv[1]
+    model_path = sys.argv[2]
+    epochs = int(sys.argv[3])
     
-    print(f"Loading positive images from: {positives_path}")
-    print(f"Loading negative images from: {negatives_path}")
     print(f"Model will be saved to: {model_path}")
     print(f"Training for {epochs} epochs")
     
-    # Load and prepare images
-    X_train, y_train = load_images_from_folders(positives_path, negatives_path)
+    # Load and prepare images from the JSON label map
+    X_train, y_train, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
     
     if X_train is None or len(X_train) == 0:
         print("Error: No images found or failed to load images")
         sys.exit(1)
     
-    print(f"Loaded {len(X_train)} images")
+    print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
     
-    # Create the model
-    model = create_cnn_model()
+    # Create the model with the dynamic class count
+    model = create_cnn_model(NUM_CLASSES)
     print("Model created successfully")
     
     # Train the model
@@ -249,7 +280,7 @@ if __name__ == "__main__":
     final_val_loss = history.history['val_loss'][-1]
     final_val_accuracy = history.history['val_accuracy'][-1]
     
-    # Get the model folder from model_path
+    # Derive the model folder from the model file path
     model_folder = os.path.dirname(model_path)
     
     # Convert model to TFLite and save both formats

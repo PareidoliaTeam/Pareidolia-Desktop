@@ -267,7 +267,7 @@ export async function getDatasetsList() {
     for (const file of files) {
       const filePath = path.join(datasetsPath, file);
       const stats = fs.statSync(filePath);
-      
+
       // Only include directories
       if (stats.isDirectory()) {
         datasets[file] = {
@@ -451,68 +451,63 @@ ipcMain.handle('setup-python-venv', async () => {
 });
 
 /**
- * Handle training model execution via IPC from renderer process
+ * Handle training model execution via IPC from renderer process.
  * @param {Object} event - IPC event
  * @param {Object} params - Training parameters
- * @param {string} params.projectPath - Path to the project folder
- * @param {number} params.epochs - Number of training epochs
+ * @param {Object} params.labelsJson  - Object mapping label names to arrays of folder paths
+ *                                      e.g. { "Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"] }
+ * @param {string} params.modelFolderPath - Path to the model folder where outputs will be saved
+ * @param {number} params.epochs      - Number of training epochs
  */
 ipcMain.handle('execute-train', async (event, params) => {
-  // the two parameters nessecery, more parameters are created based on the project path.
-  const { projectPath, epochs } = params;
-  
-  // Construct paths for positives, negatives, and model within the project folder
-  const positivesPath = path.join(projectPath, 'positives');
-  const negativesPath = path.join(projectPath, 'negatives');
-  const modelFolder = path.join(projectPath, 'model');
-  const modelPath = path.join(modelFolder, 'model.keras');
-  
-  // Ensure the positives directory exists
-  if (!fs.existsSync(positivesPath)) {
+  const { labelsJson, modelFolderPath, epochs } = params;
+
+  // Validate labelsJson
+  if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
     return {
       success: false,
-      error: `Positives folder not found at: ${positivesPath}`,
+      error: 'labelsJson must be a non-empty object mapping label names to arrays of folder paths.',
       timestamp: new Date().toISOString()
     };
   }
-  
-  // Ensure the negatives directory exists
-  if (!fs.existsSync(negativesPath)) {
-    return {
-      success: false,
-      error: `Negatives folder not found at: ${negativesPath}`,
-      timestamp: new Date().toISOString()
-    };
+
+  // Validate that every folder path referenced in labelsJson actually exists
+  for (const [label, folders] of Object.entries(labelsJson)) {
+    for (const folder of folders) {
+      if (!fs.existsSync(folder)) {
+        return {
+          success: false,
+          error: `Folder not found for label "${label}": ${folder}`,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
   }
-  
-  // Ensure the model directory exists
-  if (!fs.existsSync(modelFolder)) {
-    fs.mkdirSync(modelFolder, { recursive: true });
+
+  // Ensure the model output directory exists
+  if (!fs.existsSync(modelFolderPath)) {
+    fs.mkdirSync(modelFolderPath, { recursive: true });
   }
-  
-  // Determine the correct path based on dev/production environment
+
+  const modelPath = path.join(modelFolderPath, 'model.keras');
+
+  // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
-  
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    // Development: use the root py folder
     pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
   } else {
-    // Production: use the bundled py folder
     pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
   }
-  
+
   console.log('Python script path:', pythonScriptPath);
-  console.log('Positives path:', positivesPath);
-  console.log('Negatives path:', negativesPath);
+  console.log('Labels JSON:', labelsJson);
   console.log('Model path:', modelPath);
   console.log('Epochs:', epochs);
-  
-  // Pass positives_path, negatives_path, model_path, and epochs as arguments
-  // Use the venv path for Python execution
+
+  // Pass labels_json, model_path, and epochs as arguments
   const venvPath = getVenvPath();
   return await executePythonScript(pythonScriptPath, [
-    positivesPath,
-    negativesPath,
+    JSON.stringify(labelsJson),
     modelPath,
     epochs.toString()
   ], venvPath);
