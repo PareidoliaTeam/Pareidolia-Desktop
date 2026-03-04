@@ -222,7 +222,7 @@ const createServer = () => {
 
     app.post('/ping', (req, res) => {
         console.log('Ping received at', new Date().toISOString());
-        res.status(201).json({ message: 'pong' });
+        res.status(201).json({ success: true, message: 'pong' });
     });
     
 
