@@ -136,27 +136,28 @@ afterAll(() => {
 // ============================================================
 
 describe('GET /get-datasets', () => {
-  it('returns 200 with a list of datasets', async () => {
-    getDatasetsList.mockResolvedValue([
-      { name: 'cats', path: '/Users/testuser/Documents/PareidoliaApp/datasets/cats' },
-      { name: 'dogs', path: '/Users/testuser/Documents/PareidoliaApp/datasets/dogs' },
-    ]);
+  it('returns 200 with a dictionary of datasets', async () => {
+    getDatasetsList.mockResolvedValue({
+      cats: { path: '/Users/testuser/Documents/PareidoliaApp/datasets/cats' },
+      dogs: { path: '/Users/testuser/Documents/PareidoliaApp/datasets/dogs' },
+    });
 
     const res = await request(app).get('/get-datasets');
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
-    expect(res.body[0].name).toBe('cats');
-    expect(res.body[1].name).toBe('dogs');
+    expect(res.body).toHaveProperty('cats');
+    expect(res.body).toHaveProperty('dogs');
+    expect(res.body.cats.path).toBe('/Users/testuser/Documents/PareidoliaApp/datasets/cats');
+    expect(res.body.dogs.path).toBe('/Users/testuser/Documents/PareidoliaApp/datasets/dogs');
   });
 
-  it('returns 200 with an empty array when no datasets exist', async () => {
-    getDatasetsList.mockResolvedValue([]);
+  it('returns 200 with an empty dictionary when no datasets exist', async () => {
+    getDatasetsList.mockResolvedValue({});
 
     const res = await request(app).get('/get-datasets');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(res.body).toEqual({});
   });
 
   it('returns 500 with error message when getDatasetsList throws', async () => {
@@ -168,15 +169,14 @@ describe('GET /get-datasets', () => {
     expect(res.body).toMatchObject({ error: 'File system error' });
   });
 
-  it('returns objects that include a name and path field', async () => {
-    getDatasetsList.mockResolvedValue([
-      { name: 'birds', path: '/Users/testuser/Documents/PareidoliaApp/datasets/birds' },
-    ]);
+  it('returns objects with path property for each dataset', async () => {
+    getDatasetsList.mockResolvedValue({
+      birds: { path: '/Users/testuser/Documents/PareidoliaApp/datasets/birds' },
+    });
 
     const res = await request(app).get('/get-datasets');
 
-    expect(res.body[0]).toHaveProperty('name');
-    expect(res.body[0]).toHaveProperty('path');
+    expect(res.body.birds).toHaveProperty('path');
   });
 });
 
@@ -185,27 +185,28 @@ describe('GET /get-datasets', () => {
 // ============================================================
 
 describe('GET /get-models', () => {
-  it('returns 200 with a list of models', async () => {
-    getModelsList.mockResolvedValue([
-      { name: 'cat-detector', path: '/Users/testuser/Documents/PareidoliaApp/models/cat-detector' },
-      { name: 'dog-detector', path: '/Users/testuser/Documents/PareidoliaApp/models/dog-detector' },
-    ]);
+  it('returns 200 with a dictionary of models', async () => {
+    getModelsList.mockResolvedValue({
+      'cat-detector': { path: '/Users/testuser/Documents/PareidoliaApp/models/cat-detector' },
+      'dog-detector': { path: '/Users/testuser/Documents/PareidoliaApp/models/dog-detector' },
+    });
 
     const res = await request(app).get('/get-models');
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
-    expect(res.body[0].name).toBe('cat-detector');
-    expect(res.body[1].name).toBe('dog-detector');
+    expect(res.body).toHaveProperty('cat-detector');
+    expect(res.body).toHaveProperty('dog-detector');
+    expect(res.body['cat-detector'].path).toBe('/Users/testuser/Documents/PareidoliaApp/models/cat-detector');
+    expect(res.body['dog-detector'].path).toBe('/Users/testuser/Documents/PareidoliaApp/models/dog-detector');
   });
 
-  it('returns 200 with an empty array when no models exist', async () => {
-    getModelsList.mockResolvedValue([]);
+  it('returns 200 with an empty dictionary when no models exist', async () => {
+    getModelsList.mockResolvedValue({});
 
     const res = await request(app).get('/get-models');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(res.body).toEqual({});
   });
 
   it('returns 500 with error message when getModelsList throws', async () => {
@@ -217,14 +218,13 @@ describe('GET /get-models', () => {
     expect(res.body).toMatchObject({ error: 'Permission denied' });
   });
 
-  it('returns objects that include a name and path field', async () => {
-    getModelsList.mockResolvedValue([
-      { name: 'bird-detector', path: '/Users/testuser/Documents/PareidoliaApp/models/bird-detector' },
-    ]);
+  it('returns objects with path property for each model', async () => {
+    getModelsList.mockResolvedValue({
+      'bird-detector': { path: '/Users/testuser/Documents/PareidoliaApp/models/bird-detector' },
+    });
 
     const res = await request(app).get('/get-models');
 
-    expect(res.body[0]).toHaveProperty('name');
-    expect(res.body[0]).toHaveProperty('path');
+    expect(res.body['bird-detector']).toHaveProperty('path');
   });
 });

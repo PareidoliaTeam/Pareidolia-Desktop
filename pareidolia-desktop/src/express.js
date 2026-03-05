@@ -116,7 +116,7 @@ const createServer = () => {
             if (!fs.existsSync(modelFilePath)) {
                 return res.status(404).json({ error: 'Error, no model created' });
             }
-            res.download(modelFilePath, 'model.tflite');
+            res.download(modelFilePath, `${modelName}.tflite`);
         } catch (error) {
             console.error('Error downloading model:', error);
             res.status(500).json({ error: 'Error downloading model', message: error.message });
@@ -220,9 +220,9 @@ const createServer = () => {
         }
     });
 
-    app.post('ping', (req, res) => {
+    app.post('/ping', (req, res) => {
         console.log('Ping received at', new Date().toISOString());
-        res.json({ message: 'pong' });
+        res.status(201).json({ success: true, message: 'pong' });
     });
     
 
