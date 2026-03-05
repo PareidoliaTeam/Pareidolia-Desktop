@@ -2,7 +2,7 @@
  * Unit tests for getDatasetsList and getModelsList in main.js
  *
  * All file system and Electron calls are mocked so no real files are touched.
- * These tests verify the logic of how folders are read and returned as JSON arrays.
+ * These tests verify the logic of how folders are read and returned as JSON dictionaries.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -66,12 +66,12 @@ describe('getDatasetsList', () => {
     vi.clearAllMocks();
   });
 
-  it('returns an empty array when the datasets folder does not exist', async () => {
+  it('returns an empty dictionary when the datasets folder does not exist', async () => {
     fs.existsSync.mockReturnValue(false);
 
     const result = await getDatasetsList();
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({});
   });
 
   it('returns only directories, not files', async () => {
@@ -84,32 +84,32 @@ describe('getDatasetsList', () => {
 
     const result = await getDatasetsList();
 
-    expect(result).toHaveLength(2);
-    expect(result.map((r) => r.name)).toEqual(['cats', 'dogs']);
+    expect(result).toHaveProperty('cats');
+    expect(result).toHaveProperty('dogs');
+    expect(result).not.toHaveProperty('notes.txt');
   });
 
-  it('returns objects with correct name and path for each dataset', async () => {
+  it('returns objects with correct path for each dataset', async () => {
     fs.existsSync.mockReturnValue(true);
     fs.readdirSync.mockReturnValue(['my-dataset']);
     fs.statSync.mockReturnValue({ isDirectory: () => true });
 
     const result = await getDatasetsList();
 
-    expect(result[0]).toMatchObject({
-      name: 'my-dataset',
+    expect(result['my-dataset']).toMatchObject({
       path: expect.stringContaining('my-dataset'),
     });
     // Path should be inside the PareidoliaApp/datasets directory
-    expect(result[0].path).toContain('datasets');
+    expect(result['my-dataset'].path).toContain('datasets');
   });
 
-  it('returns an empty array when the datasets folder is empty', async () => {
+  it('returns an empty dictionary when the datasets folder is empty', async () => {
     fs.existsSync.mockReturnValue(true);
     fs.readdirSync.mockReturnValue([]);
 
     const result = await getDatasetsList();
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({});
   });
 
   it('throws when the file system returns an unexpected error', async () => {
@@ -131,12 +131,12 @@ describe('getModelsList', () => {
     vi.clearAllMocks();
   });
 
-  it('returns an empty array when the models folder does not exist', async () => {
+  it('returns an empty dictionary when the models folder does not exist', async () => {
     fs.existsSync.mockReturnValue(false);
 
     const result = await getModelsList();
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({});
   });
 
   it('returns only directories, not files', async () => {
@@ -148,32 +148,32 @@ describe('getModelsList', () => {
 
     const result = await getModelsList();
 
-    expect(result).toHaveLength(2);
-    expect(result.map((r) => r.name)).toEqual(['cat-detector', 'dog-detector']);
+    expect(result).toHaveProperty('cat-detector');
+    expect(result).toHaveProperty('dog-detector');
+    expect(result).not.toHaveProperty('readme.md');
   });
 
-  it('returns objects with correct name and path for each model', async () => {
+  it('returns objects with correct path for each model', async () => {
     fs.existsSync.mockReturnValue(true);
     fs.readdirSync.mockReturnValue(['my-model']);
     fs.statSync.mockReturnValue({ isDirectory: () => true });
 
     const result = await getModelsList();
 
-    expect(result[0]).toMatchObject({
-      name: 'my-model',
+    expect(result['my-model']).toMatchObject({
       path: expect.stringContaining('my-model'),
     });
     // Path should be inside the PareidoliaApp/models directory
-    expect(result[0].path).toContain('models');
+    expect(result['my-model'].path).toContain('models');
   });
 
-  it('returns an empty array when the models folder is empty', async () => {
+  it('returns an empty dictionary when the models folder is empty', async () => {
     fs.existsSync.mockReturnValue(true);
     fs.readdirSync.mockReturnValue([]);
 
     const result = await getModelsList();
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({});
   });
 
   it('throws when the file system returns an unexpected error', async () => {

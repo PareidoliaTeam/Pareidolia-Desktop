@@ -258,7 +258,7 @@ export async function getDatasetsList() {
     const datasetsPath = path.join(pareidoliaPath, 'datasets');
     
     if (!fs.existsSync(datasetsPath)) {
-      return [];
+      return {};
     }
 
     const files = fs.readdirSync(datasetsPath);
@@ -293,7 +293,7 @@ export async function getModelsList() {
     const modelsPath = path.join(pareidoliaPath, 'models');
     
     if (!fs.existsSync(modelsPath)) {
-      return [];
+      return {};
     }
 
     const files = fs.readdirSync(modelsPath);
