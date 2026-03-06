@@ -1,8 +1,14 @@
+/*
+  * Last modified by Alexangelo Orozco Gutierrez on 2-28-2026
+  * Added download model route with parameter, uses test file for now
+*/
+
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { getDatasetsList, getModelsList, createProjectFolder, getPareidoliaFolderPath, getVenvPath, executePythonScript, getLocalIP } from './main.js';
+import { getDatasetsList, getModelsList, createDatasetFolder, getPareidoliaFolderPath, getLocalIP } from './main.js';
+import { getVenvPath, executePythonScript } from './python.js';
 
 const createServer = () => {
     const app = express();
@@ -39,14 +45,82 @@ const createServer = () => {
         }
     });
 
+    app.post('/add-dataset', async (req, res) => {
+        const { datasetName } = req.body;
+        if (!datasetName) {
+            return res.status(400).json({ error: 'datasetName is required' });
+        }
+        try {
+            await createDatasetFolder(datasetName);
+            res.status(201).json({ success: true, datasetName });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post('/add-model', async (req, res) => {
+        const { modelName } = req.body;
+        if (!modelName) {
+            return res.status(400).json({ error: 'modelName is required' });
+        }
+        try {
+            await createModelFolder(modelName);
+            res.status(201).json({ success: true, modelName });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    //make image view pagination route for mobile
+
+
     /**
      * GET /download-model-mobile
      * Downloads a model by name
      * Query param: name (model name)
+     * Example: GET /download-model-mobile?modelName=Flowers
      */
-    app.get('/download-model-mobile', (req, res) => {
-        const modelName = req.query.name;
-        res.json({ message: 'Coming Soon' });
+    app.get('/download-model-to-mobile', (req, res) => {
+        const modelName = req.query.modelName;
+
+        // Validate that modelName was provided
+        if (!modelName) {
+            return res.status(400).json({ error: 'Error, modelName parameter is required' });
+        }
+
+        try {
+            // Construct path to the model folder
+            const pareidoliaPath = getPareidoliaFolderPath();
+            const modelPath = path.join(pareidoliaPath, 'models', modelName);
+
+            // Check if model folder exists
+            if (!fs.existsSync(modelPath)) {
+                return res.status(404).json({ error: 'Error, failure to find model folder' });
+            }
+
+            // Construct path to the models subfolder
+            const modelsSubfolderPath = path.join(modelPath, 'models');
+
+            // Check for mock.png file TEST ONLY
+            // const mockImagePath = path.join(modelsSubfolderPath, 'mock.png');
+            // if (!fs.existsSync(mockImagePath)) {
+            //     return res.status(404).json({ error: 'Error, no model created' });
+            // }
+
+            // Send the mock.png file
+            // res.sendFile(mockImagePath);
+
+            // TODO: When model training is complete, replace mock.png with actual model
+            // Uncomment the code below to send the model.tflite file instead:
+            const modelFilePath = path.join(modelsSubfolderPath, 'model.tflite');
+            if (!fs.existsSync(modelFilePath)) {
+                return res.status(404).json({ error: 'Error, no model created' });
+            }
+            res.download(modelFilePath, `${modelName}.tflite`);
+        } catch (error) {
+            console.error('Error downloading model:', error);
+            res.status(500).json({ error: 'Error downloading model', message: error.message });
+        }
     });
 
     /**
@@ -92,7 +166,7 @@ const createServer = () => {
             // Check if dataset exists, if not create it
             if (!fs.existsSync(datasetPath)) {
                 console.log('Dataset does not exist, creating:', datasetName);
-                await createProjectFolder(datasetName);
+                await createDatasetFolder(datasetName);
                 console.log('Dataset created successfully');
             }
             
@@ -146,9 +220,9 @@ const createServer = () => {
         }
     });
 
-    app.post('ping', (req, res) => {
+    app.post('/ping', (req, res) => {
         console.log('Ping received at', new Date().toISOString());
-        res.json({ message: 'pong' });
+        res.status(201).json({ success: true, message: 'pong' });
     });
     
 

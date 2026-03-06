@@ -30,46 +30,53 @@ epochSlider.addEventListener('input', () => {
 });
 
 // Train button click handler
-// Will do actual training in the future, however currently it errors out
-// issue will be fixed once virtual envoirments and package management is implemented
 trainBtn.addEventListener('click', async () => {
     const epochs = epochSlider.value;
-    console.log(`Training started with ${epochs} epochs!`);
+    console.log(`%c[UI] Training started with ${epochs} epochs!`, 'color: #007acc; font-weight: bold;');
+    console.log(`%c[UI] Project Path: ${projectPath}`, 'color: #007acc;');
     
-    /* 
-    Code to call Python script via IPC handler
-    */
     try {
         // Disable button during execution
         trainBtn.disabled = true;
-        //trainBtn.textContent = 'Training...';
+        trainBtn.textContent = 'Training in progress...';
+        
+        const randomNumberDisplay = document.getElementById('random-number');
+        randomNumberDisplay.textContent = 'Training in progress...';
+        randomNumberDisplay.style.color = '#FFA500';
+        
+        console.log('%c[UI] Calling IPC handler: executeTrain', 'color: #007acc; font-weight: bold;');
+        const callStartTime = Date.now();
         
         /* ------------------------------------------------
          Call the Python script via IPC with project path and epochs
-         retuns an object with success flag and output/error message
+         returns an object with success flag and output/error message
         --------------------------------------------------- */
         const result = await window.electronAPI.executeTrain({
             projectPath: projectPath,
             epochs: parseInt(epochs)
         });
         
-        // Update UI with result
-        const randomNumberDisplay = document.getElementById('random-number');
+        const callDuration = Math.round((Date.now() - callStartTime) / 1000);
+        console.log(`%c[UI] IPC handler completed in ${callDuration}s`, 'color: #007acc; font-weight: bold;');
+        console.log('[UI] Result object:', result);
         
+        // Update UI with result
         if (result.success) {
-            //randomNumberDisplay.textContent = result.output;
-            randomNumberDisplay.textContent = 'Training completed successfully!';
+            const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
+            randomNumberDisplay.textContent = `Training completed successfully!${execTime}`;
             randomNumberDisplay.style.color = '#28a745';
-            console.log('Training successful:', result.output);
+            console.log('%c[UI] Training successful!', 'color: #28a745; font-weight: bold;');
+            console.log('[UI] Output:', result.output);
         } else {
-            //randomNumberDisplay.textContent = `Error: ${result.error}`;
-            randomNumberDisplay.textContent = 'Training failed. Check console for details.';
+            const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
+            randomNumberDisplay.textContent = `Training failed.${execTime} Check console for details.`;
             randomNumberDisplay.style.color = '#dc3545';
-            console.error('Training failed:', result.error);
+            console.error('%c[UI] Training failed!', 'color: #dc3545; font-weight: bold;');
+            console.error('[UI] Error:', result.error);
         }
     } catch (error) {
-        // errr handling if for some reason Electron or Python do not run successfully
-        console.error('IPC error:', error);
+        // error handling if for some reason Electron or Python do not run successfully
+        console.error('%c[UI] IPC error:', 'color: #dc3545; font-weight: bold;', error);
         document.getElementById('random-number').textContent = `IPC Error: ${error.message}`;
         document.getElementById('random-number').style.color = '#dc3545';
     } finally {

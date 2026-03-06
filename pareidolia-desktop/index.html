@@ -1,4 +1,7 @@
-<!-- Made by Alexangelo Orozco Gutierrez on January 23, 2026 -->
+<!-- Made by Alexangelo Orozco Gutierrez on January 23, 2026 
+     Last Revised on February 28, 2026 by Alexangelo Orozco Gutierrez
+     Added distinction of Add Dataset and Model buttons
+     Created Separate pop up modals for the buttons -->
 
 <!doctype html>
 <html>
@@ -38,8 +41,11 @@
 
       <!-- Right Sidebar -->
       <aside class="right-sidebar">
-        <!-- Add Project Button -->
-        <button class="add-project-btn">+ Add Model</button>
+        <!-- New Model Button -->
+        <button class="new-model-btn add-project-btn">+ Add Model</button>
+
+        <!-- Add Dataset Button -->
+        <button class="add-dataset-btn add-project-btn">+ Add Dataset</button>
 
         <div class="projects-section">
           <h3>Models</h3>
@@ -68,7 +74,7 @@
 
     </div>
 
-    <!-- Add Project Modal -->
+    <!-- Add Model Modal -->
     <div id="add-project-modal" class="modal">
       <div class="modal-content">
         <span class="modal-close">&times;</span>
@@ -77,6 +83,19 @@
         <div class="modal-buttons">
           <button id="modal-create-btn" class="modal-btn modal-create">Create</button>
           <button id="modal-cancel-btn" class="modal-btn modal-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Dataset Modal -->
+    <div id="add-dataset-modal" class="modal">
+      <div class="modal-content">
+        <span class="modal-close">&times;</span>
+        <h2>Create New Dataset</h2>
+        <input type="text" id="dataset-name-input" class="modal-input" placeholder="Enter dataset name" />
+        <div class="modal-buttons">
+          <button id="modal-create-dataset-btn" class="modal-btn modal-create">Create</button>
+          <button id="modal-cancel-dataset-btn" class="modal-btn modal-cancel">Cancel</button>
         </div>
       </div>
     </div>
