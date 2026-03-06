@@ -228,8 +228,7 @@ export async function createModelFolder(modelName) {
     // Create model-settings.json file
     const settingsPath = path.join(modelPath, 'model-settings.json');
     const defaultSettings = {
-      datasets: [],
-      labels: [],
+      labels: {},
       epochs: 10
     };
 
@@ -247,6 +246,74 @@ export async function createModelFolder(modelName) {
   }
 }
 
+/**
+ * To be used for the training page to update the model-settings.json file with new settings after setting labels, datasets, and epochs.
+ * Example changes could be new labels added so the labels dictionary needs to add its new keys and updating the values of keys with the paths of
+ * the datasets used.
+ * @param {string} modelName - name of the model to focus on, needed to find the model-settings.json file
+ * @param {json} newSettings updated json of the settings to overwrite the file with
+ */
+export async function updateModelSettings(modelName, newSettings) {
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const settingsPath = path.join(pareidoliaPath, 'models', modelName, 'model-settings.json');
+
+    if (!fs.existsSync(settingsPath)) {
+      throw new Error(`Model settings file not found for model: ${modelName}`);
+    }
+
+    fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2));
+    console.log(`Updated model settings for ${modelName} at: ${settingsPath}`);
+  } catch (error) {
+    console.error(`Error updating model settings: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Gets the model settings from the model-settings.json file for a given model.
+ * @param {string} modelName - name of the model to focus on, needed to find the model-settings.json file
+ * @returns {json} settings - the parsed JSON content of the model-settings.json file
+ */
+export async function getModelSettings(modelName) {
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const settingsPath = path.join(pareidoliaPath, 'models', modelName, 'model-settings.json');
+    
+    if (!fs.existsSync(settingsPath)) {
+      throw new Error(`Model settings file not found for model: ${modelName}`);
+    }
+    const settings = fs.readFileSync(settingsPath, 'utf-8');
+    return JSON.parse(settings);
+  } catch (error) {
+    console.error(`Error getting model settings: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * REQUIRES PROPER IMPLEMENTATION
+ * Will create a JSON string to pass to the Python training script with the model path and settings for the specified model. 
+ * This is needed because the training script needs to know where to save the trained model and what settings to train with.
+ * It is easiest to create a string to pass in rather then to give it a file path
+ * @param {string} modelName - name of the model to focus on, needed to find the model folder and settings  
+ * @returns {string} An object containing the model path and settings for the specified model, to be used for training in Python. Example: { modelPath: '/path/to/model/folder', settings: { labels: {}, epochs: 10 } }
+ */
+export async function modelDetailsForPython(modelName) {
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const modelPath = path.join(pareidoliaPath, 'models', modelName);
+    const settings = await getModelSettings(modelName);
+    
+    return {
+      modelPath,
+      settings
+    };
+  } catch (error) {
+    console.error(`Error getting model details for Python: ${error.message}`);
+    throw error;
+  }
+}
 
 /**
  * Gets a list of all project folders in the datasets folder within Pareidolia.
