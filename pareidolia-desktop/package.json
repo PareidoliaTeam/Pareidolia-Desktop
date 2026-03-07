@@ -10,7 +10,10 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "echo \"No linting configured\""
+    "lint": "echo \"No linting configured\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": {
@@ -29,7 +32,9 @@
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron/fuses": "^1.8.0",
     "electron": "40.0.0",
-    "vite": "^5.4.21"
+    "supertest": "^7.2.2",
+    "vite": "^5.4.21",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",

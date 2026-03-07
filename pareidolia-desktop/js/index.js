@@ -1,7 +1,15 @@
+/*
+  * Last modified by Alexangelo Orozco Gutierrez on 2-28-2026
+  * Refactored to separate dataset and model creation functions
+  * Temporarily created Add Model to test main.js fuctiionality
+  * Renamed old button to Add Dataset to better reflect functionality
+*/
+
 // ============================================================
 // Query Selectors
 // ============================================================
-const addProjectBtn = document.querySelector('.add-project-btn');
+const newModelBtn = document.querySelector('.new-model-btn');
+const addDatasetBtn = document.querySelector('.add-dataset-btn');
 const projectOpenBtns = document.querySelectorAll('.project-open-btn');
 const rightSidebar = document.querySelector('.right-sidebar');
 const contentArea = document.querySelector('.content');
@@ -12,12 +20,17 @@ const gridBtns = document.querySelectorAll('.project-grid-btn');
 const projectsList = document.querySelector('.projects-list');
 const qrCodeContainer = document.getElementById('qr-code-container');
 
-// Modal elements
+// Modal elements for Model
 const addProjectModal = document.getElementById('add-project-modal');
 const projectNameInput = document.getElementById('project-name-input');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
-const modalClose = document.querySelector('.modal-close');
+
+// Modal elements for Dataset
+const addDatasetModal = document.getElementById('add-dataset-modal');
+const datasetNameInput = document.getElementById('dataset-name-input');
+const modalCreateDatasetBtn = document.getElementById('modal-create-dataset-btn');
+const modalCancelDatasetBtn = document.getElementById('modal-cancel-dataset-btn');
 
 // ============================================================
 // Functions
@@ -83,20 +96,48 @@ function showProject(projectName) {
 }
 
 /**
- * Creates a new project by prompting the user for a name and creating a folder.
+ * Creates a new dataset by prompting the user for a name and creating a folder.
  * Uses IPC to communicate with the main process to create the folder.
  */
-async function handleAddProject() {
-  const projectName = projectNameInput.value.trim();
+async function handleAddDataset() {
+  const datasetName = datasetNameInput.value.trim();
   
-  if (!projectName) {
-    alert('Project name cannot be empty');
+  if (!datasetName) {
+    alert('Dataset name cannot be empty');
     return;
   }
 
   try {
-    const projectPath = await window.electronAPI.invoke('create-project-folder', projectName);
-    console.log('Project created at:', projectPath);
+    const datasetPath = await window.electronAPI.invoke('create-dataset-folder', datasetName);
+    console.log('Dataset created at:', datasetPath);
+    
+    // Reset input and close modal
+    datasetNameInput.value = '';
+    closeAddDatasetModal();
+
+    
+    // Reload the projects list
+    await loadProjectsFromFolder();
+  } catch (error) {
+    console.error('Error creating dataset:', error);
+  }
+}
+
+/**
+ * Creates a new model by prompting the user for a name and creating a folder.
+ * Uses IPC to communicate with the main process to create the folder.
+ */
+async function handleAddModel() {
+  const modelName = projectNameInput.value.trim();
+  
+  if (!modelName) {
+    alert('Model name cannot be empty');
+    return;
+  }
+
+  try {
+    const modelPath = await window.electronAPI.invoke('create-model-folder', modelName);
+    console.log('Model created at:', modelPath);
     
     // Reset input and close modal
     projectNameInput.value = '';
@@ -106,12 +147,12 @@ async function handleAddProject() {
     // Reload the projects list
     await loadProjectsFromFolder();
   } catch (error) {
-    console.error('Error creating project:', error);
+    console.error('Error creating model:', error);
   }
 }
 
 /**
- * Opens the add project modal dialog.
+ * Opens the add model modal dialog.
  */
 function openAddProjectModal() {
   addProjectModal.classList.add('show');
@@ -119,11 +160,27 @@ function openAddProjectModal() {
 }
 
 /**
- * Closes the add project modal dialog.
+ * Closes the add model modal dialog.
  */
 function closeAddProjectModal() {
   addProjectModal.classList.remove('show');
   projectNameInput.value = '';
+}
+
+/**
+ * Opens the add dataset modal dialog.
+ */
+function openAddDatasetModal() {
+  addDatasetModal.classList.add('show');
+  datasetNameInput.focus();
+}
+
+/**
+ * Closes the add dataset modal dialog.
+ */
+function closeAddDatasetModal() {
+  addDatasetModal.classList.remove('show');
+  datasetNameInput.value = '';
 }
 
 /**
@@ -143,14 +200,14 @@ async function loadProjectsFromFolder() {
     const projects = await window.electronAPI.invoke('get-datasets-list');
     
     // Create buttons for each project
-    projects.forEach(projectInfo => {
+    Object.entries(projects).forEach(([projectName, projectInfo]) => {
       const li = document.createElement('li');
       li.classList.add('project-card');
       
       const button = document.createElement('button');
       button.classList.add('project-open-btn');
       button.value = projectInfo.path;
-      button.textContent = projectInfo.name;
+      button.textContent = projectName;
       button.addEventListener('click', (e) => {
         e.stopPropagation();
         const projectPath = button.getAttribute('value');
@@ -163,7 +220,7 @@ async function loadProjectsFromFolder() {
       projectsList.appendChild(li);
     });
 
-    console.log(`Loaded ${projects.length} projects`);
+    console.log(`Loaded ${Object.keys(projects).length} projects`);
   } catch (error) {
     console.error('Error loading projects:', error);
   }
@@ -177,28 +234,41 @@ async function loadProjectsFromFolder() {
 
 // ========== Sidebar Buttons Navigation ==========
 
-// Add Project button - open modal to create new project
-addProjectBtn.addEventListener('click', (e) => {
+// New Model button - open modal to create new model
+newModelBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   openAddProjectModal();
 });
 
-// Modal Create button - submit project creation
-modalCreateBtn.addEventListener('click', async (e) => {
+// Add Dataset button - open modal to create new dataset
+addDatasetBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  await handleAddProject();
+  openAddDatasetModal();
 });
 
-// Modal Cancel button - close modal without creating
+// Modal Create Model button - submit model creation
+modalCreateBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  await handleAddModel();
+});
+
+// Modal Cancel Model button - close modal without creating
 modalCancelBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   closeAddProjectModal();
 });
 
-// Modal Close button (X) - close modal
-modalClose.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closeAddProjectModal();
+// Modal Close buttons (X) - close respective modals
+document.querySelectorAll('.modal-close').forEach(closeBtn => {
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const modal = closeBtn.closest('.modal');
+    if (modal === addProjectModal) {
+      closeAddProjectModal();
+    } else if (modal === addDatasetModal) {
+      closeAddDatasetModal();
+    }
+  });
 });
 
 // Modal background click - close modal
@@ -208,16 +278,42 @@ addProjectModal.addEventListener('click', (e) => {
   }
 });
 
-// Enter key in input field - submit form
+// Modal Create Dataset button - submit dataset creation
+modalCreateDatasetBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  await handleAddDataset();
+});
+
+// Modal Cancel Dataset button - close modal without creating
+modalCancelDatasetBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeAddDatasetModal();
+});
+
+// Modal background click - close dataset modal
+addDatasetModal.addEventListener('click', (e) => {
+  if (e.target === addDatasetModal) {
+    closeAddDatasetModal();
+  }
+});
+
+// Enter key in model name input field - submit form
 projectNameInput.addEventListener('keypress', async (e) => {
   if (e.key === 'Enter') {
-    await handleAddProject();
+    await handleAddModel();
+  }
+});
+
+// Enter key in dataset name input field - submit form
+datasetNameInput.addEventListener('keypress', async (e) => {
+  if (e.key === 'Enter') {
+    await handleAddDataset();
   }
 });
 
 // Sidebar click (outside buttons) - return to home
 rightSidebar.addEventListener('click', (e) => {
-  if (!e.target.classList.contains('project-open-btn') && !e.target.classList.contains('add-project-btn')) {
+  if (!e.target.classList.contains('project-open-btn') && !e.target.classList.contains('new-model-btn') && !e.target.classList.contains('add-dataset-btn')) {
     showHome();
   }
 });

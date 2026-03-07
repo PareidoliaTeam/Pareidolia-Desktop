@@ -1,6 +1,6 @@
 /*
-  * Last modified by Aleaxngelo Orozco Gutierrez on 2-10-2026
-  * Added Python execution handler and an IPC handler for the train_model.py script
+  * Last modified by Alexangelo Orozco Gutierrez on 2-28-2026
+  * Renamed functions to distinguish dataset and model creation. 
 */
 
 import { app, BrowserWindow, ipcMain } from 'electron';
@@ -8,9 +8,9 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
 import { execSync } from 'node:child_process';
 import createServer from './express.js';
+import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -162,11 +162,11 @@ async function ensurePareidoliaFolder() {
 }
 
 /**
- * Creates a project folder inside the datasets folder within Pareidolia.
- * @param {string} projectName - The name of the project folder to create
- * @returns {Promise<string>} The full path to the created project folder
+ * Creates a dataset folder inside the datasets folder within Pareidolia.
+ * @param {string} projectName - The name of the dataset folder to create
+ * @returns {Promise<string>} The full path to the created dataset folder
  */
-export async function createProjectFolder(projectName) {
+export async function createDatasetFolder(projectName) {
   try {
     const pareidoliaPath = await ensurePareidoliaFolder();
     const datasetsPath = path.join(pareidoliaPath, 'datasets');
@@ -200,6 +200,55 @@ export async function createProjectFolder(projectName) {
 }
 
 /**
+ * Creates a model folder inside the models folder within Pareidolia.
+ * Also creates a model-settings.json file with initial configuration.
+ * @param {string} modelName - The name of the model folder to create
+ * @returns {Promise<string>} The full path to the created model folder
+ */
+export async function createModelFolder(modelName) {
+  try {
+    const pareidoliaPath = await ensurePareidoliaFolder();
+    const modelsPath = path.join(pareidoliaPath, 'models');
+    const modelPath = path.join(modelsPath, modelName);
+
+    if (!fs.existsSync(modelPath)) {
+      fs.mkdirSync(modelPath, { recursive: true });
+      console.log(`Created model folder at: ${modelPath}`);
+    } else {
+      console.log(`Model folder already exists at: ${modelPath}`);
+    }
+
+    // Create models subfolder where trained models are saved
+    const modelsSubfolderPath = path.join(modelPath, 'models');
+    if (!fs.existsSync(modelsSubfolderPath)) {
+      fs.mkdirSync(modelsSubfolderPath, { recursive: true });
+      console.log(`Created models subfolder at: ${modelsSubfolderPath}`);
+    }
+
+    // Create model-settings.json file
+    const settingsPath = path.join(modelPath, 'model-settings.json');
+    const defaultSettings = {
+      datasets: [],
+      labels: [],
+      epochs: 10
+    };
+
+    if (!fs.existsSync(settingsPath)) {
+      fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));
+      console.log(`Created model settings file at: ${settingsPath}`);
+    } else {
+      console.log(`Model settings file already exists at: ${settingsPath}`);
+    }
+
+    return modelPath;
+  } catch (error) {
+    console.error(`Error creating model folder: ${error.message}`);
+    throw error;
+  }
+}
+
+
+/**
  * Gets a list of all project folders in the datasets folder within Pareidolia.
  * @returns {Promise<Array>} Array of objects with name and path properties
  */
@@ -209,11 +258,11 @@ export async function getDatasetsList() {
     const datasetsPath = path.join(pareidoliaPath, 'datasets');
     
     if (!fs.existsSync(datasetsPath)) {
-      return [];
+      return {};
     }
 
     const files = fs.readdirSync(datasetsPath);
-    const projects = [];
+    const datasets = {};
 
     for (const file of files) {
       const filePath = path.join(datasetsPath, file);
@@ -221,14 +270,13 @@ export async function getDatasetsList() {
       
       // Only include directories
       if (stats.isDirectory()) {
-        projects.push({
-          name: file,
+        datasets[file] = {
           path: filePath
-        });
+        };
       }
     }
 
-    return projects;
+    return datasets;
   } catch (error) {
     console.error(`Error getting projects list: ${error.message}`);
     throw error;
@@ -245,11 +293,11 @@ export async function getModelsList() {
     const modelsPath = path.join(pareidoliaPath, 'models');
     
     if (!fs.existsSync(modelsPath)) {
-      return [];
+      return {};
     }
 
     const files = fs.readdirSync(modelsPath);
-    const models = [];
+    const models = {};
 
     for (const file of files) {
       const filePath = path.join(modelsPath, file);
@@ -257,10 +305,9 @@ export async function getModelsList() {
       
       // Only include directories
       if (stats.isDirectory()) {
-        models.push({
-          name: file,
+        models[file] = {
           path: filePath
-        });
+        };
       }
     }
 
@@ -370,10 +417,10 @@ ipcMain.handle('get-local-ip', () => {
 });
 
 /**
- * Handle creating a project folder via IPC from renderer process
+ * Handle creating a dataset folder via IPC from renderer process
  */
-ipcMain.handle('create-project-folder', async (event, projectName) => {
-  return await createProjectFolder(projectName);
+ipcMain.handle('create-dataset-folder', async (event, projectName) => {
+  return await createDatasetFolder(projectName);
 });
 
 /**
@@ -384,151 +431,17 @@ ipcMain.handle('get-pareidolia-path', async () => {
 });
 
 
+/**
+ * Handle creating a model folder via IPC from renderer process
+ */
+ipcMain.handle('create-model-folder', async (event, modelName) => {
+  return await createModelFolder(modelName);
+});
+
+
 // ============================================
 // PYTHON EXECUTION HANDLERS
 // ============================================
-
-/**
- * Gets the path to the Python venv folder.
- * Used in setUpPythonVenv and executePythonScript functions to ensure the correct Python environment is used.
- * @returns {string} The full path to the venv folder
- */
-export function getVenvPath() {
-  const pareidoliaPath = getPareidoliaFolderPath();
-  return path.join(pareidoliaPath, 'venv');
-}
-
-/**
- * Gets the path to the Python executable in the venv.
- * Used in setUpPythonVenv and executePythonScript functions to ensure the correct Python environment is used.
- * @returns {string} The full path to the Python executable
- */
-function getVenvPythonExecutable() {
-  const venvPath = getVenvPath();
-  const platform = process.platform;
-
-  if (platform === 'win32') {
-    // Windows
-    return path.join(venvPath, 'Scripts', 'python.exe');
-  } else {
-    // macOS and Linux
-    return path.join(venvPath, 'bin', 'python');
-  }
-}
-
-/**
- * Checks if a Python virtual environment exists, 
- * creates it if it doesn't, and installs required packages.
- * Located in index.js and runs automatically at startup. 
- * Runs in the background and does not affect the UI.
- * @returns {Promise<Object>} Object with success flag, path, and message
- */
-async function setupPythonVenv() {
-  return new Promise((resolve) => {
-    const venvPath = getVenvPath();
-    
-    // Check if venv already exists
-    if (fs.existsSync(venvPath)) {
-      console.log('Virtual environment already exists at:', venvPath);
-      resolve({
-        success: true,
-        venvPath: venvPath,
-        pythonExecutable: getVenvPythonExecutable(),
-        message: 'Virtual environment already exists'
-      });
-      //returns early if venv already exists to avoid unnecessary setup time on every startup
-      return;
-    }
-
-    //starts venv creation process if venv does not exist
-
-    console.log('Creating virtual environment at:', venvPath);
-    
-    // Create venv using Python 3.11
-    const platform = process.platform;
-    const pythonCommand = platform === 'win32' ? 'py' : 'python3.11';
-    const pythonArgs = platform === 'win32' ? ['-3.11', '-m', 'venv', venvPath] : ['-m', 'venv', venvPath];
-    const createVenvProcess = spawn(pythonCommand, pythonArgs);
-    
-    let venvError = '';
-    
-    createVenvProcess.stderr.on('data', (data) => {
-      venvError += data.toString();
-    });
-    
-    createVenvProcess.on('close', (code) => {
-      if (code === 0) {
-        console.log('Virtual environment created successfully');
-        
-        // Install required packages
-        const pythonExecutable = getVenvPythonExecutable();
-        const packages = ['tensorflow', 'opencv-python', 'numpy'];
-        
-        console.log('Installing required packages:', packages);
-        
-        const pipProcess = spawn(pythonExecutable, ['-m', 'pip', 'install', ...packages]);
-        
-        // Capture stdout from pip process and log it
-        let pipOutput = '';
-        pipProcess.stdout.on('data', (data) => {
-          pipOutput += data.toString();
-          console.log('pip:', data.toString());
-        });
-        
-        // Capture stderr from pip process and log any errors
-        let pipError = '';
-        pipProcess.stderr.on('data', (data) => {
-          pipError += data.toString();
-          console.log('pip error:', data.toString());
-        });
-        
-        pipProcess.on('close', (pipCode) => {
-          if (pipCode === 0) {
-            console.log('Packages installed successfully');
-            resolve({
-              success: true,
-              venvPath: venvPath,
-              pythonExecutable: pythonExecutable,
-              message: 'Virtual environment created and packages installed successfully'
-            });
-          } else {
-            console.error('Error installing packages:', pipError);
-            resolve({
-              success: false,
-              error: pipError || `pip exited with code ${pipCode}`,
-              venvPath: venvPath,
-              pythonExecutable: pythonExecutable
-            });
-          }
-        });
-        
-        pipProcess.on('error', (err) => {
-          console.error('Error running pip:', err);
-          resolve({
-            success: false,
-            error: err.message,
-            venvPath: venvPath,
-            pythonExecutable: pythonExecutable
-          });
-        });
-      } else {
-        console.error('Error creating virtual environment:', venvError);
-        resolve({
-          success: false,
-          error: venvError || `venv creation exited with code ${code}`
-        });
-      }
-    });
-    
-    createVenvProcess.on('error', (err) => {
-      console.error('Error running python -m venv:', err);
-      resolve({
-        success: false,
-        error: err.message
-      });
-    });
-  });
-}
 
 /**
  * IPC handler to setup Python virtual environment
@@ -536,65 +449,6 @@ async function setupPythonVenv() {
 ipcMain.handle('setup-python-venv', async () => {
   return await setupPythonVenv();
 });
-
-/**
- * Executes a Python script and returns the output.
- * @param {string} pythonPath - The path to the Python script
- * @param {Array} args - Command line arguments to pass to the script
- * @param {string} venvPath - Optional path to the venv folder
- * @returns {Promise<Object>} Object with success flag, output/error, and timestamp
- * 
- * 
- * This spesific function will be used in any IPC handler involving a python script.
- * However, it is encouraged to make your own IPC handler and use this function within it instead of a
- * general purpose IPC handler for all Python scripts due to spesific needs on the images and train pages.
- */
-export function executePythonScript(pythonPath, args = [], venvPath = null) {
-  return new Promise((resolve) => {
-    // Determine which Python executable to use
-    let pythonExecutable = 'python3';
-    if (venvPath) {
-      pythonExecutable = getVenvPythonExecutable();
-    }
-    
-    const pythonProcess = spawn(pythonExecutable, [pythonPath, ...args]);
-    
-    let output = '';
-    let error = '';
-    
-    pythonProcess.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-    
-    pythonProcess.stderr.on('data', (data) => {
-      error += data.toString();
-    });
-    
-    pythonProcess.on('close', (code) => {
-      if (code === 0) {
-        resolve({
-          success: true,
-          output: output.trim(),
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        resolve({
-          success: false,
-          error: error || `Process exited with code ${code}`,
-          timestamp: new Date().toISOString()
-        });
-      }
-    });
-    
-    pythonProcess.on('error', (err) => {
-      resolve({
-        success: false,
-        error: err.message,
-        timestamp: new Date().toISOString()
-      });
-    });
-  });
-}
 
 /**
  * Handle training model execution via IPC from renderer process
