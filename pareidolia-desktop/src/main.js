@@ -278,7 +278,7 @@ export async function getDatasetsList() {
 
     return datasets;
   } catch (error) {
-    console.error(`Error getting projects list: ${error.message}`);
+    console.error(`Error getting datasets list: ${error.message}`);
     throw error;
   }
 }

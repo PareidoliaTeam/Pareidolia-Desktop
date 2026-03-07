@@ -233,7 +233,7 @@ async function handleAddProject() {
     }
 
     try {
-        const modelPath = await window.electronAPI.invoke('create-project-folder', modelName);
+        const modelPath = await window.electronAPI.invoke('create-model-folder', modelName);
         console.log('Model created at:', modelPath);
 
         // Reset input and close modal
@@ -306,14 +306,14 @@ async function loadDatasetsFromFolder() {
         const datasets = await window.electronAPI.invoke('get-datasets-list');
 
         // Create buttons for each project
-        datasets.forEach(datasetInfo => {
+        Object.entries(datasets).forEach(([datasetName, datasetInfo]) => {
             const li = document.createElement('li');
             li.classList.add('dataset-item');
 
             const div = document.createElement('div');
             div.classList.add('dataset-open-btn');
             div.setAttribute('data-path', datasetInfo.path);
-            div.textContent = datasetInfo.name;
+            div.textContent = datasetName;
 
             div.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -328,7 +328,7 @@ async function loadDatasetsFromFolder() {
 
         console.log(`Loaded ${datasets.length} projects`);
     } catch (error) {
-        console.error('Error loading projects:', error);
+        console.error('Error loading datasets:', error);
     }
 }
 
@@ -345,18 +345,18 @@ async function loadModelsFromFolder() {
         // Clear existing project buttons
         modelsList.innerHTML = '';
 
-        // Call a new IPC handler to get the list of datasets (need to switch to models)
-        const models = await window.electronAPI.invoke('get-datasets-list');
+        // Call a new IPC handler to get the list of models
+        const models = await window.electronAPI.invoke('get-models-list');
 
         // Create buttons for each project
-        models.forEach(modelInfo => {
+        Object.entries(models).forEach(([modelName, modelInfo]) => {
             const li = document.createElement('li');
             li.classList.add('model-item');
 
             const div = document.createElement('div');
             div.classList.add('model-open-btn');
             div.setAttribute('data-path', modelInfo.path);
-            div.textContent = modelInfo.name;
+            div.textContent = modelName;
             div.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const modelPath = div.getAttribute('data-path');
@@ -369,7 +369,7 @@ async function loadModelsFromFolder() {
 
         console.log(`Loaded ${models.length} projects`);
     } catch (error) {
-        console.error('Error loading projects:', error);
+        console.error('Error loading models:', error);
     }
 }
 /**
