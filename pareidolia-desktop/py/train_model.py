@@ -245,10 +245,10 @@ if __name__ == "__main__":
     
     # Get command line arguments
     labels_json_str = sys.argv[1]
-    model_path = sys.argv[2]
+    model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
     
-    print(f"Model will be saved to: {model_path}")
+    print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
     
     # Load and prepare images from the JSON label map
@@ -279,9 +279,6 @@ if __name__ == "__main__":
     final_accuracy = history.history['accuracy'][-1]
     final_val_loss = history.history['val_loss'][-1]
     final_val_accuracy = history.history['val_accuracy'][-1]
-    
-    # Derive the model folder from the model file path
-    model_folder = os.path.dirname(model_path)
     
     # Convert model to TFLite and save both formats
     print("Converting model to TFLite format...")

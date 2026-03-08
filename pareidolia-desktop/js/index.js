@@ -17,8 +17,12 @@ const homeView = document.getElementById('home');
 const projectView = document.getElementById('project-view');
 const projectNameDisplay = document.getElementById('project-name');
 const gridBtns = document.querySelectorAll('.project-grid-btn');
-const projectsList = document.querySelector('.projects-list');
+const datasetsList = document.querySelector('.datasets-list');
+const modelsList = document.querySelector('.models-list');
 const qrCodeContainer = document.getElementById('qr-code-container');
+const imagesBtn = document.querySelector('.project-grid-btn[data-page="images"]');
+const trainBtn = document.querySelector('.project-grid-btn[data-page="train"]');
+const settingsBtn = document.querySelector('.project-grid-btn[data-page="settings"]');
 
 // Modal elements for Model
 const addProjectModal = document.getElementById('add-project-modal');
@@ -89,10 +93,21 @@ function showHome() {
  * Inverse of showHome() - hides home view and adds 'active' class to project view.
  * @param {string} projectName - The name of the project to display
  */
-function showProject(projectName) {
+function showProject(projectName, type) {
   homeView.classList.remove('active');
   projectView.classList.add('active');
   projectNameDisplay.textContent = projectName;
+
+  // Show only the relevant button for the project type
+  if (type === 'dataset') {
+    imagesBtn.style.display = '';
+    trainBtn.style.display = 'none';
+    settingsBtn.style.display = 'none';
+  } else if (type === 'model') {
+    imagesBtn.style.display = 'none';
+    trainBtn.style.display = '';
+    settingsBtn.style.display = 'none';
+  }
 }
 
 /**
@@ -117,7 +132,8 @@ async function handleAddDataset() {
 
     
     // Reload the projects list
-    await loadProjectsFromFolder();
+    await loadDatasetsFromFolder();
+    await loadModelsFromFolder();
   } catch (error) {
     console.error('Error creating dataset:', error);
   }
@@ -145,7 +161,8 @@ async function handleAddModel() {
 
     
     // Reload the projects list
-    await loadProjectsFromFolder();
+    await loadDatasetsFromFolder();
+    await loadModelsFromFolder();
   } catch (error) {
     console.error('Error creating model:', error);
   }
@@ -187,42 +204,89 @@ function closeAddDatasetModal() {
  * Loads all project folders from the Pareidolia folder and creates buttons for them.
  * Each button has the folder path as its value.
  */
-async function loadProjectsFromFolder() {
+async function loadDatasetsFromFolder() {
   try {
     // First ensure the Pareidolia folder exists
     const pareidoliaPath = await window.electronAPI.invoke('get-pareidolia-path');
     console.log('Pareidolia path:', pareidoliaPath);
 
-    // Clear existing project buttons
-    projectsList.innerHTML = '';
+    // Clear existing dataset buttons
+    datasetsList.innerHTML = '';
 
     // Call a new IPC handler to get the list of datasets
-    const projects = await window.electronAPI.invoke('get-datasets-list');
+    const datasets = await window.electronAPI.invoke('get-datasets-list');
     
-    // Create buttons for each project
-    Object.entries(projects).forEach(([projectName, projectInfo]) => {
+    // Create buttons for each dataset
+    Object.entries(datasets).forEach(([datasetName, datasetInfo]) => {
       const li = document.createElement('li');
       li.classList.add('project-card');
       
       const button = document.createElement('button');
       button.classList.add('project-open-btn');
-      button.value = projectInfo.path;
-      button.textContent = projectName;
+      button.value = datasetInfo.path;
+      button.textContent = datasetName;
       button.addEventListener('click', (e) => {
         e.stopPropagation();
-        const projectPath = button.getAttribute('value');
-        const projectDisplayName = button.textContent;
-        showProject(projectDisplayName);
-        sessionStorage.setItem('projectPath', projectPath);
+        const datasetPath = button.getAttribute('value');
+        const datasetDisplayName = button.textContent;
+        showProject(datasetDisplayName, 'dataset');
+        sessionStorage.setItem('datasetPath', datasetPath);
+        sessionStorage.setItem('projectPath', datasetPath);
+        sessionStorage.setItem('projectName', datasetDisplayName);
       });
 
       li.appendChild(button);
-      projectsList.appendChild(li);
+      datasetsList.appendChild(li);
     });
 
-    console.log(`Loaded ${Object.keys(projects).length} projects`);
+    console.log(`Loaded ${Object.keys(datasets).length} datasets`);
   } catch (error) {
-    console.error('Error loading projects:', error);
+    console.error('Error loading datasets:', error);
+  }
+}
+
+/**
+ * Loads all models folders from the Pareidolia folder and creates buttons for them.
+ * Each button has the folder path as its value.
+ */
+async function loadModelsFromFolder() {
+  try {
+    // First ensure the Pareidolia folder exists
+    const pareidoliaPath = await window.electronAPI.invoke('get-pareidolia-path');
+    console.log('Pareidolia path:', pareidoliaPath);
+
+    // Clear existing model buttons
+    modelsList.innerHTML = '';
+
+    // Call a new IPC handler to get the list of models
+    const models = await window.electronAPI.invoke('get-models-list');
+    
+    // Create buttons for each model
+    Object.entries(models).forEach(([modelName, modelInfo]) => {
+      const li = document.createElement('li');
+      li.classList.add('project-card');
+      
+      const button = document.createElement('button');
+      button.classList.add('project-open-btn');
+      button.value = modelInfo.path;
+      button.textContent = modelName;
+      button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const modelPath = button.getAttribute('value');
+        const modelDisplayName = button.textContent;
+        showProject(modelDisplayName, 'model');
+        sessionStorage.setItem('modelPath', modelPath);
+        sessionStorage.setItem('projectPath', modelPath);
+        sessionStorage.setItem('projectName', modelDisplayName);
+      });
+
+      li.appendChild(button);
+      modelsList.appendChild(li);
+    });
+
+    console.log(`Loaded ${Object.keys(models).length} models`);
+  } catch (error) {
+    console.error('Error loading models:', error);
   }
 }
 
@@ -354,7 +418,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  await loadProjectsFromFolder();
+  await loadDatasetsFromFolder();
+  await loadModelsFromFolder();
   await generateQRCode();
 });
 

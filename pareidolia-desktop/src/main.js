@@ -274,6 +274,24 @@ export async function updateModelSettings(modelName, newSettings) {
  * Gets the model settings from the model-settings.json file for a given model.
  * @param {string} modelName - name of the model to focus on, needed to find the model-settings.json file
  * @returns {json} settings - the parsed JSON content of the model-settings.json file
+ * 
+ * Example output: 
+ * { name: "Fruits",
+ *  labels: 
+ *  { "Apple": 
+ *    { "Fuji Apples": "/path/folder1" , 
+ *     "Gala Apples": "/path/folder2" }, 
+ *    "Orange": 
+ *      { "Navel Oranges": "/path/a", 
+ *      "Blood Oranges": "/path/b" } 
+ *  }, 
+ *  epochs: 10 
+ * }
+ * Labels is a key with a value of a dictionary with the keys Labels.
+ * Labels hav values of dictionaries with the Dataset name as keys and their paths as values. 
+ * This way we can have multiple datasets for each label.
+ * 
+ * The current structure helps organize data while also makign future additions possible, such as storing settings.
  */
 export async function getModelSettings(modelName) {
   try {
@@ -292,21 +310,30 @@ export async function getModelSettings(modelName) {
 }
 
 /**
- * REQUIRES PROPER IMPLEMENTATION
- * Will create a JSON string to pass to the Python training script with the model path and settings for the specified model. 
- * This is needed because the training script needs to know where to save the trained model and what settings to train with.
- * It is easiest to create a string to pass in rather then to give it a file path
- * @param {string} modelName - name of the model to focus on, needed to find the model folder and settings  
- * @returns {string} An object containing the model path and settings for the specified model, to be used for training in Python. Example: { modelPath: '/path/to/model/folder', settings: { labels: {}, epochs: 10 } }
+ * Builds the training details to pass to the Python training script.
+ * Constructs labelsJson ({ LabelName: [path1, path2, ...] }) from model settings
+ * and resolves the model output folder path.
+ * @param {string} modelName - name of the model to focus on
+ * @returns {Object} { modelFolderPath, labelsJson, settings }
+ *   modelFolderPath - path to the models subfolder where trained outputs are saved
+ *   labelsJson      - flat label-to-paths map ready for the Python script
+ *   settings        - full model-settings.json contents
  */
 export async function modelDetailsForPython(modelName) {
   try {
     const pareidoliaPath = getPareidoliaFolderPath();
     const modelPath = path.join(pareidoliaPath, 'models', modelName);
     const settings = await getModelSettings(modelName);
-    
+
+    const labelsJson = {};
+    for (const [labelName, datasets] of Object.entries(settings.labels || {})) {
+      // Each dataset folder contains a positives/ subfolder with the training images
+      labelsJson[labelName] = Object.values(datasets).map(p => path.join(p, 'positives'));
+    }
+
     return {
-      modelPath,
+      modelFolderPath: path.join(modelPath, 'models'),
+      labelsJson,
       settings
     };
   } catch (error) {
@@ -556,7 +583,7 @@ ipcMain.handle('execute-train', async (event, params) => {
     fs.mkdirSync(modelFolderPath, { recursive: true });
   }
 
-  const modelPath = path.join(modelFolderPath, 'model.keras');
+  const modelPath = modelFolderPath;
 
   // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
@@ -590,4 +617,27 @@ ipcMain.handle('get-project-images', async (event, projectPath) => {
  */
 ipcMain.handle('convert-video', async (event, projectPath) => {
   return await convertVideo(projectPath);
-})
+});
+
+/**
+ * Handle getting model details for Python training via IPC from renderer process.
+ * Returns the pre-built labelsJson, model output folder path, and full settings.
+ */
+ipcMain.handle('get-model-details-for-python', async (event, modelName) => {
+  return await modelDetailsForPython(modelName);
+});
+
+/**
+ * Handle getting model settings via IPC from renderer process
+ */
+ipcMain.handle('get-model-settings', async (event, modelName) => {
+  return await getModelSettings(modelName);
+});
+
+/**
+ * Handle updating model settings via IPC from renderer process
+ */
+ipcMain.handle('update-model-settings', async (event, params) => {
+  const { modelName, newSettings } = params;
+  return await updateModelSettings(modelName, newSettings);
+});
