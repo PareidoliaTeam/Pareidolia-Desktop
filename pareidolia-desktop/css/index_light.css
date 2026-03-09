@@ -1,0 +1,561 @@
+
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+  background-color: lightgray;
+}
+
+.container {
+  display: flex;
+  height: 100vh;
+}
+
+/* MODELS LEFT SIDEBAR STYLES */
+.left-sidebar-models,
+.left-sidebar-datasets {
+  width: 260px;
+  flex-shrink: 0;
+  background-color: white;
+  display: none;
+  flex-direction: column;
+  padding: 20px;
+  border-right: 1px solid #ddd;
+}
+
+.header h1 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  border-bottom: 1px solid darkgray;
+}
+.header img {
+  margin-left: auto;
+}
+
+.navbar {
+  background-color: #f5f5f5;
+  color: #333;
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.version {
+  font-size: 0.7rem; color: #888;
+}
+
+.hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 20px 0;
+}
+
+.dataset-list,
+.model-list {
+  overflow-y: auto;
+}
+
+.dataset-section,
+.model-section {
+  position: sticky;
+  justify-content: center;
+  gap: 20px;
+  font-size: 0.9rem;
+  color: darkgray;
+}
+
+.dataset-item,
+.model-item {
+  background: #e0e0e0;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.sidebar-active {
+  display: flex !important;
+}
+
+.negative-btn{
+  margin-top: auto;
+  background: darkred;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.back-btn {
+  background: #333333;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.action-btn,
+.modal-btn-modal-create,
+.view-gallery-btn,
+.btm-btn,
+.upload-btn-sidebar,
+.create-btn {
+  margin-top: auto;
+  background: #333333;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* MAIN WINDOW STYLE */
+.main-view {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+
+.dataset h2 {
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+}
+
+.dataset-button-group {
+  display: flex;
+  gap: 15px;
+}
+
+.dataset-btn {
+  background: #333333;
+  color: white;
+  border: none;
+  padding: 12px 40px;
+  border-radius: 8px;
+  min-width: 150px;
+  cursor: pointer;
+}
+
+.bottom {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 15px;
+}
+
+/* CREATE MODEL VIEW STYLE */
+.modal-content {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  width: 50%;
+  max-width: 300px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+.create-model-modal {
+  display: none;
+  position: fixed;
+  z-index: 100;
+  left: 0;
+  top: 0;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.close-btn,
+.modal-close {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  color: #aaa;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+  color: #333333;
+  text-decoration: none;
+}
+
+.modal-btn {
+  padding: 10px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+}
+
+/* HELP MODAL STYLE */
+.modal,
+.qr-modal,
+.help-modal{
+  display: none;
+  position: fixed;
+  z-index: 100;
+  left: 0;
+  top: 0;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content,
+.help-modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 75vh;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow-y: auto;
+}
+
+/* SETTINGS MODAL STYLE */
+.settings-modal{
+  display: none;
+  position: fixed;
+  z-index: 100;
+  left: 0;
+  top: 0;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.settings-modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 75vh;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow-y: auto;
+}
+
+/* APP VIEW STYLE */
+.app-view{
+  display: none;
+  flex-direction: column;
+  flex-grow: 1;
+  padding: 20px;
+}
+
+#view-home{
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+/* TRAIN / PROJECT STYLE */
+.train-btn { background: #333; color: white; border: none; }
+.send-btn { background: #e0e0e0; color: #aaa; border: none; }
+
+/* MAIN VIEW AREA*/
+.main-view {
+  background-color: #f5f5f5;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.app-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0; /*40 is default but 0 makes it look like the old one*/
+}
+
+/* PROJECT HEADER STYLE */
+.project-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.filepath {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* SETTINGS LAYOUT*/
+.settings-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 20px;
+  flex-grow: 1;
+}
+
+
+.qr-section.side-by-side {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  max-width: 550px;
+  padding: 2.5rem;
+  gap: 30px;
+
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+
+.qr-content-left {
+  flex: 0 0 auto;
+  text-align: center;
+}
+
+.qr-content-left h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+
+.qr-content-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: left;
+  border-left: 1px solid #eee;
+  padding-left: 20px;
+}
+
+.qr-content-right p {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.qr-content-right span {
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+/* DATASET LIST SELECTION */
+#view-dataset-home span {
+  display: block;
+  text-align: center;
+  width: 100%;
+  margin: 20px 0;
+  color: #666;
+}
+
+.dataset-select {
+  list-style: none;
+  padding: 0;
+}
+
+.dataset-select li {
+  margin-bottom: 15px;
+  font-weight: 500;
+}
+
+.dataset-select span {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  font-weight: normal;
+  margin-left: 25px;
+}
+
+/* FOOTEER STYLE */
+.project-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 20px;
+}
+
+.train-btn, .send-btn {
+  padding: 10px 30px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+/* CAROUSEL STYLE */
+.carousel-container {
+  display: flex;
+  padding: 1.5rem 0;
+  border-top: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+}
+
+.carousel-wrapper {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.carousel {
+  display: flex;
+  gap: 1rem;
+  animation: slideLeft 20s linear infinite;
+  width: max-content;
+}
+
+.carousel-item {
+  flex-shrink: 0;
+  aspect-ratio: 4 / 3;
+  width: 300px;
+  height: 225px;
+  background-color: #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.carousel-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: scale-down;
+}
+
+
+@keyframes slideLeft {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(calc(-300px * 5 - 1rem * 5));
+  }
+}
+
+/* GALLERY STYLE */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  padding:20px;
+}
+
+.gallery-item {
+  height: 150px;
+  width: 200px;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 12px;
+  box-shadow: 0 10px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease-in-out;
+  overflow: hidden;
+}
+
+.gallery-item:hover {
+  transform: scale(1.1);
+  cursor: pointer;
+}
+
+#modal-preview-img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  display: block;
+}
+
+.modal-content.side-by-side {
+  display: flex;
+  flex-direction: row;
+  max-width: 800px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.image-modal-left {
+  flex: 1.5;
+  background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-modal-right {
+  flex: 1;
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: white;
+}
+
+.image-modal-right label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.image-modal-right select {
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  margin-bottom: 2rem;
+  width: 100%;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.negative-btn {
+  margin-top: 0;
+  flex: 1;
+}
+
+.action-btn {
+  margin-top: 0;
+  flex: 1;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.modal-title {
+  font-size: 1.5rem;
+  color: #333;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
