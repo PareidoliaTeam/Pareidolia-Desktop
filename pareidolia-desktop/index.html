@@ -1,107 +1,234 @@
-<!-- Made by Alexangelo Orozco Gutierrez on January 23, 2026 
-     Last Revised on February 28, 2026 by Alexangelo Orozco Gutierrez
-     Added distinction of Add Dataset and Model buttons
-     Created Separate pop up modals for the buttons -->
-
 <!doctype html>
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Pareidolia Desktop</title>
-    <link rel="stylesheet" href="css/index.css">
-  </head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pareidolia Desktop</title>
+  <link rel="stylesheet" href="css/index_light.css">
+</head>
+<body>
+<div class="container">
+  <!-- Left Sidebar for Models (Should Remain Persistant in Model View / Home)-->
+  <aside class="left-sidebar-models">
+    <div class="header">
+      <!-- We can move this into settings <span class="version">v.0.0.1</span>-->
+      <h1>Pareidolia</h1>
+      <!-- Logo made by Alexangelo Orozco Gutierrez on January 22, 2026 Last Revised on January 23, 2026 -->
+      <img src="assets/logoRevised.png" alt="App Logo" width="50" />
+    </div>
+    <!-- List of models -->
+    <p class="model-section">Models</p>
+    <nav id="modelsList" class="model-list"></nav>
+    <button class="create-btn">+ Create</button>
+  </aside>
 
-  <body>
+  <!-- Left Sidebar for Datasets (Should Remain Persistant in Dataset View / Gallery)-->
+  <aside class="left-sidebar-datasets">
+  <div class="header">
+    <h1>Pareidolia</h1>
+    <!-- Logo made by Alexangelo Orozco Gutierrez on January 22, 2026 Last Revised on January 23, 2026 -->
+    <img src="assets/logoRevised.png" alt="App Logo" width="50" />
+  </div>
+  <!-- List of datasets -->
+  <p class="dataset-section">Datasets</p>
+  <nav id="datasetsList" class="datasets-list"></nav>
+  <button class="upload-btn-sidebar">↑ Upload</button>
+</aside>
 
-    <div class="container">
-      <!-- JS function turns on and off which page is visible -->
-      <main class="content">
-        <!-- Logo/Main Menu -->
-        <div id="home" class="page active">
-          <!-- Logo made by Alexangelo Orozco Gutierrez on January 22, 2026 
-           Last Revised on January 23, 2026 -->
-          <img src="assets/logoRevised.png" alt="App Logo" width="400" />
 
-          <!-- URGENT - Font change at some point I don't like this one -->
-          <p style="text-align:center; width:100%; margin-top:1rem; font-size: 4rem; font-family:cursive;">Pareidolia</p>
+  <!-- Main "Window" Area-->
+  <main class="main-view">
+
+    <!-- Home Page View -->
+    <div id="view-home" class="app-view">
+      <h2>Datasets</h2>
+      <div class="dataset-button-group">
+        <button class="dataset-btn" onclick="switchMode('view-dataset-home', '.left-sidebar-datasets')">✦ View</button>
+        <button id="upload-btn" class="dataset-btn">↑ Upload</button>
+        <!-- Bottom set of buttons for additional things -->
+        <footer class="bottom">
+          <button id="help-btn" class="btm-btn">? Help</button>
+          <button id="settings-btn" class="btm-btn">⚙ Settings</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Model Info View-->
+    <div id="view-model-info" class="app-view" style="display: none">
+      <header class="navbar">
+        <div class="model-info">
+          <h2 id="current-model-title">Model Loading</h2>
+          <div id="current-model-path">File Path</div>
         </div>
-        
-        <!-- Project Buttons when project is clicked on -->
-        <div id="project-view" class="page">
-          <h1 id="project-name"></h1>
-          <div class="project-buttons-grid">
-            <!-- 3 buttons. Images, Train, and Settings -->
-            <button class="project-grid-btn" data-page="images" data-image="" value="Images">Images</button>
-            <button class="project-grid-btn" data-page="train" data-image="" value="Train">Train</button>
-            <button class="project-grid-btn" data-page="settings" data-image="" value="Settings">Settings</button>
+        <button class="back-btn" onclick="switchMode('view-home', 'left-sidebar-models')">← Back</button>
+      </header>
+      <hr class="divider">
+
+      <!-- Model Info -->
+      <div class="settings-panel">
+
+        <!-- Selected datasets -->
+        <section class="settings-col">
+          <h3>Selected Datasets</h3>
+          <div class="search-bar">
+            <input type="text" placeholder="Search">
+          </div>
+          <ul class="dataset-select">
+            <li><input type="checkbox" > Example Dataset <span>Path</span></li>
+          </ul>
+        </section>
+
+        <!-- Training Settings -->
+        <section class="settings-col">
+          <h3>Training Settings</h3>
+          <div class="setting-item">
+            <label>Epoch</label>
+            <input id="epoch-slider" type="range" min="1" max="100" value="1">
+            <span id="epoch-value">1</span>
+            <p class="setting-desc">How many passes through the dataset?</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- Footer -->
+      <footer class="project-footer">
+        <span class="last-trained">Last Trained: Never</span>
+        <div class="footer-btns">
+          <button class="train-btn">Train Model</button>
+          <button class="send-btn" disabled>↓ Send To App</button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Dataset Home View-->
+    <div id="view-dataset-home" class="app-view" style="display: none">
+      <header class="navbar">
+        <h2>Datasets</h2>
+        <button class="back-btn" onclick="switchMode('view-home', 'left-sidebar-models')">← Return to Home</button>
+      </header>
+      <span>Click on a dataset to view more info.</span>
+      <hr class="divider">
+    </div>
+
+    <!-- Dataset Info View-->
+    <div id="view-dataset-info" class="app-view" style="display: none">
+      <header class="navbar">
+        <div class="project-info">
+          <h2 id="current-dataset-title">Dataset: Loading...</h2>
+          <div id="current-dataset-filepath">File Path</div>
+        </div>
+        <button class="back-btn" onclick="showView('view-dataset-home')">← Back</button>
+      </header>
+      <hr class="divider">
+
+      <!-- Image Carousel-->
+      <div class="carousel-container">
+        <div class="carousel-wrapper">
+          <div class="carousel">
           </div>
         </div>
-      </main>
+      </div>
 
-
-      <!-- Right Sidebar -->
-      <aside class="right-sidebar">
-        <!-- New Model Button -->
-        <button class="new-model-btn add-project-btn">+ Add Model</button>
-
-        <!-- Add Dataset Button -->
-        <button class="add-dataset-btn add-project-btn">+ Add Dataset</button>
-
-        <div class="projects-section">
-          <h3>Models</h3>
-          <!-- Projects will be dynamically loaded from the Pareidolia folder -->
-          <ul class="projects-list">
-            <!-- Dummy Projects, to be replaced with dynamic loading
-            <li class="project-card">
-              <button class="project-open-btn" value="Apple">Project 1</button>
-            </li>
-            <li class="project-card">
-              <button class="project-open-btn" value="Orange">Project 2</button>
-            </li>
-            <li class="project-card">
-              <button class="project-open-btn" value="Human Face">Project 3</button>
-            </li>
-            -->
-          </ul>
+      <!-- Footer -->
+      <footer class="project-footer">
+        <div class="footer-btns">
+          <button class="view-gallery-btn" onclick="showDatasetGallery()" >View Gallery</button>
+          <button class="negative-btn">Delete Dataset</button>
         </div>
-
-        <!-- QR Code Section -->
-        <div class="qr-section">
-          <h3>Connect</h3>
-          <div id="qr-code-container"></div>
-        </div>
-      </aside>
-
+      </footer>
     </div>
 
-    <!-- Add Model Modal -->
-    <div id="add-project-modal" class="modal">
-      <div class="modal-content">
-        <span class="modal-close">&times;</span>
-        <h2>Create New Model</h2>
-        <input type="text" id="project-name-input" class="modal-input" placeholder="Enter model name" />
-        <div class="modal-buttons">
-          <button id="modal-create-btn" class="modal-btn modal-create">Create</button>
-          <button id="modal-cancel-btn" class="modal-btn modal-cancel">Cancel</button>
+    <!-- Dataset Gallery View-->
+    <div id="view-dataset-gallery" class="app-view" style="display: none">
+      <header class="navbar">
+        <div class="project-info">
+          <h2 id="current-gallery-title">Dataset: Loading...</h2>
+          <div id="current-gallery-filepath">File Path</div>
         </div>
+        <button class="back-btn" onclick="showView('view-dataset-info')">← Back to Dataset</button>
+      </header>
+      <hr class="divider">
+        <!-- Gallery  -->
+        <div class="gallery-grid"></div>
+    </div>
+  </main>
+</div>
+
+<!-- MODALSS SECTION -->
+
+<!-- Image Options Modal -->
+<div id="image-options-modal" class="modal">
+  <div class="modal-content side-by-side">
+    <span class="close-btn" id="close-modal">&times;</span>
+    <div class="image-modal-left">
+      <img id="modal-preview-img" src="" alt="Preview">
+    </div>
+    <div class="image-modal-right">
+      <h2 class="modal-title">Image Options</h2>
+      <label for="label">Dataset Label:</label>
+      <select name="label" id="label">
+        <option value="positive">Positive</option>
+        <option value="negative">Negative</option>
+      </select>
+      <div class="modal-actions">
+        <button class="action-btn">Open in Folder</button>
+        <button class="negative-btn">Delete</button>
       </div>
     </div>
+  </div>
+</div>
 
-    <!-- Add Dataset Modal -->
-    <div id="add-dataset-modal" class="modal">
-      <div class="modal-content">
-        <span class="modal-close">&times;</span>
-        <h2>Create New Dataset</h2>
-        <input type="text" id="dataset-name-input" class="modal-input" placeholder="Enter dataset name" />
-        <div class="modal-buttons">
-          <button id="modal-create-dataset-btn" class="modal-btn modal-create">Create</button>
-          <button id="modal-cancel-dataset-btn" class="modal-btn modal-cancel">Cancel</button>
-        </div>
-      </div>
+
+<!-- Add Project Modal -->
+<div id="add-model-modal" class="create-model-modal">
+  <div class="modal-content">
+    <span class="modal-close">&times;</span>
+    <h2>Create New Model</h2>
+    <input type="text" id="project-name-input" class="modal-input" placeholder="Enter model name" />
+    <div class="modal-buttons">
+      <button id="modal-create-btn" class="modal-btn-modal-create">Create</button>
+      <button id="modal-cancel-btn" class="negative-btn">Cancel</button>
     </div>
+  </div>
+</div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script type="module" src="/src/renderer.js"></script>
-    <script src="js/index.js"></script>
-  </body>
+<!-- Help Modal -->
+<div id="help-modal" class="help-modal">
+  <div class="help-modal-content">
+    <span id="help-modal-close" class="modal-close">&times;</span>
+    <h2>Help</h2>
+    <body>This is the help modal. We are planning to add tips and tricks into this so that users can have an easier time using our applicaiton.</body>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="settings-modal">
+  <div class="settings-modal-content">
+    <span id="settings-modal-close" class="modal-close">&times;</span>
+    <h2>Settings</h2>
+    <body>This is the settings modal. We are planning to add user adjustable settings for the application. (e.g. Dark Mode).</body>
+  </div>
+</div>
+
+<!-- QR Code Modal -->
+<div id="qr-modal" class="qr-modal">
+  <div class="qr-section side-by-side">
+    <span id="qr-modal-close" class="modal-close">&times;</span>
+    <div class="qr-content-left">
+      <h3>Connect</h3>
+      <div id="qr-code-container"></div>
+    </div>
+    <div class="qr-content-right">
+      <p>Instructions</p>
+      <span>1. Open Pareidolia Mobile.</span>
+      <span>2. Scan this QR code to sync your device.</span>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module" src="/src/renderer.js"></script>
+<script src="js/home.js"></script>
+</body>
 </html>
