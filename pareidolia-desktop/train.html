@@ -33,6 +33,21 @@ spesific datasets to use in the model.
         <div class="train-menu">
             <h2>Training Configuration</h2>
             
+            <div class="menu-section">
+                <label>Add Label</label>
+                <div class="labels-list" id="labels-list">
+                    <!-- Labels will be dynamically added here -->
+                </div>
+                <div class="add-label-container">
+                    <input 
+                        type="text" 
+                        id="new-label-input" 
+                        class="label-input" 
+                        placeholder="Enter label name"
+                    >
+                    <button id="add-label-btn" class="add-label-btn">+</button>
+                </div>
+            </div>
             <!-- Contain the box with the title, slider, and Train button -->
             <div class="menu-section">
                 <label for="epoch-slider">Epochs</label>
@@ -41,13 +56,35 @@ spesific datasets to use in the model.
                     <span id="epoch-display" class="epoch-display">10</span>
                 </div>
             </div>
-            <p>Training Results: <span id="random-number"></span></p>
+            <p>Training Results: <span id="results"></span></p>
             <br>
 
             <button id="train-btn" class="train-btn">Train</button>
         </div>
     </div>
     
+    <!-- Dataset Assignment Modal -->
+    <div id="dataset-modal" class="modal">
+        <div class="modal-content dataset-modal-content">
+            <span class="modal-close" id="dataset-modal-close">&times;</span>
+            <h2 id="dataset-modal-title">Datasets for Label</h2>
+
+            <div class="modal-section">
+                <label class="modal-section-label">Assigned Datasets</label>
+                <div class="dataset-assigned-list" id="assigned-datasets-list">
+                    <!-- Assigned datasets rendered here -->
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <label class="modal-section-label">Available Datasets</label>
+                <div class="dataset-available-list" id="available-datasets-list">
+                    <!-- Available datasets rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="js/train.js"></script>
 </body>
 </html>

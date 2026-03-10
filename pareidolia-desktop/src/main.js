@@ -228,8 +228,7 @@ export async function createModelFolder(modelName) {
     // Create model-settings.json file
     const settingsPath = path.join(modelPath, 'model-settings.json');
     const defaultSettings = {
-      datasets: [],
-      labels: [],
+      labels: {},
       epochs: 10
     };
 
@@ -247,6 +246,101 @@ export async function createModelFolder(modelName) {
   }
 }
 
+/**
+ * To be used for the training page to update the model-settings.json file with new settings after setting labels, datasets, and epochs.
+ * Example changes could be new labels added so the labels dictionary needs to add its new keys and updating the values of keys with the paths of
+ * the datasets used.
+ * @param {string} modelName - name of the model to focus on, needed to find the model-settings.json file
+ * @param {json} newSettings updated json of the settings to overwrite the file with
+ */
+export async function updateModelSettings(modelName, newSettings) {
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const settingsPath = path.join(pareidoliaPath, 'models', modelName, 'model-settings.json');
+
+    if (!fs.existsSync(settingsPath)) {
+      throw new Error(`Model settings file not found for model: ${modelName}`);
+    }
+
+    fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2));
+    console.log(`Updated model settings for ${modelName} at: ${settingsPath}`);
+  } catch (error) {
+    console.error(`Error updating model settings: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Gets the model settings from the model-settings.json file for a given model.
+ * @param {string} modelName - name of the model to focus on, needed to find the model-settings.json file
+ * @returns {json} settings - the parsed JSON content of the model-settings.json file
+ * 
+ * Example output: 
+ * { name: "Fruits",
+ *  labels: 
+ *  { "Apple": 
+ *    { "Fuji Apples": "/path/folder1" , 
+ *     "Gala Apples": "/path/folder2" }, 
+ *    "Orange": 
+ *      { "Navel Oranges": "/path/a", 
+ *      "Blood Oranges": "/path/b" } 
+ *  }, 
+ *  epochs: 10 
+ * }
+ * Labels is a key with a value of a dictionary with the keys Labels.
+ * Labels hav values of dictionaries with the Dataset name as keys and their paths as values. 
+ * This way we can have multiple datasets for each label.
+ * 
+ * The current structure helps organize data while also makign future additions possible, such as storing settings.
+ */
+export async function getModelSettings(modelName) {
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const settingsPath = path.join(pareidoliaPath, 'models', modelName, 'model-settings.json');
+    
+    if (!fs.existsSync(settingsPath)) {
+      throw new Error(`Model settings file not found for model: ${modelName}`);
+    }
+    const settings = fs.readFileSync(settingsPath, 'utf-8');
+    return JSON.parse(settings);
+  } catch (error) {
+    console.error(`Error getting model settings: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Builds the training details to pass to the Python training script.
+ * Constructs labelsJson ({ LabelName: [path1, path2, ...] }) from model settings
+ * and resolves the model output folder path.
+ * @param {string} modelName - name of the model to focus on
+ * @returns {Object} { modelFolderPath, labelsJson, settings }
+ *   modelFolderPath - path to the models subfolder where trained outputs are saved
+ *   labelsJson      - flat label-to-paths map ready for the Python script
+ *   settings        - full model-settings.json contents
+ */
+export async function modelDetailsForPython(modelName) {
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const modelPath = path.join(pareidoliaPath, 'models', modelName);
+    const settings = await getModelSettings(modelName);
+
+    const labelsJson = {};
+    for (const [labelName, datasets] of Object.entries(settings.labels || {})) {
+      // Each dataset folder contains a positives/ subfolder with the training images
+      labelsJson[labelName] = Object.values(datasets).map(p => path.join(p, 'positives'));
+    }
+
+    return {
+      modelFolderPath: path.join(modelPath, 'models'),
+      labelsJson,
+      settings
+    };
+  } catch (error) {
+    console.error(`Error getting model details for Python: ${error.message}`);
+    throw error;
+  }
+}
 
 /**
  * Gets a list of all project folders in the datasets folder within Pareidolia.
@@ -267,7 +361,7 @@ export async function getDatasetsList() {
     for (const file of files) {
       const filePath = path.join(datasetsPath, file);
       const stats = fs.statSync(filePath);
-      
+
       // Only include directories
       if (stats.isDirectory()) {
         datasets[file] = {
@@ -451,68 +545,63 @@ ipcMain.handle('setup-python-venv', async () => {
 });
 
 /**
- * Handle training model execution via IPC from renderer process
+ * Handle training model execution via IPC from renderer process.
  * @param {Object} event - IPC event
  * @param {Object} params - Training parameters
- * @param {string} params.projectPath - Path to the project folder
- * @param {number} params.epochs - Number of training epochs
+ * @param {Object} params.labelsJson  - Object mapping label names to arrays of folder paths
+ *                                      e.g. { "Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"] }
+ * @param {string} params.modelFolderPath - Path to the model folder where outputs will be saved
+ * @param {number} params.epochs      - Number of training epochs
  */
 ipcMain.handle('execute-train', async (event, params) => {
-  // the two parameters nessecery, more parameters are created based on the project path.
-  const { projectPath, epochs } = params;
-  
-  // Construct paths for positives, negatives, and model within the project folder
-  const positivesPath = path.join(projectPath, 'positives');
-  const negativesPath = path.join(projectPath, 'negatives');
-  const modelFolder = path.join(projectPath, 'model');
-  const modelPath = path.join(modelFolder, 'model.keras');
-  
-  // Ensure the positives directory exists
-  if (!fs.existsSync(positivesPath)) {
+  const { labelsJson, modelFolderPath, epochs } = params;
+
+  // Validate labelsJson
+  if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
     return {
       success: false,
-      error: `Positives folder not found at: ${positivesPath}`,
+      error: 'labelsJson must be a non-empty object mapping label names to arrays of folder paths.',
       timestamp: new Date().toISOString()
     };
   }
-  
-  // Ensure the negatives directory exists
-  if (!fs.existsSync(negativesPath)) {
-    return {
-      success: false,
-      error: `Negatives folder not found at: ${negativesPath}`,
-      timestamp: new Date().toISOString()
-    };
+
+  // Validate that every folder path referenced in labelsJson actually exists
+  for (const [label, folders] of Object.entries(labelsJson)) {
+    for (const folder of folders) {
+      if (!fs.existsSync(folder)) {
+        return {
+          success: false,
+          error: `Folder not found for label "${label}": ${folder}`,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
   }
-  
-  // Ensure the model directory exists
-  if (!fs.existsSync(modelFolder)) {
-    fs.mkdirSync(modelFolder, { recursive: true });
+
+  // Ensure the model output directory exists
+  if (!fs.existsSync(modelFolderPath)) {
+    fs.mkdirSync(modelFolderPath, { recursive: true });
   }
-  
-  // Determine the correct path based on dev/production environment
+
+  const modelPath = modelFolderPath;
+
+  // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
-  
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    // Development: use the root py folder
     pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
   } else {
-    // Production: use the bundled py folder
     pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
   }
-  
+
   console.log('Python script path:', pythonScriptPath);
-  console.log('Positives path:', positivesPath);
-  console.log('Negatives path:', negativesPath);
+  console.log('Labels JSON:', labelsJson);
   console.log('Model path:', modelPath);
   console.log('Epochs:', epochs);
-  
-  // Pass positives_path, negatives_path, model_path, and epochs as arguments
-  // Use the venv path for Python execution
+
+  // Pass labels_json, model_path, and epochs as arguments
   const venvPath = getVenvPath();
   return await executePythonScript(pythonScriptPath, [
-    positivesPath,
-    negativesPath,
+    JSON.stringify(labelsJson),
     modelPath,
     epochs.toString()
   ], venvPath);
@@ -528,4 +617,27 @@ ipcMain.handle('get-project-images', async (event, projectPath) => {
  */
 ipcMain.handle('convert-video', async (event, projectPath) => {
   return await convertVideo(projectPath);
-})
+});
+
+/**
+ * Handle getting model details for Python training via IPC from renderer process.
+ * Returns the pre-built labelsJson, model output folder path, and full settings.
+ */
+ipcMain.handle('get-model-details-for-python', async (event, modelName) => {
+  return await modelDetailsForPython(modelName);
+});
+
+/**
+ * Handle getting model settings via IPC from renderer process
+ */
+ipcMain.handle('get-model-settings', async (event, modelName) => {
+  return await getModelSettings(modelName);
+});
+
+/**
+ * Handle updating model settings via IPC from renderer process
+ */
+ipcMain.handle('update-model-settings', async (event, params) => {
+  const { modelName, newSettings } = params;
+  return await updateModelSettings(modelName, newSettings);
+});

@@ -316,9 +316,9 @@ body, html {
 /* SETTINGS LAYOUT*/
 .settings-panel {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: auto 1fr;
   gap: 40px;
-  margin-top: 20px;
+  margin: 30px 30px;
   flex-grow: 1;
 }
 
@@ -404,6 +404,7 @@ body, html {
   justify-content: flex-end;
   align-items: center;
   gap: 20px;
+  margin: 10px 30px 20px;
 }
 
 .train-btn, .send-btn {
@@ -558,4 +559,244 @@ body, html {
   margin-top: 0;
   margin-bottom: 1rem;
   font-weight: 700;
+}
+
+/* ========================= */
+/* LABELS SECTION STYLES */
+/* ========================= */
+
+.labels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  min-height: 40px;
+}
+
+.label-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  background-color: #e8f0f7;
+  border: 1px solid #b3d9e8;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #333;
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+.label-item:hover {
+  background-color: #cce0f0;
+  border-color: #8fc4de;
+}
+
+.label-item-name {
+  font-weight: 500;
+  flex: 1;
+}
+
+.remove-label-btn {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: background-color 0.2s;
+  margin-left: 0.5rem;
+}
+
+.remove-label-btn:hover {
+  background-color: #c82333;
+}
+
+.add-label-container {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.label-input {
+  flex: 1;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.label-input:focus {
+  outline: none;
+  border-color: #697782;
+  box-shadow: 0 0 4px rgba(105, 119, 130, 0.3);
+}
+
+.add-label-btn {
+  width: 40px;
+  padding: 0.6rem;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+}
+
+.add-label-btn:hover {
+  background-color: #218838;
+}
+
+/* ========================= */
+/* DATASET MODAL STYLES */
+/* ========================= */
+
+.dataset-modal-content {
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-section {
+  margin-top: 1.25rem;
+}
+
+.modal-section-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.dataset-assigned-list,
+.dataset-available-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0.4rem;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+/* Scoped to modal to avoid conflict with sidebar .dataset-item */
+.dataset-modal-content .dataset-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-bottom: 0;
+  cursor: default;
+  background: transparent;
+}
+
+.dataset-modal-content .dataset-item.assigned {
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+}
+
+.dataset-modal-content .dataset-item.available {
+  background-color: #e8f0f7;
+  border: 1px solid #b3d9e8;
+  color: #333;
+}
+
+.dataset-item-name {
+  flex: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dataset-remove-btn {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+}
+
+.dataset-remove-btn:hover {
+  background-color: #c82333;
+}
+
+.dataset-add-btn {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+}
+
+.dataset-add-btn:hover {
+  background-color: #218838;
+}
+
+.dataset-empty-msg {
+  text-align: center;
+  color: #999;
+  padding: 0.4rem;
+  font-size: 0.85rem;
+}
+
+/* Labels column — fixed size, does not stretch */
+.settings-panel > section:first-child {
+  align-self: start;
+  width: fit-content;
+  min-width: 200px;
+  max-width: 260px;
+}
+
+/* Training results — sits below epoch slider in right column */
+.model-train-results {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  min-height: 3em;
+  max-width: 200px;
+}
+
+.train-results-placeholder {
+  color: #bbb;
+  font-style: italic;
+  font-size: 0.85rem;
 }

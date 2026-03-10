@@ -216,6 +216,7 @@ export function executePythonScript(pythonPath, args = [], venvPath = null) {
         resolve({
           success: false,
           error: error || `Process exited with code ${code}`,
+          output: output.trim(),
           timestamp: new Date().toISOString(),
           executionTime: totalTime
         });
