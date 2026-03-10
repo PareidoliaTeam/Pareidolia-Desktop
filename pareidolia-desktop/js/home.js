@@ -288,8 +288,13 @@ function renderLabels() {
  */
 function addLabel(labelName) {
     const trimmedName = labelName.trim();
-    if (!trimmedName) { alert('Label name cannot be empty'); return; }
-    if (trimmedName in modelSettings.labels) { alert('Label already exists'); return; }
+    if (!trimmedName) { 
+        //replace with pop up modals, screws up texet cursor on windows
+        // alert('Label name cannot be empty'); 
+        return; }
+    if (trimmedName in modelSettings.labels) { 
+        // alert('Label already exists'); 
+        return; }
 
     modelSettings.labels[trimmedName] = {};
     renderLabels();
