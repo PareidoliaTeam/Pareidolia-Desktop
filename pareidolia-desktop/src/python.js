@@ -82,7 +82,7 @@ export function setupPythonVenv() {
         
         // Install required packages
         const pythonExecutable = getVenvPythonExecutable();
-        const packages = ['tensorflow', 'opencv-python', 'numpy'];
+        const packages = ['tensorflow', 'opencv-python', 'numpy', 'scikit-learn'];
         
         console.log('Installing required packages:', packages);
         
