@@ -45,6 +45,34 @@ const createServer = () => {
         }
     });
 
+    app.get('/get-model-details', (req, res) => {
+        const modelName = req.query.modelName;
+        if (!modelName) {
+            return res.status(400).json({ error: 'modelName query parameter is required' });
+        }
+        try {
+            const pareidoliaPath = getPareidoliaFolderPath();
+            const modelPath = path.join(pareidoliaPath, 'models', modelName);
+            if (!fs.existsSync(modelPath)) {
+                return res.status(404).json({ error: 'Model not found' });
+            }
+            const modelSettingsPath = path.join(modelPath, 'model-settings.json');
+            if (fs.existsSync(modelSettingsPath)) {
+                const modelSettings = JSON.parse(fs.readFileSync(modelSettingsPath, 'utf-8'));
+                const modelDetails = {
+                    path: modelPath,
+                    labels: modelSettings.labels || {}
+                };
+                res.json(modelDetails);
+            } else {
+                res.status(404).json({ error: 'model-settings.json not found' });
+            }
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+
     app.post('/add-dataset', async (req, res) => {
         const { datasetName } = req.body;
         if (!datasetName) {

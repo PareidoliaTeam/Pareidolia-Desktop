@@ -396,12 +396,22 @@ export async function getModelsList() {
     for (const file of files) {
       const filePath = path.join(modelsPath, file);
       const stats = fs.statSync(filePath);
-      
+      const modelSettingsPath = path.join(filePath, 'model-settings.json');
+      const modelSettings = fs.existsSync(modelSettingsPath) ? JSON.parse(fs.readFileSync(modelSettingsPath, 'utf-8')) : null;
+
       // Only include directories
       if (stats.isDirectory()) {
-        models[file] = {
-          path: filePath
-        };
+        if (modelSettings) {
+          models[file] = {
+            path: filePath,
+            labels: modelSettings.labels || {}
+          };
+        }
+        else{
+          models[file] = {
+            path: filePath
+          };
+        }
       }
     }
 
