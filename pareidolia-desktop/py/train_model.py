@@ -19,7 +19,7 @@ Arguments:
 Example (macOS / Linux) — replace the paths with your own folders:
     python train_model.py '{"Apple": ["/Users/you/images/apples"], "Orange": ["/Users/you/images/oranges"]}' /Users/you/models/fruit/model.keras 10
 
-    python train_model.py '{"Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/positives"], "Not Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/negatives", "/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Orange/positives"]}' /Users/alexangeloorozco/Documents/PareidoliaApp/models/Round/models 3
+    python train_model.py '{"Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/positives"], "Not Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/negatives", "/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Orange/positives"]}' /Users/alexangeloorozco/Documents/PareidoliaApp/models/Round/models 50
 
 Example (Windows) — use double-quotes around the JSON and escape inner quotes:
     python train_model.py "{\"Apple\": [\"C:/images/apples\"], \"Orange\": [\"C:/images/oranges\"]}" C:/models/fruit/model.keras 10
@@ -35,6 +35,7 @@ import cv2
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
+from sklearn.model_selection import train_test_split
 
 # Model constants
 IMG_HEIGHT = 224
@@ -252,16 +253,19 @@ if __name__ == "__main__":
     print(f"Training for {epochs} epochs")
     
     # Load and prepare images from the JSON label map
-    X_train, y_train, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
+    images, labels, num_classes, label_names = load_images_from_json(labels_json_str)
     
+    # do train/test split (80/20)
+    X_train, X_test, y_train, y_test = train_test_split(images, labels, test_size=0.2, random_state=42, stratify=labels)
+
     if X_train is None or len(X_train) == 0:
         print("Error: No images found or failed to load images")
         sys.exit(1)
     
-    print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
+    print(f"Loaded {len(X_train)} images across {num_classes} classes: {label_names}")
     
     # Create the model with the dynamic class count
-    model = create_cnn_model(NUM_CLASSES)
+    model = create_cnn_model(num_classes)
     print("Model created successfully")
     
     # Train the model
