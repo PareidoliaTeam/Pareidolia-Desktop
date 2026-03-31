@@ -68,7 +68,16 @@ const availableDatasetsList = document.getElementById('available-datasets-list')
 // Current model settings state
 let modelSettings = null;
 let currentLabelName = null;
+let activeBlock = null;
 
+// builder ids
+const builderModal = document.getElementById('builder-modal');
+const builderModalBtn = document.getElementById('builder-modal-btn');
+const builderModalCloseBtn = document.getElementById('builder-modal-close');
+const layerItems = document.querySelectorAll('.layer-item');
+const builderCanvas = document.getElementById('builder-canvas');
+const viewCodeBtn = document.getElementById('view-code-btn');
+const viewBlockBtn = document.getElementById('view-blocks-btn');
 
 // ============================================================
 // Functions
@@ -126,7 +135,9 @@ function showDataset(datasetName,datasetPath) {
     showView('view-dataset-info');
     loadCarousel();
 }
-
+/**
+ * Shows the dataset gallery view and loads the appropriate gallery
+ */
 function showDatasetGallery() {
     showView('view-dataset-gallery');
     loadGallery();
@@ -203,7 +214,7 @@ function openOptionsModal(imgData) {
 }
 
 /**
- * Opens the imageoptions model
+ * Opens the image options model
  */
 function closeOptionsModal() {
     optionsModal.style.display = 'none';
@@ -221,9 +232,28 @@ function closeOptionsModal() {
 async function loadModelSettingsForView(modelName) {
     try {
         modelSettings = await window.electronAPI.invoke('get-model-settings', modelName);
+        // epochs and labels
         if (!modelSettings.labels) modelSettings.labels = {};
         epochSlider.value = modelSettings.epochs ?? 10;
         epochValueDisplay.textContent = epochSlider.value;
+
+        // clears builder canvas
+        builderCanvas.innerHTML = '';
+
+        // adds saved layers
+        if(modelSettings.layers && modelSettings.layers.length > 0){
+            modelSettings.layers.forEach(layer => {
+                addLayerToCanvas(layer.type, layer.parameters);
+            });
+        } else {
+            builderCanvas.innerHTML = '<div class="builder-block-window">Drag Here</div>';
+        }
+
+        // loads last trained timestamp
+        const lastTrainedSpan = document.querySelector('.last-trained');
+        if (lastTrainedSpan) {
+            lastTrainedSpan.textContent = `Last Trained: ${modelSettings.lastTrained || 'Never'}`;
+        }
     } catch (error) {
         console.error('Error loading model settings:', error);
         modelSettings = { labels: {}, epochs: 10 };
@@ -236,7 +266,18 @@ async function loadModelSettingsForView(modelName) {
  */
 async function saveModelSettings() {
     if (!modelSettings) return;
-    const modelName = sessionStorage.getItem('projectName');
+    const modelName = sessionStorage.getItem('projectName')
+    const blocks = document.querySelectorAll('.model-block');
+    modelSettings.layers = Array.from(blocks).map(block => {
+        const params = { ...block.dataset };
+        const type = params.type;
+        delete params.type;
+
+        return {
+            type: type,
+            parameters: params
+        };
+    });
     try {
         await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: modelSettings });
         console.log('Model settings saved');
@@ -289,7 +330,7 @@ function renderLabels() {
 function addLabel(labelName) {
     const trimmedName = labelName.trim();
     if (!trimmedName) { 
-        //replace with pop up modals, screws up texet cursor on windows
+        //replace with pop up modals, screws up text cursor on Windows
         // alert('Label name cannot be empty'); 
         return; }
     if (trimmedName in modelSettings.labels) { 
@@ -330,6 +371,20 @@ async function openDatasetModal(labelName) {
 function closeDatasetModal() {
     datasetModal.style.display = 'none';
     currentLabelName = null;
+}
+
+/**
+ * Opens the builder modal.
+ */
+function openBuilderModal(){
+    builderModal.style.display = 'flex';
+}
+
+/**
+ * Closes the builder modal.
+ */
+function closeBuilderModal(){
+    builderModal.style.display = 'none';
 }
 
 /**
@@ -498,7 +553,7 @@ async function generateQRCode() {
         // Clear the container
         qrCodeContainer.innerHTML = '';
 
-        // Generate QR code using qrcodejs library
+        // Generate QR code using qrcode.js library
         new QRCode(qrCodeContainer, {
             text: serverURL,
             width: 180,
@@ -600,7 +655,7 @@ async function loadModelsFromFolder() {
     }
 }
 /**
- * Loads carousel and attatches images into it
+ * Loads carousel and attaches images into it
  */
 async function loadCarousel() {
     const currentPath = sessionStorage.getItem('projectPath');
@@ -623,7 +678,7 @@ async function loadCarousel() {
 }
 
 /**
- * Loads gallery and attatches images into it
+ * Loads gallery and attaches images into it
  */
 async function loadGallery(){
     const currentPath = sessionStorage.getItem('projectPath');
@@ -647,6 +702,168 @@ async function loadGallery(){
         });
     }
 }
+
+// ============================================================
+// BUILDER RELATED FUNCTIONS
+// ============================================================
+
+/**
+ * Adds a layer via a drag and drop system
+ * @param type
+ * @param savedParams
+ */
+function addLayerToCanvas(type, savedParams = null) {
+    // block creation
+    const block = document.createElement('div');
+    block.className = 'model-block';
+    block.draggable = true;
+    block.dataset.type = type;
+    block.innerHTML = `<strong>${type}</strong>`;
+
+    // checks for saved parameters if not default
+    if (savedParams) {
+        Object.assign(block.dataset, savedParams);
+    } else {
+        if (type === 'Dense') block.dataset.units = 32;
+    }
+
+    block.innerHTML = `<strong>${type}</strong>`;
+
+    // show settings
+    block.onclick = () => {
+        if(activeBlock) activeBlock.style.border = "none";
+        activeBlock = block;
+        block.style.border = "2px solid #ffcc00";
+        showSettings(type, block);
+    };
+
+    // drag logic
+    block.ondragstart = (e) => {
+        e.dataTransfer.setData('isNew', 'false');
+        block.style.opacity = "0.5";
+    };
+
+    // deleting logic
+    block.ondragend = async(e) => {
+        block.style.opacity = "1";
+        const rect = builderCanvas.getBoundingClientRect();
+        const isInside = (
+            e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom
+        );
+
+        if (!isInside) {
+            block.remove();
+            document.getElementById('settings-content').innerHTML = '<p class="hint">Layer removed.</p>';
+            await saveModelSettings();
+        }
+    };
+    // attaches block
+    builderCanvas.appendChild(block);
+}
+
+/**
+ * Dynamically shows the various parameters of a layer if applicable
+ * @param type
+ * @param block
+ */
+function showSettings(type, block) {
+    const container = document.getElementById('settings-content');
+    let html = `<h4>${type} Configuration</h4>`;
+
+    // the most complex ones
+    if (type === 'Dense' || type === 'Conv2D') {
+        const label = (type === 'Dense') ? 'Units' : 'Filters';
+        html += `<label>${label}:</label>
+                 <input type="number" id="set-units" value="${block.dataset.units || (type === 'Dense' ? 128 : 32)}">`;
+
+        html += `<label>Activation:</label>
+                 <select id="set-activation">
+                    <option value="relu" ${block.dataset.activation === 'relu' ? 'selected' : ''}>ReLU</option>
+                    <option value="sigmoid" ${block.dataset.activation === 'sigmoid' ? 'selected' : ''}>Sigmoid</option>
+                    <option value="tanh" ${block.dataset.activation === 'tanh' ? 'selected' : ''}>Tanh</option>
+                 </select>`;
+    }
+
+    // Layers that use pooling
+    else if (type.includes('Pooling2D') && !type.includes('Global')) {
+        html += `<label>Pool Size:</label>
+                 <input type="number" id="set-pool" value="${block.dataset.pool_size || 2}">`;
+    }
+    // Layers that use a float parameter
+    else if (['Dropout', 'RandomRotation', 'RandomZoom', 'RandomContrast'].includes(type)) {
+        const label = (type === 'Dropout') ? 'Rate (0-1)' : 'Factor (0-1)';
+        const key = (type === 'Dropout') ? 'rate' : 'factor';
+        html += `<label>${label}:</label>
+                 <input type="number" step="0.1" id="set-factor" value="${block.dataset[key] || 0.2}">`;
+    }
+
+    // Layers that just need a dropdown
+    else if (type === 'RandomFlip') {
+        html += `<label>Mode:</label>
+                 <select id="set-flip">
+                    <option value="horizontal" ${block.dataset.mode === 'horizontal' ? 'selected' : ''}>Horizontal</option>
+                    <option value="vertical" ${block.dataset.mode === 'vertical' ? 'selected' : ''}>Vertical</option>
+                    <option value="horizontal_and_vertical" ${block.dataset.mode === 'horizontal_and_vertical' ? 'selected' : ''}>Both</option>
+                 </select>`;
+    } else {
+        html += `<p>No modifiable parameters.</p>`;
+    }
+
+    html += `<button id="apply-btn" class="train-btn" style="margin-top:10px">Apply</button>`;
+    container.innerHTML = html;
+
+    document.getElementById('apply-btn').onclick = async () => {
+        const units = document.getElementById('set-units');
+        const act = document.getElementById('set-activation');
+        const factor = document.getElementById('set-factor');
+        const pool = document.getElementById('set-pool');
+        const flip = document.getElementById('set-flip');
+
+        if (units) block.dataset.units = units.value;
+        if (act) block.dataset.activation = act.value;
+        if (pool) block.dataset.pool_size = pool.value;
+        if (flip) block.dataset.mode = flip.value;
+        if (factor) {
+            if (type === 'Dropout') block.dataset.rate = factor.value;
+            else block.dataset.factor = factor.value;
+        }
+        await saveModelSettings();
+        alert("Settings Saved!");
+    };
+}
+
+/**
+ * Turns the ez block builder mode into the JSON advanced mode
+ */
+function syncBlocksToCode() {
+    const blocks = document.querySelectorAll('.model-block');
+    const layers = Array.from(blocks).map(block => ({
+        type: block.dataset.type,
+        parameters: { ...block.dataset }
+    }));
+    layers.forEach(l => delete l.parameters.type);
+
+    editor.setValue(JSON.stringify(layers, null, 2));
+}
+
+/**
+ * Turns the advanced mode layers into ez mode blocks
+ */
+function syncCodeToBlocks() {
+    try {
+        const layers = JSON.parse(editor.getValue());
+        const canvas = document.getElementById('builder-canvas');
+        canvas.innerHTML = '';
+
+        layers.forEach(layer => {
+            addLayerToCanvas(layer.type, layer.parameters);
+        });
+    } catch (e) {
+        //alert("INVALID.");
+    }
+}
+
 
 // ============================================================
 // Event Listeners
@@ -732,6 +949,50 @@ optionsModalClose.addEventListener('click', (e) => {
     closeOptionsModal();
 })
 
+// Open Block Builder Modal
+builderModalBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openBuilderModal();
+})
+// Close Block Builder Modal
+builderModalCloseBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeBuilderModal();
+})
+
+layerItems.forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('layerType', e.target.getAttribute('data-type'));
+        e.dataTransfer.setData('isNew', 'true');
+    });
+});
+
+builderCanvas.addEventListener('dragover', (e) => e.preventDefault());
+builderCanvas.addEventListener('drop', async(e) => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('layerType');
+    const isNew = e.dataTransfer.getData('isNew') === 'true';
+
+    if (isNew) {
+        addLayerToCanvas(type);
+        await saveModelSettings();
+    }
+});
+
+// Switch to "code" mode for sequential model editor
+viewCodeBtn.addEventListener('click', () => {
+    syncBlocksToCode();
+    document.getElementById('visual-workspace').style.display = 'none';
+    document.getElementById('code-workspace').style.display = 'block';
+});
+
+// Switch to "block" mode for sequential model editor
+viewBlockBtn.addEventListener('click', () => {
+    syncCodeToBlocks();
+    document.getElementById('code-workspace').style.display = 'none';
+    document.getElementById('visual-workspace').style.display = 'flex';
+});
+
 // EpochSlider to change
 epochSlider.addEventListener('input', (event) => {
     const val = event.target.value;
@@ -747,7 +1008,7 @@ epochSlider.addEventListener('change', async (event) => {
     await saveModelSettings();
 });
 
-// carpousel animation
+// carousel animation
 carousel.addEventListener('animationiteration', () => {
     // Reset carousel position for seamless looping
     carousel.style.animation = 'none';
@@ -793,7 +1054,8 @@ modelTrainBtn.addEventListener('click', async () => {
         const result = await window.electronAPI.executeTrain({
             labelsJson,
             modelFolderPath,
-            epochs: parseInt(epochs)
+            epochs: parseInt(epochs),
+            layers: modelSettings.layers
         });
 
         const callDuration = Math.round((Date.now() - callStartTime) / 1000);
@@ -804,6 +1066,21 @@ modelTrainBtn.addEventListener('click', async () => {
             modelTrainResults.textContent = `Training completed successfully!${execTime}`;
             modelTrainResults.style.color = '#28a745';
             console.log('%c[UI] Training successful!', 'color: #28a745; font-weight: bold;');
+
+            // timestamp stuff
+            const now = new Date();
+            const timestamp = now.toLocaleString();
+
+            const lastTrainedSpan = document.querySelector('.last-trained');
+            if (lastTrainedSpan) {
+                lastTrainedSpan.textContent = `Last Trained: ${timestamp}`;
+            }
+            // save to JSON
+            if(modelSettings){
+                modelSettings.lastTrained = timestamp;
+                await saveModelSettings();
+            }
+
         } else {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
             modelTrainResults.textContent = `Training failed.${execTime} Check console for details.`;
@@ -835,3 +1112,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
 window.electronAPI.invoke('setup-python-venv')
+
+// Load monaco editor
+let editor;
+require.config({
+    paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'}
+});
+
+//
+require(['vs/editor/editor.main'], function() {
+    editor = monaco.editor.create(document.getElementById('monaco-editor-container'), {
+        value: "[]",
+        language: 'json',
+        theme: 'vs-light',
+        automaticLayout: true
+    });
+});

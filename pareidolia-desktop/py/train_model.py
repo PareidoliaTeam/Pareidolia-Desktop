@@ -33,6 +33,7 @@ import os
 import numpy as np
 import cv2
 import tensorflow as tf
+import json
 from tensorflow import keras
 from tensorflow.keras import layers, models
 
@@ -86,6 +87,79 @@ def create_cnn_model(num_classes):
         metrics=['accuracy']
     )
     
+    return model
+
+def create_model_new(num_classes,layers_json):
+    """Creates a CNN model for image classification. Utilized https://github.com/Wei-HaiMing/workflowExample/blob/main/workflow.ipynb?short_path=b61c709
+
+    @param num_classes: Number of output classes, determined from labels JSON
+    """
+    model = models.Sequential()
+    model.add(layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)))
+
+    has_flattened = False
+
+    for layer_data in layers_json:
+        layer_type = layer_data['type']
+        parameters = layer_data['parameters']
+
+
+        # make dictionary for layers to clean up code
+
+        # data augmentation layers
+        if layer_type == 'RandomFlip':
+            model.add(layers.RandomFlip(parameters.get('mode', 'horizontal'), name="data_augmentation"))
+        elif layer_type == 'RandomRotation':
+            model.add(layers.RandomRotation(float(parameters.get('factor', 0.1))))
+        elif layer_type == 'RandomZoom':
+            model.add(layers.RandomZoom(float(parameters.get('factor', 0.1))))
+        elif layer_type == 'RandomContrast':
+            model.add(layers.RandomContrast(float(parameters.get('factor', 0.2))))
+
+        # layers
+        elif layer_type == 'Conv2D':
+            model.add(layers.Conv2D(
+                filters=int(parameters.get('units', 32)),
+                kernel_size=3, padding='same',
+                activation=parameters.get('activation', 'relu')
+            ))
+        elif layer_type == 'MaxPooling2D':
+            model.add(layers.MaxPooling2D(pool_size=int(parameters.get('pool_size', 2))))
+        elif layer_type == 'AveragePooling2D':
+            model.add(layers.AveragePooling2D(pool_size=int(parameters.get('pool_size', 2))))
+        elif layer_type == 'GlobalAveragePooling2D':
+            model.add(layers.GlobalAveragePooling2D())
+            has_flattened = True
+        elif layer_type == 'Flatten':
+            model.add(layers.Flatten())
+            has_flattened = True
+        elif layer_type == 'Dense':
+            if not has_flattened:
+                model.add(layers.Flatten())
+                has_flattened = True
+            model.add(layers.Dense(
+                int(parameters.get('units', 128)),
+                activation=parameters.get('activation', 'relu')
+            ))
+        elif layer_type == 'Dropout':
+            model.add(layers.Dropout(float(parameters.get('rate', 0.2))))
+
+    # saftey check to make sure its flattened
+    if not has_flattened:
+        model.add(layers.Flatten())
+
+    if num_classes == 1:
+           model.add(layers.Dense(1, activation='sigmoid'))
+           loss_func = 'binary_crossentropy'
+    else:
+        model.add(layers.Dense(num_classes, activation='softmax'))
+        loss_func = 'categorical_crossentropy'
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
     return model
 
 def load_images_from_json(labels_json):
@@ -235,18 +309,19 @@ def convert_model_to_tflite(model, X_train, model_folder):
 # Functions are declared above and used here
 if __name__ == "__main__":
     # Check for required arguments
-    # Usage: python train_model.py <labels_json> <model_path> <epochs>
+    # Usage: python train_model.py <labels_json> <model_path> <epochs> <layers>
     #   labels_json - JSON string mapping label names to arrays of folder paths
     #                 e.g. '{"Apple": ["/path/to/apples"], "Orange": ["/path/a", "/path/b"]}'
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 5:
         print("Error: Missing required arguments")
-        print('Usage: python train_model.py <labels_json> <model_path> <epochs>')
+        print('Usage: python train_model.py <labels_json> <model_path> <epochs> <layers>')
         sys.exit(1)
     
     # Get command line arguments
     labels_json_str = sys.argv[1]
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
+    layers_json_list = json.loads(sys.argv[4])
     
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
@@ -261,7 +336,7 @@ if __name__ == "__main__":
     print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
     
     # Create the model with the dynamic class count
-    model = create_cnn_model(NUM_CLASSES)
+    model = create_model_new(NUM_CLASSES, layers_json_list)
     print("Model created successfully")
     
     # Train the model

@@ -229,7 +229,8 @@ export async function createModelFolder(modelName) {
     const settingsPath = path.join(modelPath, 'model-settings.json');
     const defaultSettings = {
       labels: {},
-      epochs: 10
+      epochs: 10,
+      layers: {}
     };
 
     if (!fs.existsSync(settingsPath)) {
@@ -285,7 +286,16 @@ export async function updateModelSettings(modelName, newSettings) {
  *      { "Navel Oranges": "/path/a", 
  *      "Blood Oranges": "/path/b" } 
  *  }, 
- *  epochs: 10 
+ *  "epochs": 10,
+ *   "layers": [
+ *     {
+ *       "type": "Dense",
+ *       "parameters": {
+ *         "units": "32"
+ *       }
+ *     }
+ *   ],
+ *   "lastTrained": "3/23/2026, 7:36:47 PM"
  * }
  * Labels is a key with a value of a dictionary with the keys Labels.
  * Labels hav values of dictionaries with the Dataset name as keys and their paths as values. 
@@ -552,9 +562,10 @@ ipcMain.handle('setup-python-venv', async () => {
  *                                      e.g. { "Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"] }
  * @param {string} params.modelFolderPath - Path to the model folder where outputs will be saved
  * @param {number} params.epochs      - Number of training epochs
+ * @param {Object} params.layers      - Augmentation layers
  */
 ipcMain.handle('execute-train', async (event, params) => {
-  const { labelsJson, modelFolderPath, epochs } = params;
+  const { labelsJson, modelFolderPath, epochs, layers} = params;
 
   // Validate labelsJson
   if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
@@ -603,7 +614,8 @@ ipcMain.handle('execute-train', async (event, params) => {
   return await executePythonScript(pythonScriptPath, [
     JSON.stringify(labelsJson),
     modelPath,
-    epochs.toString()
+    epochs.toString(),
+      JSON.stringify(layers || [])
   ], venvPath);
 });
 /**

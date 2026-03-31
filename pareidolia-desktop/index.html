@@ -94,6 +94,14 @@
             <span class="train-results-placeholder">No results yet. Train the model to see results here.</span>
           </div>
         </section>
+
+        <section class="settings-col">
+          <h3>Sequential Model Settings</h3>
+          <div class="setting-item">
+            <button class="train-btn" id="builder-modal-btn">▟ Open Editor</button>
+          </div>
+          <!-- Training Results -->
+        </section>
       </div>
 
       <!-- Footer -->
@@ -252,7 +260,64 @@
   </div>
 </div>
 
+<!-- Sequential Model Editors (Also make this full screen rudy) -->
+<div id="builder-modal" class="modal">
+  <div class="modal-content builder-modal-content">
+    <span class="modal-close" id="builder-modal-close">x</span>
+
+    <div class="builder-header">
+      <h2 class="builder-title">Sequential Model Builder</h2>
+      <!-- Originally two buttons, but might just make a singular button to swap modes doesn't make sense to have both-->
+      <div class="view-toggle">
+        <button id="view-blocks-btn" class="action-btn active">Blocks</button>
+        <button id="view-code-btn" class="action-btn">Editor</button>
+      </div>
+    </div>
+
+    <div class="builder-layout">
+
+      <!--- EZ Mode Block Builder -->
+      <div id="visual-workspace" class="workspace-area">
+        <aside class="layer-palette">
+          <h3>Layers</h3>
+          <div class="layer-item" draggable="true" data-type="Conv2D">Conv2D</div>
+          <div class="layer-item" draggable="true" data-type="MaxPooling2D">MaxPooling2D</div>
+          <div class="layer-item" draggable="true" data-type="AveragePooling2D">AveragePooling2D</div>
+          <div class="layer-item" draggable="true" data-type="GlobalAveragePooling2D">GlobalAvgPool</div>
+          <div class="layer-item" draggable="true" data-type="Flatten">Flatten</div>
+          <div class="layer-item" draggable="true" data-type="Dense">Dense</div>
+          <div class="layer-item" draggable="true" data-type="Dropout">Dropout</div>
+          <div class="layer-item" draggable="true" data-type="RandomFlip">Random Flip</div>
+          <div class="layer-item" draggable="true" data-type="RandomRotation">Random Rotation</div>
+          <div class="layer-item" draggable="true" data-type="RandomZoom">Random Zoom</div>
+          <div class="layer-item" draggable="true" data-type="RandomContrast">Random Contrast</div>
+        </aside>
+
+        <!-- Drag and drop area -->
+        <main class="builder-canvas" id="builder-canvas">
+          <div class="builder-block-window">Drag here</div>
+        </main>
+
+        <!-- Layer Settings for ez mode-->
+        <section class="layer-settings" id="layer-settings">
+          <h3>Settings</h3>
+          <div id="settings-content">
+            <p class="hint">Select a layer to edit.</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- Advanced Editor (Monaco)-->
+      <div id="code-workspace" class="workspace-area" style="display: none;">
+        <div id="monaco-editor-container"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module" src="/src/renderer.js"></script>
 <script src="js/home.js"></script>
