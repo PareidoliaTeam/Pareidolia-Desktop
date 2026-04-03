@@ -44,6 +44,9 @@ import math
 import torch
 import torch.nn as nn
 from torchmetrics import Accuracy
+from .pt_model import RepVGGClassifier
+from .image_data_module import ImageDataModule
+from .epoch_history_printer import EpochHistoryPrinter
 
 # Model constants
 IMG_HEIGHT = 224
@@ -259,29 +262,57 @@ if __name__ == "__main__":
     
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
+
+    pl.seed_everything(42, workers=True)
+
+    data_module = ImageDataModule(
+        data_dir="./data",
+        batch_size=64,
+        img_size=224,
+        num_workers=0,
+        val_split=0.2,
+        seed=42,
+        cifar10=False,
+        labels_json=labels_json_str,
+    )
     
     # Load and prepare images from the JSON label map
-    X_train, y_train, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
-    
-    if X_train is None or len(X_train) == 0:
-        print("Error: No images found or failed to load images")
-        sys.exit(1)
-    
-    print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
-    
-    # Create the model with the dynamic class count
-    model = create_cnn_model(NUM_CLASSES)
-    print("Model created successfully")
-    
-    # Train the model
-    print(f"Starting training for {epochs} epochs...")
-    history = model.fit(
-        X_train, y_train,
-        epochs=epochs,
-        batch_size=32,
-        validation_split=0.2,
-        verbose=1
+    model = RepVGGClassifier(
+        model_name="repvgg_a2",
+        num_classes=10,    # CIFAR-10
+        lr=3e-4,
+        hidden_dim=512,
     )
+
+    checkpoint_cb = ModelCheckpoint(
+        monitor="val_acc",
+        mode="max",
+        save_top_k=1,
+        filename="repvgg-a2-cifar10-{epoch:02d}-{val_acc:.4f}",
+    )
+
+    early_stop_cb = EarlyStopping(
+        monitor="val_acc",
+        mode="max",
+        patience=5,
+    )
+    lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
+
+    csv_logger = CSVLogger("logs", name="repvgg_a2_cifar10")
+
+    trainer = pl.Trainer(
+        max_epochs=3,
+        accelerator="auto",
+        devices="auto",
+        precision="16-mixed" if torch.cuda.is_available() else 32,
+        callbacks=[checkpoint_cb, early_stop_cb, lr_monitor_cb, RichProgressBar(refresh_rate=1), EpochHistoryPrinter()],
+        deterministic=True,
+        log_every_n_steps=1,
+        num_sanity_val_steps=0,
+        enable_progress_bar=True,
+        logger=csv_logger,
+    )
+    model = model.to(trainer.strategy.root_device)
     
     # Get final metrics
     final_loss = history.history['loss'][-1]
