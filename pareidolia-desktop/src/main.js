@@ -99,20 +99,41 @@ function getDocumentsPath() {
 
 /**
  * Gets the local IP address of the machine.
- * Returns the first non-loopback IPv4 address found.
+ * Prioritizes standard local subnets and filters out VPNs/Virtual interfaces.
  * @returns {string|null} The local IP address or null if not found
  */
 export function getLocalIP() {
   const interfaces = os.networkInterfaces();
+  let preferredIP = null;
+  let fallbackIP = null;
+
   for (const name of Object.keys(interfaces)) {
+    const lowerName = name.toLowerCase();
+    // Skip known virtual adapters and VPNs like Tailscale
+    if (lowerName.includes('tailscale') || 
+        lowerName.includes('vmware') || 
+        lowerName.includes('virtual') || 
+        lowerName.includes('wsl') ||
+        lowerName.includes('veth')) {
+      continue;
+    }
+
     for (const iface of interfaces[name]) {
       // Skip internal and non-IPv4 interfaces
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+        // Check if it's a standard private local network IP
+        if (iface.address.startsWith('192.168.') || 
+            iface.address.startsWith('10.') || 
+            iface.address.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+          if (!preferredIP) preferredIP = iface.address;
+        } else {
+          if (!fallbackIP) fallbackIP = iface.address;
+        }
       }
     }
   }
-  return null;
+
+  return preferredIP || fallbackIP || null;
 }
 
 /**
