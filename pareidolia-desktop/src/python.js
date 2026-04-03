@@ -132,6 +132,14 @@ export async function setupPythonVenv() {
   });
 }
 
+/**
+ * Module function to install Python packages using pip in the venv. If multiple
+ * package blocks are needed, then this function can be called multiple times with 
+ * different package lists and index urls.
+ * @param {List<string>} packages 
+ * @param {string} indexurl 
+ * @returns {Promise<Object>} Object with success flag, path, and message or error
+ */
 export function installPythonPackages(packages, indexurl = null) { 
   return new Promise((resolve) => {
     // Install required packages
