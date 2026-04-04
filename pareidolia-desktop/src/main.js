@@ -619,9 +619,13 @@ ipcMain.handle('execute-train', async (event, params) => {
   // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    // pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    pythonScriptPath = path.join(__dirname, '../../py/pt_train_model.py');
+
   } else {
-    pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    // pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    pythonScriptPath = path.join(process.resourcesPath, 'py/pt_train_model.py');
+
   }
 
   console.log('Python script path:', pythonScriptPath);
@@ -631,11 +635,20 @@ ipcMain.handle('execute-train', async (event, params) => {
 
   // Pass labels_json, model_path, and epochs as arguments
   const venvPath = getVenvPath();
-  return await executePythonScript(pythonScriptPath, [
+  const trainingParamsTf = [
+    JSON.stringify(labelsJson), // labels_json as a string argument ex: '{"Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"]}'
+    modelPath,                  // path to where model will be saved to after training
+    epochs.toString()           // number of epochs to train
+  ];
+  const trainingParamsPt = [
     JSON.stringify(labelsJson),
     modelPath,
-    epochs.toString()
-  ], venvPath);
+    epochs.toString(),
+    "repvgg_a2"                 // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
+    
+  ];
+
+  return await executePythonScript(pythonScriptPath, trainingParamsPt, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
 });
 /**
  * Handle getting the images in a selected project

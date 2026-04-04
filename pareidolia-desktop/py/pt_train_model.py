@@ -250,15 +250,16 @@ if __name__ == "__main__":
     # Usage: python train_model.py <labels_json> <model_path> <epochs>
     #   labels_json - JSON string mapping label names to arrays of folder paths
     #                 e.g. '{"Apple": ["/path/to/apples"], "Orange": ["/path/a", "/path/b"]}'
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 5:
         print("Error: Missing required arguments")
-        print('Usage: python train_model.py <labels_json> <model_path> <epochs>')
+        print('Usage: python train_model.py <labels_json> <model_path> <epochs> <pretrained_model_name>')
         sys.exit(1)
     
     # Get command line arguments
     labels_json_str = sys.argv[1]
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
+    pretrained_model_name = sys.argv[4]
     
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
@@ -278,7 +279,7 @@ if __name__ == "__main__":
     
     # Load and prepare images from the JSON label map
     model = RepVGGClassifier(
-        model_name="repvgg_a2",
+        model_name=pretrained_model_name,
         num_classes=10,    # CIFAR-10
         lr=3e-4,
         hidden_dim=512,
@@ -296,12 +297,13 @@ if __name__ == "__main__":
         mode="max",
         patience=5,
     )
+
     lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
 
     csv_logger = CSVLogger("logs", name="repvgg_a2_cifar10")
 
     trainer = pl.Trainer(
-        max_epochs=3,
+        max_epochs=epochs,
         accelerator="auto",
         devices="auto",
         precision="16-mixed" if torch.cuda.is_available() else 32,
@@ -315,10 +317,10 @@ if __name__ == "__main__":
     model = model.to(trainer.strategy.root_device)
     
     # Get final metrics
-    final_loss = history.history['loss'][-1]
-    final_accuracy = history.history['accuracy'][-1]
-    final_val_loss = history.history['val_loss'][-1]
-    final_val_accuracy = history.history['val_accuracy'][-1]
+    # final_loss = history.history['loss'][-1]
+    # final_accuracy = history.history['accuracy'][-1]
+    # final_val_loss = history.history['val_loss'][-1]
+    # final_val_accuracy = history.history['val_accuracy'][-1]
     
     # Convert model to TFLite and save both formats
     print("Converting model to TFLite format...")
