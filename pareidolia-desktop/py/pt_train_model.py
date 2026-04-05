@@ -44,9 +44,12 @@ import math
 import torch
 import torch.nn as nn
 from torchmetrics import Accuracy
-from .pt_model import RepVGGClassifier
-from .image_data_module import ImageDataModule
-from .epoch_history_printer import EpochHistoryPrinter
+from pt_model import RepVGGClassifier
+from image_data_module import ImageDataModule
+from epoch_history_printer import EpochHistoryPrinter
+import onnx
+import glob
+import sys, subprocess
 
 # Model constants
 IMG_HEIGHT = 224
@@ -244,6 +247,164 @@ def convert_model_to_tflite(model, X_train, model_folder):
             'error': str(e)
         }
 
+def convert_pt_to_onnx(model, model_folder):
+    try:
+        os.makedirs(model_folder, exist_ok=True)
+
+        dummy_input = torch.randn(1, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH)
+        
+        model.to_onnx(
+            file_path=os.path.join(model_folder, "model.onnx"),
+            input_sample=dummy_input,
+            export_params=True,
+            opset_version=17,
+            dynamo=False,
+            input_names=['input'],
+            output_names=['output'],
+            dynamic_axes={
+                'input': {0: 'batch_size'},
+                'output': {0: 'batch_size'}
+            }
+        )
+    
+        print(f"Model exported to ONNX format at {os.path.join(model_folder, 'model.onnx')}")
+
+        return {
+            'success': True,
+            'onnx_model': os.path.join(model_folder, "model.onnx")
+            # 'tflite_model': tflite_model_path
+        }
+    
+    except Exception as e:
+        print(f"Error exporting model to ONNX: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
+    
+def verify_onnx_integrity(onnx_model_path):
+    try:
+        onnx_model = onnx.load(onnx_model_path)
+        onnx.checker.check_model(onnx_model)
+        print("ONNX model integrity check passed.")
+        return True
+    except Exception as e:
+        print(f"ONNX model integrity check failed: {str(e)}")
+        return False
+    
+def compute_mean_std_welford_fast(image_paths, image_size=256, crop_size=224):
+    """Vectorized Welford — updates per image batch of pixels, not per pixel."""
+    n     = 0
+    mean  = np.zeros(3, dtype=np.float64)
+    M2    = np.zeros(3, dtype=np.float64)
+
+    for path in image_paths:
+        img = tf.io.read_file(path)
+        img = tf.image.decode_jpeg(img, channels=3)
+        img = tf.image.resize(img, [image_size, image_size])
+        img = tf.image.resize_with_crop_or_pad(img, crop_size, crop_size)
+        img = tf.cast(img, tf.float32) / 255.0
+
+        pixels = tf.reshape(img, [-1, 3]).numpy()    # [50176, 3]
+        batch_n = len(pixels)
+
+        # parallel Welford merge (Chan's parallel algorithm)
+        batch_mean = pixels.mean(axis=0)
+        batch_M2   = pixels.var(axis=0) * batch_n
+
+        delta  = batch_mean - mean # delta between batch mean and current mean
+        total  = n + batch_n       # total count of pixels after adding this batch
+
+        mean  += delta * (batch_n / total) # adjust the running mean based on the current batch
+
+        # squared difference between means measures how far apart the means are from each other
+        # variance is based on the squared differences from the mean
+        # 
+        M2    += batch_M2 + delta**2 * (n * batch_n / total) # running total of squared differences from the mean, adjusted for the new batch
+        n      = total # update total count of pixels
+
+    std = np.sqrt(M2 / n) # variance is M2/n, std is sqrt of variance; this is std of the entire dataset after processing all batches
+
+    return mean.astype(np.float32), std.astype(np.float32)
+
+def representative_data_gen():
+    image_paths = glob.glob("calibration_images/cifar10/*.JPEG")
+    mean, std = compute_mean_std_welford_fast(image_paths)
+    print("Calculated mean:", mean)
+    print("Calculated std:", std)
+    assert len(image_paths) >= 100, f"Only {len(image_paths)} images found"
+
+    for path in image_paths[:128]:
+        img = tf.io.read_file(path)                            # read raw file bytes from disk
+        img = tf.image.decode_jpeg(img, channels=3)            # decode to uint8 [H, W, 3], values 0-255
+        img = tf.image.resize(img, [256, 256])                 # resize to 256x256, becomes float32
+        img = tf.image.resize_with_crop_or_pad(img, 224, 224)  # center crop to 224x224 (crop_pct=0.875)
+        img = tf.cast(img, tf.float32) / 255.0                 # normalize [0, 255] → [0, 1]
+        img = (img - mean) / std                               # apply ImageNet mean/std, range ≈ [-2, +2]
+        img = tf.expand_dims(img, axis=0)                      # add batch dim [224,224,3] → [1,224,224,3]
+        yield [img]                                            # yield one sample to the converter
+
+def convert_onnx_to_tf(onnx_model_path, tf_model_path):
+    try:
+        os.makedirs(os.path.dirname(tf_model_path), exist_ok=True)
+        print("ONNX_MODEL_PATH:", onnx_model_path)
+        print("TFMODEL_PATH:", tf_model_path)
+        # subprocess.check_call([
+        #     sys.executable, "-m", "onnx2tf",
+        #     "-i", onnx_model_path,
+        #     "-o", tf_model_path,
+        #     "-n"
+        # ])
+
+        # Instead of check_call, use run() for more control:
+        result = subprocess.run(
+            [sys.executable, "-m", "onnx2tf", "-i", onnx_model_path, "-o", tf_model_path, "-n"],
+            capture_output=True,
+            text=True
+        )
+        print("STDOUT:", result.stdout)
+        print("STDERR:", result.stderr)
+        result.check_returncode()  # raises if it failed
+
+        print(f"ONNX model converted to TensorFlow format at: {tf_model_path}")
+        return {
+            'success': True,
+            'tf_model': tf_model_path
+        }
+    except Exception as e:
+        print(f"Error converting ONNX to TensorFlow: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
+    
+def convert_tf_to_tflite(tf_model_path, tflite_model_path):
+    try:
+        converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        converter.representative_dataset = representative_data_gen 
+        converter.target_spec.supported_ops = [
+            tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
+            tf.lite.OpsSet.TFLITE_BUILTINS,
+        ]
+        converter.inference_input_type = tf.uint8
+        converter.inference_output_type = tf.float32
+        tflite_model = converter.convert()
+
+        with open(tflite_model_path + "model_quant.tflite", "wb") as f:
+            f.write(tflite_model)
+        print(f"TensorFlow model converted to TFLite format at: {tflite_model_path}model_quant.tflite")
+        return {
+            'success': True,
+            'tflite_model': tflite_model_path + "model_quant.tflite"
+        }
+    except Exception as e:
+        print(f"Error converting TensorFlow to TFLite: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
 # Functions are declared above and used here
 if __name__ == "__main__":
     # Check for required arguments
@@ -315,7 +476,44 @@ if __name__ == "__main__":
         logger=csv_logger,
     )
     model = model.to(trainer.strategy.root_device)
+
+    trainer.fit(model, datamodule=data_module)
+
+    model.eval()
+
+    print("Converting model to ONNX format...")
+    onnx_conversion_result = convert_pt_to_onnx(model, model_folder)
+    if not onnx_conversion_result['success']:
+        print(f"Warning: ONNX conversion failed: {onnx_conversion_result['error']}")
+    else:
+        print("ONNX model conversion completed successfully")
     
+    onnx_model_path = onnx_conversion_result.get('onnx_model')
+    # print(f"ONNX model path: {onnx_model_path}")
+    if onnx_model_path and os.path.exists(onnx_model_path):
+        if verify_onnx_integrity(onnx_model_path):
+            print("ONNX model is valid and ready for TFLite conversion.")
+        else:
+            print("ONNX model integrity check failed.")
+
+    print("Converting ONNX model to TF format...")
+    tf_conversion_result = convert_onnx_to_tf(onnx_model_path, os.path.join(model_folder, "tf_out"))
+    if not tf_conversion_result['success']:
+        print(f"Warning: ONNX to TF conversion failed: {tf_conversion_result['error']}")
+    else:
+        print("ONNX to TF conversion completed successfully")
+    
+    print("Converting TF model to TFLite format...")
+    tf_model_path = tf_conversion_result.get('tf_model')
+    # print(f"TF model path: {tf_model_path}")
+    tflite_conversion_result = convert_tf_to_tflite(tf_model_path, os.path.join(model_folder, "model.tflite"))
+    if not tflite_conversion_result['success']:
+        print(f"Warning: TF to TFLite conversion failed: {tflite_conversion_result['error']}")
+    else:
+        print("TF to TFLite conversion completed successfully")
+    
+    tflite_model_path = tflite_conversion_result.get('tflite_model')
+    print(f"TFLite model path: {tflite_model_path}")
     # Get final metrics
     # final_loss = history.history['loss'][-1]
     # final_accuracy = history.history['accuracy'][-1]
@@ -323,17 +521,17 @@ if __name__ == "__main__":
     # final_val_accuracy = history.history['val_accuracy'][-1]
     
     # Convert model to TFLite and save both formats
-    print("Converting model to TFLite format...")
-    conversion_result = convert_model_to_tflite(model, X_train, model_folder)
+    # print("Converting model to TFLite format...")
+    # conversion_result = convert_model_to_tflite(model, X_train, model_folder)
     
-    if not conversion_result['success']:
-        print(f"Warning: TFLite conversion failed: {conversion_result['error']}")
-    else:
-        print("Model conversion completed successfully")
+    # if not conversion_result['success']:
+    #     print(f"Warning: TFLite conversion failed: {conversion_result['error']}")
+    # else:
+    #     print("Model conversion completed successfully")
     
     # Print final metrics in a format easy to parse for the UI
-    print(f"FINAL_LOSS:{final_loss}")
-    print(f"FINAL_ACCURACY:{final_accuracy}")
-    print(f"FINAL_VAL_LOSS:{final_val_loss}")
-    print(f"FINAL_VAL_ACCURACY:{final_val_accuracy}")
+    # print(f"FINAL_LOSS:{final_loss}")
+    # print(f"FINAL_ACCURACY:{final_accuracy}")
+    # print(f"FINAL_VAL_LOSS:{final_val_loss}")
+    # print(f"FINAL_VAL_ACCURACY:{final_val_accuracy}")
 

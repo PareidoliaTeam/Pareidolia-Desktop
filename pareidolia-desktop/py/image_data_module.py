@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms, datasets
-from .numpy_image_dataset import NumpyImageDataset
+from numpy_image_dataset import NumpyImageDataset
 
 class ImageDataModule(pl.LightningDataModule):
     def __init__(

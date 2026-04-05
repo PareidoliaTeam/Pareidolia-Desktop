@@ -104,6 +104,7 @@ export async function setupPythonVenv() {
           'torch-metrics',
           'opencv-python',
           'pandas',
+          'psutil'
         ];
         await installPythonPackages(otherPackages);
         
