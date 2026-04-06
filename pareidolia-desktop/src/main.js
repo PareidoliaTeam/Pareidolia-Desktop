@@ -8,7 +8,6 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
 import createServer from './express.js';
 import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
 
@@ -647,6 +646,7 @@ ipcMain.handle('execute-train', async (event, params) => {
     "repvgg_a2"                 // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
     
   ];
+  console.log("Running with trainingParamsPt:", trainingParamsPt);
 
   return await executePythonScript(pythonScriptPath, trainingParamsPt, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
 });

@@ -31,11 +31,9 @@ Multiple folders per label are supported:
 import json
 import sys
 import os
+import shutil
 import numpy as np
 import cv2
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers, models
 import timm
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import Callback, ModelCheckpoint, EarlyStopping, LearningRateMonitor, RichProgressBar
@@ -48,9 +46,9 @@ from torchmetrics import Accuracy
 from pt_model import RepVGGClassifier
 from image_data_module import ImageDataModule
 from epoch_history_printer import EpochHistoryPrinter
-import onnx
+from pathlib import Path
 import glob
-import sys, subprocess
+import subprocess
 
 # Model constants
 IMG_HEIGHT = 224
@@ -58,12 +56,111 @@ IMG_WIDTH = 224
 IMG_CHANNELS = 3
 # NUM_CLASSES is now determined dynamically from the labels JSON at runtime
 LEARNING_RATE = 0.001
+CONVERTER_VENV_NAME = "converter-venv-macos-tf219"
+CONVERTER_REQUIREMENTS = [
+    "tensorflow==2.19.1",
+    "tf-keras==2.19.0",
+    "onnx==1.16.2",
+    "onnx2tf==1.28.8",
+    "onnx-graphsurgeon==0.5.8",
+    "sng4onnx==2.0.1",
+    "ai-edge-litert==2.1.3",
+    "psutil==7.2.2",
+    "onnxruntime==1.24.4",
+    "onnxsim==0.4.36",
+]
+
+
+def run_logged_subprocess(command, env=None):
+    print("[Conversion] Running:", " ".join(command))
+    result = subprocess.run(command, capture_output=True, text=True, env=env)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+    result.check_returncode()
+
+
+def get_converter_python_path():
+    converter_override = os.environ.get("PAREIDOLIA_CONVERTER_PYTHON")
+    if converter_override:
+        return converter_override
+
+    current_python = Path(sys.executable).resolve()
+    if current_python.parent.name == "bin":
+        pareidolia_root = current_python.parent.parent.parent
+    else:
+        pareidolia_root = Path.home() / "Documents" / "PareidoliaApp"
+
+    converter_venv = pareidolia_root / CONVERTER_VENV_NAME
+    if os.name == "nt":
+        return str(converter_venv / "Scripts" / "python.exe")
+    return str(converter_venv / "bin" / "python")
+
+
+def is_converter_ready(converter_python):
+    if not os.path.exists(converter_python):
+        return False
+
+    result = subprocess.run(
+        [converter_python, "-m", "pip", "freeze"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+
+    installed = {}
+    for line in result.stdout.splitlines():
+        if "==" not in line:
+            continue
+        name, version = line.split("==", 1)
+        normalized = name.strip().lower().replace("_", "-")
+        installed[normalized] = version.strip()
+
+    for requirement in CONVERTER_REQUIREMENTS:
+        req_name, req_version = requirement.split("==", 1)
+        normalized_req = req_name.strip().lower().replace("_", "-")
+        if installed.get(normalized_req) != req_version:
+            return False
+
+    return True
+
+
+def ensure_converter_environment():
+    converter_python = get_converter_python_path()
+    if is_converter_ready(converter_python):
+        print(f"[Conversion] Using existing converter python: {converter_python}")
+        return converter_python
+
+    converter_venv_dir = Path(converter_python).parent.parent
+    print(f"[Conversion] Creating converter venv at: {converter_venv_dir}")
+    run_logged_subprocess([sys.executable, "-m", "venv", str(converter_venv_dir)])
+
+    run_logged_subprocess([converter_python, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
+    run_logged_subprocess([converter_python, "-m", "pip", "install", *CONVERTER_REQUIREMENTS])
+
+    if not is_converter_ready(converter_python):
+        raise RuntimeError("Converter environment setup completed, but onnx2tf is still unavailable.")
+
+    print(f"[Conversion] Converter ready: {converter_python}")
+    return converter_python
+
+
+def import_tensorflow_keras():
+    """Lazy import TensorFlow/Keras to avoid macOS import-order crashes."""
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras import layers, models
+    return tf, keras, layers, models
 
 def create_cnn_model(num_classes):
     """Creates a CNN model for image classification.
     
     @param num_classes: Number of output classes, determined from labels JSON
     """
+    _, keras, layers, models = import_tensorflow_keras()
+
     model = models.Sequential([
         layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)),
         
@@ -116,6 +213,8 @@ def load_images_from_json(labels_json):
               label_names - ordered list of label names (index matches one-hot position)
     """
     import json
+
+    _, keras, _, _ = import_tensorflow_keras()
 
     if isinstance(labels_json, str):
         labels_dict = json.loads(labels_json)
@@ -173,6 +272,8 @@ def convert_model_to_tflite(model, X_train, model_folder):
     @param X_train: Training data for representative dataset (for quantization)
     @param model_folder: Folder path where models will be saved
     """
+    tf, keras, _, _ = import_tensorflow_keras()
+
     try:
         # Ensure model folder exists
         os.makedirs(model_folder, exist_ok=True)
@@ -284,6 +385,8 @@ def convert_pt_to_onnx(model, model_folder):
         }
     
 def verify_onnx_integrity(onnx_model_path):
+    import onnx
+
     try:
         onnx_model = onnx.load(onnx_model_path)
         onnx.checker.check_model(onnx_model)
@@ -295,6 +398,8 @@ def verify_onnx_integrity(onnx_model_path):
     
 def compute_mean_std_welford_fast(image_paths, image_size=256, crop_size=224):
     """Vectorized Welford — updates per image batch of pixels, not per pixel."""
+    tf, _, _, _ = import_tensorflow_keras()
+
     n     = 0
     mean  = np.zeros(3, dtype=np.float64)
     M2    = np.zeros(3, dtype=np.float64)
@@ -329,6 +434,8 @@ def compute_mean_std_welford_fast(image_paths, image_size=256, crop_size=224):
     return mean.astype(np.float32), std.astype(np.float32)
 
 def representative_data_gen():
+    tf, _, _, _ = import_tensorflow_keras()
+
     image_paths = glob.glob("calibration_images/cifar10/*.JPEG")
     mean, std = compute_mean_std_welford_fast(image_paths)
     print("Calculated mean:", mean)
@@ -345,27 +452,32 @@ def representative_data_gen():
         img = tf.expand_dims(img, axis=0)                      # add batch dim [224,224,3] → [1,224,224,3]
         yield [img]                                            # yield one sample to the converter
 
-def convert_onnx_to_tf(onnx_model_path, tf_model_path):
+def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
     try:
-        os.makedirs(os.path.dirname(tf_model_path), exist_ok=True)
-        print("ONNX_MODEL_PATH:", onnx_model_path)
-        print("TFMODEL_PATH:", tf_model_path)
-        # subprocess.check_call([
-        #     sys.executable, "-m", "onnx2tf",
-        #     "-i", onnx_model_path,
-        #     "-o", tf_model_path,
-        #     "-n"
-        # ])
+        if os.path.exists(tf_model_path):
+            shutil.rmtree(tf_model_path)
 
-        # Instead of check_call, use run() for more control:
-        result = subprocess.run(
-            [sys.executable, "-m", "onnx2tf", "-i", onnx_model_path, "-o", tf_model_path, "-n"],
-            capture_output=True,
-            text=True
+        os.makedirs(os.path.dirname(tf_model_path), exist_ok=True)
+        print("[Conversion] ONNX model path:", onnx_model_path)
+        print("[Conversion] onnx2tf output folder:", tf_model_path)
+
+        converter_bin_dir = str(Path(converter_python).parent)
+        env = os.environ.copy()
+        env["PATH"] = converter_bin_dir + os.pathsep + env.get("PATH", "")
+
+        run_logged_subprocess(
+            [
+                converter_python,
+                "-m",
+                "onnx2tf",
+                "-i",
+                onnx_model_path,
+                "-o",
+                tf_model_path,
+                "-nuo",
+            ],
+            env=env,
         )
-        print("STDOUT:", result.stdout)
-        print("STDERR:", result.stderr)
-        result.check_returncode()  # raises if it failed
 
         print(f"ONNX model converted to TensorFlow format at: {tf_model_path}")
         return {
@@ -378,29 +490,38 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path):
             'success': False,
             'error': str(e)
         }
-    
-def convert_tf_to_tflite(tf_model_path, tflite_model_path):
-    try:
-        converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-        converter.representative_dataset = representative_data_gen 
-        converter.target_spec.supported_ops = [
-            tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
-            tf.lite.OpsSet.TFLITE_BUILTINS,
-        ]
-        converter.inference_input_type = tf.uint8
-        converter.inference_output_type = tf.float32
-        tflite_model = converter.convert()
 
-        with open(tflite_model_path + "model_quant.tflite", "wb") as f:
-            f.write(tflite_model)
-        print(f"TensorFlow model converted to TFLite format at: {tflite_model_path}model_quant.tflite")
+
+def collect_generated_tflite(tf_model_path, onnx_model_path):
+    base_name = os.path.splitext(os.path.basename(onnx_model_path))[0]
+    preferred_files = [
+        os.path.join(tf_model_path, f"{base_name}_float32.tflite"),
+        os.path.join(tf_model_path, f"{base_name}_float16.tflite"),
+        os.path.join(tf_model_path, f"{base_name}.tflite"),
+    ]
+    for candidate in preferred_files:
+        if os.path.exists(candidate):
+            return candidate
+
+    fallback = sorted(glob.glob(os.path.join(tf_model_path, "*.tflite")))
+    return fallback[0] if fallback else None
+
+
+def finalize_tflite_output(tf_model_path, model_folder, onnx_model_path):
+    try:
+        generated_tflite = collect_generated_tflite(tf_model_path, onnx_model_path)
+        if generated_tflite is None:
+            raise FileNotFoundError(f"No .tflite file generated in {tf_model_path}")
+
+        final_tflite_path = os.path.join(model_folder, "model.tflite")
+        shutil.copy2(generated_tflite, final_tflite_path)
+        print(f"Copied TFLite model to: {final_tflite_path}")
         return {
             'success': True,
-            'tflite_model': tflite_model_path + "model_quant.tflite"
+            'tflite_model': final_tflite_path
         }
     except Exception as e:
-        print(f"Error converting TensorFlow to TFLite: {str(e)}")
+        print(f"Error finalizing TFLite output: {str(e)}")
         return {
             'success': False,
             'error': str(e)
@@ -487,9 +608,9 @@ if __name__ == "__main__":
     print("Converting model to ONNX format...")
     onnx_conversion_result = convert_pt_to_onnx(model, model_folder)
     if not onnx_conversion_result['success']:
-        print(f"Warning: ONNX conversion failed: {onnx_conversion_result['error']}")
-    else:
-        print("ONNX model conversion completed successfully")
+        print(f"Error: ONNX conversion failed: {onnx_conversion_result['error']}")
+        sys.exit(1)
+    print("ONNX model conversion completed successfully")
     
     onnx_model_path = onnx_conversion_result.get('onnx_model')
     # print(f"ONNX model path: {onnx_model_path}")
@@ -498,22 +619,33 @@ if __name__ == "__main__":
             print("ONNX model is valid and ready for TFLite conversion.")
         else:
             print("ONNX model integrity check failed.")
+            sys.exit(1)
+
+    print("Preparing converter environment...")
+    try:
+        converter_python = ensure_converter_environment()
+    except Exception as e:
+        print(f"Error setting up converter environment: {str(e)}")
+        sys.exit(1)
 
     print("Converting ONNX model to TF format...")
-    tf_conversion_result = convert_onnx_to_tf(onnx_model_path, os.path.join(model_folder, "tf_out"))
+    tf_conversion_result = convert_onnx_to_tf(
+        onnx_model_path,
+        os.path.join(model_folder, "tf_out"),
+        converter_python
+    )
     if not tf_conversion_result['success']:
-        print(f"Warning: ONNX to TF conversion failed: {tf_conversion_result['error']}")
-    else:
-        print("ONNX to TF conversion completed successfully")
+        print(f"Error: ONNX to TF conversion failed: {tf_conversion_result['error']}")
+        sys.exit(1)
+    print("ONNX to TF conversion completed successfully")
     
-    print("Converting TF model to TFLite format...")
+    print("Finalizing TFLite model output...")
     tf_model_path = tf_conversion_result.get('tf_model')
-    # print(f"TF model path: {tf_model_path}")
-    tflite_conversion_result = convert_tf_to_tflite(tf_model_path, os.path.join(model_folder, "model.tflite"))
+    tflite_conversion_result = finalize_tflite_output(tf_model_path, model_folder, onnx_model_path)
     if not tflite_conversion_result['success']:
-        print(f"Warning: TF to TFLite conversion failed: {tflite_conversion_result['error']}")
-    else:
-        print("TF to TFLite conversion completed successfully")
+        print(f"Error: TFLite output finalization failed: {tflite_conversion_result['error']}")
+        sys.exit(1)
+    print("TFLite model conversion completed successfully")
     
     tflite_model_path = tflite_conversion_result.get('tflite_model')
     print(f"TFLite model path: {tflite_model_path}")
@@ -537,4 +669,3 @@ if __name__ == "__main__":
     # print(f"FINAL_ACCURACY:{final_accuracy}")
     # print(f"FINAL_VAL_LOSS:{final_val_loss}")
     # print(f"FINAL_VAL_ACCURACY:{final_val_accuracy}")
-
