@@ -28,6 +28,7 @@ Multiple folders per label are supported:
     python train_model.py '{"Apple": ["/path/batch1", "/path/batch2"], "Orange": ["/path/oranges"]}' /Users/you/models/fruit/model.keras 20
 -----------------------
 """
+import json
 import sys
 import os
 import numpy as np
@@ -422,6 +423,8 @@ if __name__ == "__main__":
     epochs = int(sys.argv[3])
     pretrained_model_name = sys.argv[4]
     
+    print(json.dumps(labels_json_str, indent=2))
+
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
 

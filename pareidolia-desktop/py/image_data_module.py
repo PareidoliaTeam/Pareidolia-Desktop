@@ -10,6 +10,22 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms, datasets
 from numpy_image_dataset import NumpyImageDataset
 
+class NumpyImageDataset(Dataset):
+    def __init__(self, images, labels, transform=None):
+        self.images = images
+        self.labels = labels
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        image = Image.fromarray((self.images[idx] * 255).astype(np.uint8))
+        label = int(self.labels[idx])
+        if self.transform is not None:
+            image = self.transform(image)
+        return image, label
+
 class ImageDataModule(pl.LightningDataModule):
     def __init__(
         self,
@@ -21,17 +37,29 @@ class ImageDataModule(pl.LightningDataModule):
         seed=42,
         cifar10=False,
         labels_json=None,
+        test_split=0.1,
     ):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.img_size = img_size
         self.val_split = val_split
+        self.test_split = test_split
         self.num_workers = 0 if os.name == "nt" else num_workers  # Windows workaround for num_workers > 0
         self.seed = seed
         self.cifar10 = cifar10
         self.labels_json = labels_json
         self._json_dataset_cache = None
+        self._split_indices_cache = None
+
+        if not (0 <= self.val_split < 1):
+            raise ValueError(f"val_split must be in [0, 1), got {self.val_split}")
+        if not (0 <= self.test_split < 1):
+            raise ValueError(f"test_split must be in [0, 1), got {self.test_split}")
+        if self.val_split + self.test_split >= 1:
+            raise ValueError(
+                f"val_split + test_split must be < 1, got {self.val_split + self.test_split}"
+            )
 
         self.train_transform = transforms.Compose([
             transforms.Resize((img_size, img_size)),
@@ -99,6 +127,8 @@ class ImageDataModule(pl.LightningDataModule):
         images = np.array(images, dtype=np.float32) / 255.0
         labels = np.array(labels, dtype=np.int64)
 
+        print(f"Loaded {len(images)} images across {num_classes} classes from JSON dataset.")
+
         return images, labels, num_classes, label_names
 
     def _get_json_dataset(self):
@@ -108,6 +138,36 @@ class ImageDataModule(pl.LightningDataModule):
                 raise ValueError("No images were loaded from labels_json.")
             self._json_dataset_cache = (images, labels, num_classes, label_names)
         return self._json_dataset_cache
+
+    def _get_split_indices(self, n_total):
+        if self._split_indices_cache is not None and self._split_indices_cache["n_total"] == n_total:
+            return (
+                self._split_indices_cache["train_indices"],
+                self._split_indices_cache["val_indices"],
+                self._split_indices_cache["test_indices"],
+            )
+
+        n_val = int(self.val_split * n_total)
+        n_test = int(self.test_split * n_total)
+        n_train = n_total - n_val - n_test
+        if n_train <= 0:
+            raise ValueError(
+                f"Dataset too small for val_split={self.val_split} and test_split={self.test_split} (n_total={n_total})."
+            )
+
+        generator = torch.Generator().manual_seed(self.seed)
+        all_indices = torch.randperm(n_total, generator=generator).tolist()
+        train_indices = all_indices[:n_train]
+        val_indices = all_indices[n_train:n_train + n_val]
+        test_indices = all_indices[n_train + n_val:]
+
+        self._split_indices_cache = {
+            "n_total": n_total,
+            "train_indices": train_indices,
+            "val_indices": val_indices,
+            "test_indices": test_indices,
+        }
+        return train_indices, val_indices, test_indices
 
     def prepare_data(self):
         if self.cifar10:
@@ -124,50 +184,55 @@ class ImageDataModule(pl.LightningDataModule):
             self.num_classes = num_classes
             self.class_names = label_names
 
+            n_total = len(images)
+            train_indices, val_indices, test_indices = self._get_split_indices(n_total)
+            eval_base = NumpyImageDataset(images, labels, transform=self.eval_transform)
+
             if stage in ("fit", None):
                 train_base = NumpyImageDataset(images, labels, transform=self.train_transform)
-                val_base = NumpyImageDataset(images, labels, transform=self.eval_transform)
-                n_total = len(train_base)
-                n_val = int(self.val_split * n_total)
-                n_train = n_total - n_val
-                generator = torch.Generator().manual_seed(self.seed)
-                train_subset, val_subset = random_split(range(n_total), [n_train, n_val], generator=generator)
-                self.train_ds = torch.utils.data.Subset(train_base, train_subset.indices)
-                self.val_ds = torch.utils.data.Subset(val_base, val_subset.indices)
+                self.train_ds = torch.utils.data.Subset(train_base, train_indices)
+                self.val_ds = torch.utils.data.Subset(eval_base, val_indices)
 
             if stage in ("test", None):
-                self.test_ds = NumpyImageDataset(images, labels, transform=self.eval_transform)
+                self.test_ds = torch.utils.data.Subset(eval_base, test_indices)
 
             if stage in ("predict", None):
                 self.predict_ds = NumpyImageDataset(images, labels, transform=self.eval_transform)
 
             return
 
-        if stage in ("fit", None):
-            if not self.cifar10:
-                train_base = datasets.ImageFolder(self.data_dir, transform=self.train_transform)
-                val_base = datasets.ImageFolder(self.data_dir, transform=self.eval_transform)
-            else:
+        if self.cifar10:
+            if stage in ("fit", None):
                 train_base = datasets.CIFAR10(root=self.data_dir, train=True, transform=self.train_transform, download=False)
                 val_base = datasets.CIFAR10(root=self.data_dir, train=True, transform=self.eval_transform, download=False)
+                n_total = len(train_base)
+                n_val = int(self.val_split * n_total)
+                n_train = n_total - n_val
+                generator = torch.Generator().manual_seed(self.seed)
+                all_indices = torch.randperm(n_total, generator=generator).tolist()
+                train_indices = all_indices[:n_train]
+                val_indices = all_indices[n_train:]
+                self.train_ds = torch.utils.data.Subset(train_base, train_indices)
+                self.val_ds = torch.utils.data.Subset(val_base, val_indices)
+                self.num_classes = len(train_base.classes)
+                self.class_names = train_base.classes
 
-            n_total = len(train_base)
-            n_val = int(self.val_split * n_total)
-            n_train = n_total - n_val
-            generator = torch.Generator().manual_seed(self.seed)
-
-            train_subset, val_subset = random_split(range(n_total), [n_train, n_val], generator=generator)
-            self.train_ds = torch.utils.data.Subset(train_base, train_subset.indices)
-            self.val_ds = torch.utils.data.Subset(val_base, val_subset.indices)
-
-            self.num_classes = len(train_base.classes)
-            self.class_names = train_base.classes
-
-        if stage in ("test", None):
-            if self.cifar10:
+            if stage in ("test", None):
                 self.test_ds = datasets.CIFAR10(root=self.data_dir, train=False, transform=self.eval_transform, download=False)
-            else:
-                self.test_ds = datasets.ImageFolder(self.data_dir, transform=self.eval_transform)
+        else:
+            eval_base = datasets.ImageFolder(self.data_dir, transform=self.eval_transform)
+            n_total = len(eval_base)
+            train_indices, val_indices, test_indices = self._get_split_indices(n_total)
+
+            if stage in ("fit", None):
+                train_base = datasets.ImageFolder(self.data_dir, transform=self.train_transform)
+                self.train_ds = torch.utils.data.Subset(train_base, train_indices)
+                self.val_ds = torch.utils.data.Subset(eval_base, val_indices)
+                self.num_classes = len(eval_base.classes)
+                self.class_names = eval_base.classes
+
+            if stage in ("test", None):
+                self.test_ds = torch.utils.data.Subset(eval_base, test_indices)
 
         if stage in ("predict", None):
             if self.cifar10:
