@@ -465,19 +465,22 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
         env = os.environ.copy()
         env["PATH"] = converter_bin_dir + os.pathsep + env.get("PATH", "")
 
-        run_logged_subprocess(
-            [
-                converter_python,
-                "-m",
-                "onnx2tf",
-                "-i",
-                onnx_model_path,
-                "-o",
-                tf_model_path,
-                "-nuo",
-            ],
-            env=env,
-        )
+        onnx2tf_command = [
+            converter_python,
+            "-m",
+            "onnx2tf",
+            "-i",
+            onnx_model_path,
+            "-o",
+            tf_model_path,
+            "-v",
+            "warn",
+        ]
+        # macOS-specific stability workaround: skip onnx optimizer subprocess
+        if sys.platform == "darwin":
+            onnx2tf_command.append("-nuo")
+
+        run_logged_subprocess(onnx2tf_command, env=env)
 
         print(f"ONNX model converted to TensorFlow format at: {tf_model_path}")
         return {
@@ -621,12 +624,16 @@ if __name__ == "__main__":
             print("ONNX model integrity check failed.")
             sys.exit(1)
 
-    print("Preparing converter environment...")
-    try:
-        converter_python = ensure_converter_environment()
-    except Exception as e:
-        print(f"Error setting up converter environment: {str(e)}")
-        sys.exit(1)
+    if sys.platform == "darwin":
+        print("Preparing converter environment (macOS)...")
+        try:
+            converter_python = ensure_converter_environment()
+        except Exception as e:
+            print(f"Error setting up converter environment: {str(e)}")
+            sys.exit(1)
+    else:
+        print("Using current Python environment for conversion (non-macOS).")
+        converter_python = sys.executable
 
     print("Converting ONNX model to TF format...")
     tf_conversion_result = convert_onnx_to_tf(
