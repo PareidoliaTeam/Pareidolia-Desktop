@@ -11,7 +11,7 @@ import os from 'node:os';
 import { execSync } from 'node:child_process';
 import createServer from './express.js';
 import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
-import { getDatasetsList, getModelsList, createDatasetFolder, createModelFolder, getPareidoliaFolderPath, getLocalIP, getModelSettings, updateModelSettings, getProjectImages, modelDetailsForPython } from './storage.js';
+import { ensurePareidoliaFolder, getDatasetsList, getModelsList, createDatasetFolder, createModelFolder, getPareidoliaFolderPath, getLocalIP, getModelSettings, updateModelSettings, getProjectImages, modelDetailsForPython } from './storage.js';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
