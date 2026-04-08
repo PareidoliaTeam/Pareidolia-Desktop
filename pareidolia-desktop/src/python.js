@@ -109,7 +109,7 @@ export async function setupPythonVenv() {
         ];
         await installPythonPackages(otherPackages);
         
-        resolve({                                  // ✅ add this
+        resolve({                                  
           success: true,
           venvPath,
           pythonExecutable: getVenvPythonExecutable(),
@@ -191,8 +191,6 @@ export function installPythonPackages(packages, indexurl = null) {
           venvPath: venvPath,
           pythonExecutable: pythonExecutable
         });
-
-        // return false;
       }
     });
     

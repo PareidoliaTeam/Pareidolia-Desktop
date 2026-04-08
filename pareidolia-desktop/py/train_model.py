@@ -134,7 +134,7 @@ def load_images_from_json(labels_json):
 
     if len(images) == 0:
         return None, None, 0, []
-
+ 
     images = np.array(images, dtype='float32') / 255.0
     labels = keras.utils.to_categorical(labels, num_classes)
 

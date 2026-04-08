@@ -11,6 +11,17 @@ from torchvision import transforms, datasets
 from numpy_image_dataset import NumpyImageDataset
 
 class NumpyImageDataset(Dataset):
+    """
+    Author: Armando Vega
+    Date Created: 7 April 2026
+
+    Last Modified By: Armando Vega
+    Date Last Modified: 7 April 2026
+
+    A dataset class that wraps numpy arrays of images and labels, applying optional transformations. 
+    Images are expected to be in the format of a numpy array with shape (N, H, W, C) and pixel values in the range [0, 1].
+    """
+
     def __init__(self, images, labels, transform=None):
         self.images = images
         self.labels = labels
@@ -27,17 +38,35 @@ class NumpyImageDataset(Dataset):
         return image, label
 
 class ImageDataModule(pl.LightningDataModule):
+    """
+    Author: Armando Vega
+    Date Created: 7 April 2026
+
+    Last Modified By: Armando Vega
+    Date Last Modified: 7 April 2026
+
+    Pytorch Lightning DataModule for loading and preparing image datasets for training, validation, testing, and prediction.
+    Supports loading from a directory structure or from a JSON mapping of label names to folder paths looking like: 
+    {
+        "cat": ["path/to/cat_images_folder"],
+        "dog": ["path/to/dog_images_folder", "path/to/more_dog_images_folder"]
+    }
+
+    The DataModule handles splitting datasets into training, validation etc. based on specified parameters and applies generalized tranformations for each.
+    CIFAR-10 dataset loading is also supported as a special case for debugging or quick experimentation. A directory for data batches can be specified if 
+    loading data is the preferred method. 
+    """
     def __init__(
         self,
-        data_dir=None,
-        batch_size=32,
-        img_size=224,
-        val_split=0.2,
-        num_workers=4,
-        seed=42,
-        cifar10=False,
-        labels_json=None,
-        test_split=0.1,
+        data_dir=None, # the directory to load data from; ignored if labels_json is provided or cifar10=True
+        batch_size=32, # the batch size to use for all dataloaders
+        img_size=224,  # the size to which all images will be resized (square) for both training and evaluation; default is 224 for compatibility with common pretrained models, but can be set to 32 for CIFAR-10 or smaller datasets
+        val_split=0.2, # the fraction of the dataset to use for validation when loading from a directory or JSON; ignored if cifar10=True since CIFAR-10 has a predefined train/test split
+        num_workers=4, # the number of worker processes to use for data loading; set to 0 for Windows to avoid issues with multiprocessing
+        seed=42,       # reproducibility seed
+        cifar10=False, 
+        labels_json=None, # this is a string btw
+        test_split=0.1,   # the fraction of the dataset to use for testing when loading from a directory or JSON; ignored if cifar10=True since CIFAR-10 has a predefined train/test split
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -45,7 +74,7 @@ class ImageDataModule(pl.LightningDataModule):
         self.img_size = img_size
         self.val_split = val_split
         self.test_split = test_split
-        self.num_workers = 0 if os.name == "nt" else num_workers  # Windows workaround for num_workers > 0
+        self.num_workers = 0 if os.name == "nt" else num_workers  # Windows workaround for num_workers > 0; creates issues otherwise
         self.seed = seed
         self.cifar10 = cifar10
         self.labels_json = labels_json
@@ -61,7 +90,7 @@ class ImageDataModule(pl.LightningDataModule):
                 f"val_split + test_split must be < 1, got {self.val_split + self.test_split}"
             )
 
-        self.train_transform = transforms.Compose([
+        self.train_transform = transforms.Compose([ # training tranformations
             transforms.Resize((img_size, img_size)),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(degrees=15),
@@ -70,18 +99,16 @@ class ImageDataModule(pl.LightningDataModule):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        self.eval_transform = transforms.Compose([
+        self.eval_transform = transforms.Compose([ # evaluation tranformations (no augmentation, just resizing and normalization)
             transforms.Resize(256),
             transforms.CenterCrop(img_size),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-    # def calculate_mean_std(self, images):
-        
-
     def load_images_from_json(self, labels_json):
         """Load images from a JSON mapping of label names to arrays of folder paths."""
+
         if isinstance(labels_json, str):
             labels_json = labels_json.strip()
             if labels_json.startswith("{"):
@@ -132,6 +159,9 @@ class ImageDataModule(pl.LightningDataModule):
         return images, labels, num_classes, label_names
 
     def _get_json_dataset(self):
+        """
+        
+        """
         if self._json_dataset_cache is None:
             images, labels, num_classes, label_names = self.load_images_from_json(self.labels_json)
             if images is None:

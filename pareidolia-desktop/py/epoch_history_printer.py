@@ -5,16 +5,21 @@ import pandas as pd
 import math
 
 class EpochHistoryPrinter(Callback):
+    """
+    Author: Armando Vega
+    Date Created: 7 April 2026
+
+    Last Modified By: Armando Vega
+    Date Last Modified: 7 April 2026
+
+    A PyTorch Lightning callback that prints the training and validation loss and accuracy at the end of each validation epoch. 
+    It retrieves the metrics from the trainer's callback_metrics dictionary, handling both tensor and non-tensor values, and ensures 
+    that only finite values are printed. The output is formatted for easy readability, showing the current epoch number along with the relevant metrics.
+    """
+    
     def __init__(self, print_every_n_steps=100):
         super().__init__()
         self.print_every_n_steps = max(1, int(print_every_n_steps))
-
-    # def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-    #     # Heartbeat so notebook runs don't look frozen when progress widgets fail.
-    #     if (batch_idx + 1) % self.print_every_n_steps == 0:
-    #         total = trainer.num_training_batches
-    #         total_txt = str(total) if total is not None else "?"
-    #         print(f"epoch={trainer.current_epoch:02d} batch={batch_idx + 1}/{total_txt}", flush=True)
 
     def on_validation_epoch_end(self, trainer, pl_module):
         if trainer.sanity_checking:
