@@ -159,9 +159,6 @@ class ImageDataModule(pl.LightningDataModule):
         return images, labels, num_classes, label_names
 
     def _get_json_dataset(self):
-        """
-        
-        """
         if self._json_dataset_cache is None:
             images, labels, num_classes, label_names = self.load_images_from_json(self.labels_json)
             if images is None:
@@ -235,13 +232,16 @@ class ImageDataModule(pl.LightningDataModule):
             if stage in ("fit", None):
                 train_base = datasets.CIFAR10(root=self.data_dir, train=True, transform=self.train_transform, download=False)
                 val_base = datasets.CIFAR10(root=self.data_dir, train=True, transform=self.eval_transform, download=False)
+
                 n_total = len(train_base)
                 n_val = int(self.val_split * n_total)
                 n_train = n_total - n_val
+
                 generator = torch.Generator().manual_seed(self.seed)
                 all_indices = torch.randperm(n_total, generator=generator).tolist()
                 train_indices = all_indices[:n_train]
                 val_indices = all_indices[n_train:]
+
                 self.train_ds = torch.utils.data.Subset(train_base, train_indices)
                 self.val_ds = torch.utils.data.Subset(val_base, val_indices)
                 self.num_classes = len(train_base.classes)
@@ -256,8 +256,10 @@ class ImageDataModule(pl.LightningDataModule):
 
             if stage in ("fit", None):
                 train_base = datasets.ImageFolder(self.data_dir, transform=self.train_transform)
+
                 self.train_ds = torch.utils.data.Subset(train_base, train_indices)
                 self.val_ds = torch.utils.data.Subset(eval_base, val_indices)
+
                 self.num_classes = len(eval_base.classes)
                 self.class_names = eval_base.classes
 
@@ -270,6 +272,7 @@ class ImageDataModule(pl.LightningDataModule):
             else:
                 self.predict_ds = datasets.ImageFolder(self.data_dir, transform=self.eval_transform)
 
+    # DataLoader objects for training, validation, testing, and prediction. Uses the respective datasets and applies appropriate shuffling and multiprocessing settings.
     def train_dataloader(self):
         return DataLoader(
             self.train_ds,

@@ -6,6 +6,16 @@ import pytorch_lightning as pl
 from torchmetrics import Accuracy
 
 class RepVGGClassifier(pl.LightningModule):
+    """
+    Author: Armando Vega
+    Date Created: 8 April 2026
+
+    Last Modified By: Armando Vega
+    Date Last Modified: 8 April 2026
+
+    A PyTorch Lightning module that imports a pre-trained model as the backbone and a custom head for classification. The base trained model is RepVGG-A2 but
+    can be swapped out for any of the models that timm offers. 
+    """
     def __init__(self, model_name="repvgg_a2", num_classes=10, lr=1e-3, hidden_dim=512):
         super().__init__()
         self.save_hyperparameters()

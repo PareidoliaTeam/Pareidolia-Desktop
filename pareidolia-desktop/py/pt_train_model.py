@@ -1,31 +1,39 @@
 """
-Created by Aleaxngelo Orozco Gutierrez on 2-10-2026
+Author: Armando Vega
+Date Created: 8 April 2026
 
-Currently is supposed to use file paths to get image training data and export a working model
-However, until a virtual envoirment is made with the nseecery packages, it currently returns an error.
-Future work will allow the python function to execute successfully and allow flexible model creation options
+Last Modified By: Armando Vega
+Date Last Modified: 8 April 2026
+
+Description: 
 
 --- CONSOLE TESTING ---
 Usage:
-    python train_model.py '<labels_json>' <model_output_path> <epochs>
+    python pt_train_model.py '<labels_json>' <model_output_path> <epochs> '<pretrained_model_name>'
 
 Arguments:
+
     labels_json       - JSON string mapping label names to arrays of folder paths.
                         Each folder should contain .jpg / .jpeg / .png image files.
-    model_output_path - Full path where model.keras (and model.tflite) will be saved.
+
+    model_output_path - Full path where model.onnx, tf_out, (and model.tflite) will be saved.
                         The parent directory will be created if it does not exist.
+
     epochs            - Integer number of training epochs.
 
-Example (macOS / Linux) — replace the paths with your own folders:
-    python train_model.py '{"Apple": ["/Users/you/images/apples"], "Orange": ["/Users/you/images/oranges"]}' /Users/you/models/fruit/model.keras 10
+    pretrained_model_name - Name of the pre-trained model to use as backbone (e.g. "repvgg_a2", "resnet18", etc.)
 
-    python train_model.py '{"Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/positives"], "Not Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/negatives", "/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Orange/positives"]}' /Users/alexangeloorozco/Documents/PareidoliaApp/models/Round/models 3
+
+Example (macOS / Linux) — replace the paths with your own folders:
+    python pt_train_model.py '{"Apple": ["/Users/you/images/apples"], "Orange": ["/Users/you/images/oranges"]}' /Users/you/models/fruit/model.onnx 10 "repvgg_a2"
+
+    python pt_train_model.py '{"Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/positives"], "Not Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/negatives", "/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Orange/positives"]}' /Users/alexangeloorozco/Documents/PareidoliaApp/models/Round/models 3 "repvgg_a2"
 
 Example (Windows) — use double-quotes around the JSON and escape inner quotes:
-    python train_model.py "{\"Apple\": [\"C:/images/apples\"], \"Orange\": [\"C:/images/oranges\"]}" C:/models/fruit/model.keras 10
+    python pt_train_model.py  "{\"Apple\": [\"C:/images/apples\"], \"Orange\": [\"C:/images/oranges\"]}" C:/models/fruit/model.onnx 10 "repvgg_a2"
 
 Multiple folders per label are supported:
-    python train_model.py '{"Apple": ["/path/batch1", "/path/batch2"], "Orange": ["/path/oranges"]}' /Users/you/models/fruit/model.keras 20
+    python pt_train_model.py '{"Apple": ["/path/batch1", "/path/batch2"], "Orange": ["/path/oranges"]}' /Users/you/models/fruit/model.onnx 20 "repvgg_a2"
 -----------------------
 """
 import json
@@ -72,6 +80,10 @@ CONVERTER_REQUIREMENTS = [
 
 
 def run_logged_subprocess(command, env=None):
+    """
+    Runs a converter-related subprocess command, prints stdout/stderr so
+    conversion logs are visible, and raises if the command fails.
+    """
     print("[Conversion] Running:", " ".join(command))
     result = subprocess.run(command, capture_output=True, text=True, env=env)
     if result.stdout:
@@ -80,8 +92,12 @@ def run_logged_subprocess(command, env=None):
         print(result.stderr)
     result.check_returncode()
 
-
 def get_converter_python_path():
+    """
+    Resolves the Python path for the converter environment.
+    Uses PAREIDOLIA_CONVERTER_PYTHON when set; otherwise builds the default
+    platform-specific venv path from the inferred Pareidolia root.
+    """
     converter_override = os.environ.get("PAREIDOLIA_CONVERTER_PYTHON")
     if converter_override:
         return converter_override
@@ -99,6 +115,11 @@ def get_converter_python_path():
 
 
 def is_converter_ready(converter_python):
+    """
+    Checks whether the converter environment is ready by confirming the Python
+    executable exists and that all pinned converter requirements are installed
+    with exact versions.
+    """
     if not os.path.exists(converter_python):
         return False
 
@@ -128,6 +149,11 @@ def is_converter_ready(converter_python):
 
 
 def ensure_converter_environment():
+    """
+    Ensures a valid converter virtual environment exists.
+    Reuses an existing ready environment, otherwise creates the venv, installs
+    pinned converter dependencies, validates readiness, and returns its Python.
+    """
     converter_python = get_converter_python_path()
     if is_converter_ready(converter_python):
         print(f"[Conversion] Using existing converter python: {converter_python}")
@@ -154,201 +180,6 @@ def import_tensorflow_keras():
     from tensorflow.keras import layers, models
     return tf, keras, layers, models
 
-def create_cnn_model(num_classes):
-    """Creates a CNN model for image classification.
-    
-    @param num_classes: Number of output classes, determined from labels JSON
-    """
-    _, keras, layers, models = import_tensorflow_keras()
-
-    model = models.Sequential([
-        layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)),
-        
-        # Conv Block 1
-        layers.Conv2D(16, 3, padding='same', activation='relu'),
-        layers.MaxPooling2D(),
-        
-        # Conv Block 2
-        layers.Conv2D(32, 3, padding='same', activation='relu'),
-        layers.MaxPooling2D(),
-        
-        # Conv Block 3
-        layers.Conv2D(64, 3, padding='same', activation='relu'),
-        layers.MaxPooling2D(),
-        
-        layers.Dropout(0.2),
-        
-        # Flatten
-        layers.Flatten(),
-        
-        # Dense Layers
-        layers.Dense(128, activation='relu'),
-        layers.Dropout(0.3),
-        
-        layers.Dense(64, activation='relu'),
-        layers.Dropout(0.2),
-        
-        layers.Dense(32, activation='relu'),
-        
-        layers.Dense(num_classes, activation='softmax')
-    ])
-    
-    model.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
-        loss='categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    
-    return model
-
-def load_images_from_json(labels_json):
-    """Load images from a JSON mapping of label names to arrays of folder paths.
-    
-    @param labels_json: JSON string (or dict) mapping label names to lists of folder paths.
-                        Example: {"Apple": ["/path/to/folder1"], "Orange": ["/path/a", "/path/b"]}
-    @returns: (images, labels, num_classes, label_names)
-              images      - float32 numpy array normalized to [0, 1]
-              labels      - one-hot encoded label array
-              num_classes - number of unique labels found
-              label_names - ordered list of label names (index matches one-hot position)
-    """
-    import json
-
-    _, keras, _, _ = import_tensorflow_keras()
-
-    if isinstance(labels_json, str):
-        labels_dict = json.loads(labels_json)
-    else:
-        labels_dict = labels_json
-
-    label_names = list(labels_dict.keys())
-    num_classes = len(label_names)
-
-    images = []
-    labels = []
-
-    for label_index, label_name in enumerate(label_names):
-        folder_paths = labels_dict[label_name]
-        for folder_path in folder_paths:
-            if not os.path.exists(folder_path):
-                print(f"Warning: folder not found, skipping: {folder_path}")
-                continue
-            for img_file in os.listdir(folder_path):
-                if img_file.lower().endswith(('.jpg', '.jpeg', '.png')):
-                    img_path = os.path.join(folder_path, img_file)
-
-                    img = cv2.imread(img_path)
-                    if img is None:
-                        continue
-
-                    img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-                    images.append(img)
-                    labels.append(label_index)
-
-    if len(images) == 0:
-        return None, None, 0, []
-
-    images = np.array(images, dtype='float32') / 255.0
-    labels = keras.utils.to_categorical(labels, num_classes)
-
-    return images, labels, num_classes, label_names
-
-def preprocess_frame(frame):
-    """Preprocess a frame for prediction."""
-    img = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.astype('float32') / 255.0
-    img = np.expand_dims(img, axis=0)
-    return img
-
-def convert_model_to_tflite(model, X_train, model_folder):
-    """
-    Converts a trained Keras model to TensorFlow Lite format with quantization.
-    Saves both the original .keras model and the converted .tflite model.
-    
-    @param model: The trained Keras model
-    @param X_train: Training data for representative dataset (for quantization)
-    @param model_folder: Folder path where models will be saved
-    """
-    tf, keras, _, _ = import_tensorflow_keras()
-
-    try:
-        # Ensure model folder exists
-        os.makedirs(model_folder, exist_ok=True)
-        
-        # Save the original Keras model
-        keras_model_path = os.path.join(model_folder, 'model.keras')
-        model.save(keras_model_path)
-        print(f"Keras model saved to: {keras_model_path}")
-        
-        # Create inference model (remove data_augmentation layer if it exists)
-        inference_layers = [l for l in model.layers if l.name != "data_augmentation"]
-        inference_model = tf.keras.Sequential(inference_layers)
-        
-        # Build the inference model with sample data
-        _ = inference_model(tf.zeros([1, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS], tf.float32))
-        
-        # Define representative dataset for quantization
-        def representative_dataset():
-            for i in range(min(200, len(X_train))):
-                x = X_train[i:i+1].astype(np.float32)
-                # Data should already be normalized (0..1) from preprocessing
-                yield [x]
-        
-        # Convert to TFLite with quantization
-        converter = tf.lite.TFLiteConverter.from_keras_model(inference_model)
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-        converter.representative_dataset = representative_dataset
-        converter.target_spec.supported_ops = [
-            tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
-            tf.lite.OpsSet.TFLITE_BUILTINS,
-        ]
-        converter.inference_input_type = tf.uint8
-        converter.inference_output_type = tf.float32
-        
-        # Convert the model
-        tflite_model = converter.convert()
-        
-        # Save the TFLite model
-        tflite_model_path = os.path.join(model_folder, 'model.tflite')
-        with open(tflite_model_path, 'wb') as f:
-            f.write(tflite_model)
-        print(f"TFLite model saved to: {tflite_model_path}")
-        
-        # Print model details
-        interpreter = tf.lite.Interpreter(model_path=tflite_model_path)
-        interpreter.allocate_tensors()
-        
-        in0 = interpreter.get_input_details()[0]
-        out0 = interpreter.get_output_details()[0]
-        
-        print("\n=== TFLite MODEL INPUT ===")
-        print(f"name: {in0['name']}")
-        print(f"shape: {in0['shape']}")
-        print(f"dtype: {in0['dtype']}")
-        print(f"quantization (scale, zero_point): {in0['quantization']}")
-        
-        print("\n=== TFLite MODEL OUTPUT ===")
-        print(f"name: {out0['name']}")
-        print(f"shape: {out0['shape']}")
-        print(f"dtype: {out0['dtype']}")
-        print(f"quantization (scale, zero_point): {out0['quantization']}")
-        
-        return {
-            'success': True,
-            'keras_model': keras_model_path,
-            'tflite_model': tflite_model_path
-        }
-        
-    except Exception as e:
-        print(f"Error converting model to TFLite: {str(e)}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
-
 def convert_pt_to_onnx(model, model_folder):
     try:
         os.makedirs(model_folder, exist_ok=True)
@@ -374,7 +205,6 @@ def convert_pt_to_onnx(model, model_folder):
         return {
             'success': True,
             'onnx_model': os.path.join(model_folder, "model.onnx")
-            # 'tflite_model': tflite_model_path
         }
     
     except Exception as e:
@@ -533,12 +363,12 @@ def finalize_tflite_output(tf_model_path, model_folder, onnx_model_path):
 # Functions are declared above and used here
 if __name__ == "__main__":
     # Check for required arguments
-    # Usage: python train_model.py <labels_json> <model_path> <epochs>
+    # Usage: python pt_train_model.py <labels_json> <model_path> <epochs> <pretrained_model_name>
     #   labels_json - JSON string mapping label names to arrays of folder paths
     #                 e.g. '{"Apple": ["/path/to/apples"], "Orange": ["/path/a", "/path/b"]}'
     if len(sys.argv) < 5:
         print("Error: Missing required arguments")
-        print('Usage: python train_model.py <labels_json> <model_path> <epochs> <pretrained_model_name>')
+        print('Usage: python pt_train_model.py <labels_json> <model_path> <epochs> <pretrained_model_name>')
         sys.exit(1)
     
     # Get command line arguments
@@ -616,7 +446,6 @@ if __name__ == "__main__":
     print("ONNX model conversion completed successfully")
     
     onnx_model_path = onnx_conversion_result.get('onnx_model')
-    # print(f"ONNX model path: {onnx_model_path}")
     if onnx_model_path and os.path.exists(onnx_model_path):
         if verify_onnx_integrity(onnx_model_path):
             print("ONNX model is valid and ready for TFLite conversion.")
@@ -656,23 +485,3 @@ if __name__ == "__main__":
     
     tflite_model_path = tflite_conversion_result.get('tflite_model')
     print(f"TFLite model path: {tflite_model_path}")
-    # Get final metrics
-    # final_loss = history.history['loss'][-1]
-    # final_accuracy = history.history['accuracy'][-1]
-    # final_val_loss = history.history['val_loss'][-1]
-    # final_val_accuracy = history.history['val_accuracy'][-1]
-    
-    # Convert model to TFLite and save both formats
-    # print("Converting model to TFLite format...")
-    # conversion_result = convert_model_to_tflite(model, X_train, model_folder)
-    
-    # if not conversion_result['success']:
-    #     print(f"Warning: TFLite conversion failed: {conversion_result['error']}")
-    # else:
-    #     print("Model conversion completed successfully")
-    
-    # Print final metrics in a format easy to parse for the UI
-    # print(f"FINAL_LOSS:{final_loss}")
-    # print(f"FINAL_ACCURACY:{final_accuracy}")
-    # print(f"FINAL_VAL_LOSS:{final_val_loss}")
-    # print(f"FINAL_VAL_ACCURACY:{final_val_accuracy}")
