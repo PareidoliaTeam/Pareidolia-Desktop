@@ -7,7 +7,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { getPareidoliaFolderPath } from './main.js';
+import { getPareidoliaFolderPath } from './storage.js';
 
 /**
  * Gets the path to the Python venv folder.
