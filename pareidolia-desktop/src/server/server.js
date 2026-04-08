@@ -6,9 +6,9 @@
  * All file system utilities are in storage.js (no Electron dependencies).
  */
 
-import createServer from './express.js';
-import { ensurePareidoliaFolder } from './storage.js';
-import { setupPythonVenv } from './python.js';
+import createServer from '../express.js';
+import { ensurePareidoliaFolder } from '../storage.js';
+import { setupPythonVenv } from '../python.js';
 
 console.log('Starting Pareidolia Express server...');
 

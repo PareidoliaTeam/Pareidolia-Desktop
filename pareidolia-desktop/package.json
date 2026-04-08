@@ -5,9 +5,10 @@
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
   "private": true,
+  "type": "module",
   "scripts": {
     "start": "electron-forge start",
-    "cloud-server": "node src/server.js",
+    "cloud-server": "node src/server/server.js",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
