@@ -8,7 +8,6 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
 import createServer from './express.js';
 import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
 
@@ -99,20 +98,41 @@ function getDocumentsPath() {
 
 /**
  * Gets the local IP address of the machine.
- * Returns the first non-loopback IPv4 address found.
+ * Prioritizes standard local subnets and filters out VPNs/Virtual interfaces.
  * @returns {string|null} The local IP address or null if not found
  */
 export function getLocalIP() {
   const interfaces = os.networkInterfaces();
+  let preferredIP = null;
+  let fallbackIP = null;
+
   for (const name of Object.keys(interfaces)) {
+    const lowerName = name.toLowerCase();
+    // Skip known virtual adapters and VPNs like Tailscale
+    if (lowerName.includes('tailscale') || 
+        lowerName.includes('vmware') || 
+        lowerName.includes('virtual') || 
+        lowerName.includes('wsl') ||
+        lowerName.includes('veth')) {
+      continue;
+    }
+
     for (const iface of interfaces[name]) {
       // Skip internal and non-IPv4 interfaces
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+        // Check if it's a standard private local network IP
+        if (iface.address.startsWith('192.168.') || 
+            iface.address.startsWith('10.') || 
+            iface.address.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+          if (!preferredIP) preferredIP = iface.address;
+        } else {
+          if (!fallbackIP) fallbackIP = iface.address;
+        }
       }
     }
   }
-  return null;
+
+  return preferredIP || fallbackIP || null;
 }
 
 /**
@@ -229,8 +249,7 @@ export async function createModelFolder(modelName) {
     const settingsPath = path.join(modelPath, 'model-settings.json');
     const defaultSettings = {
       labels: {},
-      epochs: 10,
-      layers: {}
+      epochs: 10
     };
 
     if (!fs.existsSync(settingsPath)) {
@@ -286,16 +305,7 @@ export async function updateModelSettings(modelName, newSettings) {
  *      { "Navel Oranges": "/path/a", 
  *      "Blood Oranges": "/path/b" } 
  *  }, 
- *  "epochs": 10,
- *   "layers": [
- *     {
- *       "type": "Dense",
- *       "parameters": {
- *         "units": "32"
- *       }
- *     }
- *   ],
- *   "lastTrained": "3/23/2026, 7:36:47 PM"
+ *  epochs: 10 
  * }
  * Labels is a key with a value of a dictionary with the keys Labels.
  * Labels hav values of dictionaries with the Dataset name as keys and their paths as values. 
@@ -406,12 +416,22 @@ export async function getModelsList() {
     for (const file of files) {
       const filePath = path.join(modelsPath, file);
       const stats = fs.statSync(filePath);
-      
+      const modelSettingsPath = path.join(filePath, 'model-settings.json');
+      const modelSettings = fs.existsSync(modelSettingsPath) ? JSON.parse(fs.readFileSync(modelSettingsPath, 'utf-8')) : null;
+
       // Only include directories
       if (stats.isDirectory()) {
-        models[file] = {
-          path: filePath
-        };
+        if (modelSettings) {
+          models[file] = {
+            path: filePath,
+            labels: modelSettings.labels || {}
+          };
+        }
+        else{
+          models[file] = {
+            path: filePath
+          };
+        }
       }
     }
 
@@ -562,10 +582,9 @@ ipcMain.handle('setup-python-venv', async () => {
  *                                      e.g. { "Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"] }
  * @param {string} params.modelFolderPath - Path to the model folder where outputs will be saved
  * @param {number} params.epochs      - Number of training epochs
- * @param {Object} params.layers      - Augmentation layers
  */
 ipcMain.handle('execute-train', async (event, params) => {
-  const { labelsJson, modelFolderPath, epochs, layers} = params;
+  const { labelsJson, modelFolderPath, epochs } = params;
 
   // Validate labelsJson
   if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
@@ -599,9 +618,13 @@ ipcMain.handle('execute-train', async (event, params) => {
   // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    // pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    pythonScriptPath = path.join(__dirname, '../../py/pt_train_model.py');
+
   } else {
-    pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    // pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    pythonScriptPath = path.join(process.resourcesPath, 'py/pt_train_model.py');
+
   }
 
   console.log('Python script path:', pythonScriptPath);
@@ -611,12 +634,21 @@ ipcMain.handle('execute-train', async (event, params) => {
 
   // Pass labels_json, model_path, and epochs as arguments
   const venvPath = getVenvPath();
-  return await executePythonScript(pythonScriptPath, [
+  const trainingParamsTf = [
+    JSON.stringify(labelsJson), // labels_json as a string argument ex: '{"Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"]}'
+    modelPath,                  // path to where model will be saved to after training
+    epochs.toString()           // number of epochs to train
+  ];
+  const trainingParamsPt = [
     JSON.stringify(labelsJson),
     modelPath,
     epochs.toString(),
-      JSON.stringify(layers || [])
-  ], venvPath);
+    "repvgg_a2"                 // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
+    
+  ];
+  console.log("Running with trainingParamsPt:", trainingParamsPt);
+
+  return await executePythonScript(pythonScriptPath, trainingParamsPt, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
 });
 /**
  * Handle getting the images in a selected project
