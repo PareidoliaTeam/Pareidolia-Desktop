@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "start": "electron-forge start",
-    "cloud-server": "node --input-type=module -e \"import './src/server.js'\"",
+    "cloud-server": "cd src/ && NODE_PATH=../../node_modules node server.js",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
