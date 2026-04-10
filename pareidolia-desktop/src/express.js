@@ -7,7 +7,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { getDatasetsList, getModelsList, createDatasetFolder, getPareidoliaFolderPath, getLocalIP } from './main.js';
+import { getDatasetsList, getModelsList, createDatasetFolder, getPareidoliaFolderPath, getLocalIP } from './storage.js';
 import { getVenvPath, executePythonScript } from './python.js';
 
 const createServer = () => {
@@ -252,13 +252,87 @@ const createServer = () => {
         console.log('Ping received at', new Date().toISOString());
         res.status(201).json({ success: true, message: 'pong' });
     });
-    
+
+    app.get('/ping', (req, res) => {
+        console.log('Ping received at', new Date().toISOString());
+        res.status(200).json({ success: true, message: 'pong' });
+    });
+
+    app.get('/get-directory-structure', (req, res) => {
+        try {
+            const pareidoliaPath = getPareidoliaFolderPath();
+            const datasetsPath = path.join(pareidoliaPath, 'datasets');
+            const modelsPath = path.join(pareidoliaPath, 'models');
+            
+            const getDirectoryContents = (dirPath) => {
+                if (!fs.existsSync(dirPath)) {
+                    return null;
+                }
+                return fs.readdirSync(dirPath).map(name => {
+                    const fullPath = path.join(dirPath, name);
+                    return {
+                        name,
+                        isDirectory: fs.statSync(fullPath).isDirectory(),
+                    };
+                });
+            };
+
+            const directoryStructure = {
+                datasets: getDirectoryContents(datasetsPath),
+                models: getDirectoryContents(modelsPath),
+            };
+
+            res.status(200).json({ success: true, directoryStructure });
+        } catch (error) {
+            console.error('Error getting directory structure:', error);
+            res.status(500).json({ success: false, error: 'Failed to get directory structure' });
+        }
+    });
+
+    app.get('/get-tailscale-ip', (req, res) => {
+        const tailscaleIP = "100.103.253.32:3001";
+        const qrContent = `http://${tailscaleIP}`;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrContent)}`;
+        
+        res.type('html').send(`
+        <!doctype html>
+        <html>
+            <head>
+            <meta charset="utf-8">
+            <title>QR Code</title>
+            </head>
+            <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;">
+            <img src="${qrUrl}" alt="Tailscale IP QR Code" />
+            </body>
+        </html>
+        `);
+    });
+
+    app.get('/get-ip', (req, res) => {
+        console.log("get-ip called!");
+        const ip = getLocalIP();
+        const qrContent = `http://${ip}:${port}`;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrContent)}`;
+        
+        res.type('html').send(`
+        <!doctype html>
+        <html>
+            <head>
+            <meta charset="utf-8">
+            <title>QR Code</title>
+            </head>
+            <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;">
+            <img src="${qrUrl}" alt="Local IP QR Code" />
+            </body>
+        </html>
+        `);
+    });
 
     app.listen(port, '0.0.0.0', () => {
         const localIP = getLocalIP();
         console.log(`Express server is running on http://${localIP}:${port}`);
     });
-
+    console.log("get-ip success!");
     return app;
 };
 

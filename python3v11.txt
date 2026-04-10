@@ -1,0 +1,22 @@
+How to build Python 3.11 from Source
+
+1. Update the Package manager
+sudo apt update
+
+2. Install the dev tools for building
+sudo apt install -y build-essential libssl-dev zlib1g-dev \
+  libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev \
+  libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev \
+  tk-dev libffi-dev uuid-dev
+
+3. Configure the build
+./configure --enable-optimizations --with-ensurepip=install
+
+4. Build with all CPU cores
+make -j$(nproc)
+
+5. Install seperatly from the default Python
+sudo make altinstall
+
+6. Verify
+python3.11 --version
