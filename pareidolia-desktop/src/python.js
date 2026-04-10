@@ -43,7 +43,7 @@ export function getVenvPythonExecutable() {
  * Runs in the background and does not affect the UI.
  * @returns {Promise<Object>} Object with success flag, path, and message
  */
-export function setupPythonVenv() {
+export async function setupPythonVenv() {
   return new Promise((resolve) => {
     const venvPath = getVenvPath();
     
@@ -76,60 +76,44 @@ export function setupPythonVenv() {
       venvError += data.toString();
     });
     
-    createVenvProcess.on('close', (code) => {
+    createVenvProcess.on('close', async (code) => {
       if (code === 0) {
         console.log('Virtual environment created successfully');
+        // install packages after venv creation
+        const torchPackages = ['torch', 'torchvision'];
+        // const torchIndexUrl = 'https://download.pytorch.org/whl/cu130'; // note that cu130 is for CUDA 13.0 which works on my NVIDIA RTX 5070
+        const torchIndexUrl = 'https://download.pytorch.org/whl/cpu'; // CPU-only version for better compatibility across different hardware
+        await installPythonPackages(torchPackages, torchIndexUrl);
+
+        const otherPackages = [
+          'tensorflow',
+          'jax',
+          'torch-xla2',
+          'onnx==1.16.2',
+          'onnx2tf',
+          'onnxscript',
+          'tf-keras',
+          'onnx-graphsurgeon',
+          'onnxruntime',
+          'ai-edge-litert',
+          'sng4onnx',
+          'datasets',
+          'torchao==0.11.0',
+          'timm',
+          'numpy',
+          'pytorch-lightning',
+          'torch-metrics',
+          'opencv-python',
+          'pandas',
+          'psutil'
+        ];
+        await installPythonPackages(otherPackages);
         
-        // Install required packages
-        const pythonExecutable = getVenvPythonExecutable();
-        const packages = ['tensorflow', 'opencv-python', 'numpy'];
-        
-        console.log('Installing required packages:', packages);
-        
-        const pipProcess = spawn(pythonExecutable, ['-m', 'pip', 'install', ...packages]);
-        
-        // Capture stdout from pip process and log it
-        let pipOutput = '';
-        pipProcess.stdout.on('data', (data) => {
-          pipOutput += data.toString();
-          console.log('pip:', data.toString());
-        });
-        
-        // Capture stderr from pip process and log any errors
-        let pipError = '';
-        pipProcess.stderr.on('data', (data) => {
-          pipError += data.toString();
-          console.log('pip error:', data.toString());
-        });
-        
-        pipProcess.on('close', (pipCode) => {
-          if (pipCode === 0) {
-            console.log('Packages installed successfully');
-            resolve({
-              success: true,
-              venvPath: venvPath,
-              pythonExecutable: pythonExecutable,
-              message: 'Virtual environment created and packages installed successfully'
-            });
-          } else {
-            console.error('Error installing packages:', pipError);
-            resolve({
-              success: false,
-              error: pipError || `pip exited with code ${pipCode}`,
-              venvPath: venvPath,
-              pythonExecutable: pythonExecutable
-            });
-          }
-        });
-        
-        pipProcess.on('error', (err) => {
-          console.error('Error running pip:', err);
-          resolve({
-            success: false,
-            error: err.message,
-            venvPath: venvPath,
-            pythonExecutable: pythonExecutable
-          });
+        resolve({                                  
+          success: true,
+          venvPath,
+          pythonExecutable: getVenvPythonExecutable(),
+          message: 'Venv created and packages installed successfully'
         });
       } else {
         console.error('Error creating virtual environment:', venvError);
@@ -145,6 +129,78 @@ export function setupPythonVenv() {
       resolve({
         success: false,
         error: err.message
+      });
+    });
+  });
+}
+
+/**
+ * Module function to install Python packages using pip in the venv. If multiple
+ * package blocks are needed, then this function can be called multiple times with 
+ * different package lists and index urls.
+ * @param {List<string>} packages 
+ * @param {string} indexurl 
+ * @returns {Promise<Object>} Object with success flag, path, and message or error
+ */
+export function installPythonPackages(packages, indexurl = null) { 
+  return new Promise((resolve) => {
+    // Install required packages
+    const pythonExecutable = getVenvPythonExecutable();
+    const venvPath = getVenvPath();
+    // const packages = ['tensorflow', 'opencv-python', 'numpy'];
+    
+    console.log('Installing required packages:', packages);
+    
+    let processDetails = ['-m', 'pip', 'install', ...packages];
+    if (indexurl) {
+      processDetails = ['-m', 'pip', 'install', ...packages, '--index-url', indexurl];
+    }
+    const pipProcess = spawn(pythonExecutable, processDetails);
+
+    
+    // Capture stdout from pip process and log it
+    let pipOutput = '';
+    pipProcess.stdout.on('data', (data) => {
+      pipOutput += data.toString();
+      console.log('pip:', data.toString());
+    });
+    
+    // Capture stderr from pip process and log any errors
+    let pipError = '';
+    pipProcess.stderr.on('data', (data) => {
+      pipError += data.toString();
+      console.log('pip error:', data.toString());
+    });
+    
+    pipProcess.on('close', (pipCode) => {
+      if (pipCode === 0) {
+        console.log('Packages installed successfully');
+        resolve({
+          success: true,
+          venvPath: venvPath,
+          pythonExecutable: pythonExecutable,
+          message: 'Virtual environment created and packages installed successfully'
+        });
+        
+        // return true;
+      } else {
+        console.error('Error installing packages:', pipError);
+        resolve({
+          success: false,
+          error: pipError || `pip exited with code ${pipCode}`,
+          venvPath: venvPath,
+          pythonExecutable: pythonExecutable
+        });
+      }
+    });
+    
+    pipProcess.on('error', (err) => {
+      console.error('Error running pip:', err);
+      resolve({
+        success: false,
+        error: err.message,
+        venvPath: venvPath,
+        pythonExecutable: pythonExecutable
       });
     });
   });

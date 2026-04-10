@@ -8,7 +8,6 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
 import createServer from './express.js';
 import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
 
@@ -99,20 +98,41 @@ function getDocumentsPath() {
 
 /**
  * Gets the local IP address of the machine.
- * Returns the first non-loopback IPv4 address found.
+ * Prioritizes standard local subnets and filters out VPNs/Virtual interfaces.
  * @returns {string|null} The local IP address or null if not found
  */
 export function getLocalIP() {
   const interfaces = os.networkInterfaces();
+  let preferredIP = null;
+  let fallbackIP = null;
+
   for (const name of Object.keys(interfaces)) {
+    const lowerName = name.toLowerCase();
+    // Skip known virtual adapters and VPNs like Tailscale
+    if (lowerName.includes('tailscale') || 
+        lowerName.includes('vmware') || 
+        lowerName.includes('virtual') || 
+        lowerName.includes('wsl') ||
+        lowerName.includes('veth')) {
+      continue;
+    }
+
     for (const iface of interfaces[name]) {
       // Skip internal and non-IPv4 interfaces
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+        // Check if it's a standard private local network IP
+        if (iface.address.startsWith('192.168.') || 
+            iface.address.startsWith('10.') || 
+            iface.address.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+          if (!preferredIP) preferredIP = iface.address;
+        } else {
+          if (!fallbackIP) fallbackIP = iface.address;
+        }
       }
     }
   }
-  return null;
+
+  return preferredIP || fallbackIP || null;
 }
 
 /**
@@ -598,9 +618,13 @@ ipcMain.handle('execute-train', async (event, params) => {
   // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    // pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    pythonScriptPath = path.join(__dirname, '../../py/pt_train_model.py');
+
   } else {
-    pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    // pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    pythonScriptPath = path.join(process.resourcesPath, 'py/pt_train_model.py');
+
   }
 
   console.log('Python script path:', pythonScriptPath);
@@ -610,11 +634,21 @@ ipcMain.handle('execute-train', async (event, params) => {
 
   // Pass labels_json, model_path, and epochs as arguments
   const venvPath = getVenvPath();
-  return await executePythonScript(pythonScriptPath, [
+  const trainingParamsTf = [
+    JSON.stringify(labelsJson), // labels_json as a string argument ex: '{"Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"]}'
+    modelPath,                  // path to where model will be saved to after training
+    epochs.toString()           // number of epochs to train
+  ];
+  const trainingParamsPt = [
     JSON.stringify(labelsJson),
     modelPath,
-    epochs.toString()
-  ], venvPath);
+    epochs.toString(),
+    "repvgg_a2"                 // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
+    
+  ];
+  console.log("Running with trainingParamsPt:", trainingParamsPt);
+
+  return await executePythonScript(pythonScriptPath, trainingParamsPt, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
 });
 /**
  * Handle getting the images in a selected project
