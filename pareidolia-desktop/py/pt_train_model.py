@@ -226,6 +226,67 @@ def verify_onnx_integrity(onnx_model_path):
         print(f"ONNX model integrity check failed: {str(e)}")
         return False
     
+def rep_test(loader):
+    tf, _, _, _ = import_tensorflow_keras()
+    # mean, std = compute_mean_std_welford_fast_test(loader)
+    # print("Calculated mean:", mean)
+    # print("Calculated std:", std)
+    MEAN = tf.constant([0.485, 0.456, 0.406], dtype=tf.float32)
+    STD  = tf.constant([0.229, 0.224, 0.225], dtype=tf.float32)
+
+    for idx, (image, _) in enumerate(loader):
+        # image is [batch, 3, 224, 224] from PyTorch DataLoader
+        # Process each image in the batch
+        for i in range(image.shape[0]):
+            img = image[i]  # [3, 224, 224]
+            img = tf.convert_to_tensor(img.permute(1, 2, 0).numpy())  # → [224, 224, 3]
+            img = tf.image.resize(img, [256, 256])                     # resize to 256x256
+            img = tf.image.resize_with_crop_or_pad(img, 224, 224)     # center crop to 224x224
+            img = tf.cast(img, tf.float32) 
+            # / 255.0                    # normalize [0, 255] → [0, 1]
+            img = (img - MEAN) / STD                                  # apply ImageNet mean/std
+            img = tf.expand_dims(img, axis=0)                         # add batch dim [1, 224, 224, 3]
+            yield [img]
+
+def compute_mean_std_welford_fast_test(loader, image_size=256, crop_size=224):
+    """Vectorized Welford — updates per image batch of pixels, not per pixel."""
+    tf, _, _, _ = import_tensorflow_keras()
+
+    n     = 0
+    mean  = np.zeros(3, dtype=np.float64)
+    M2    = np.zeros(3, dtype=np.float64)
+
+    for i, (image, _) in enumerate(loader):
+        img = tf.convert_to_tensor(image[0].permute(1, 2, 0).numpy())  # → [H, W, C]
+        img = tf.image.resize(img, [image_size, image_size], method=tf.image.ResizeMethod.BICUBIC)
+        img = tf.image.resize_with_crop_or_pad(img, crop_size, crop_size)
+        img = tf.cast(img, tf.float32) 
+        # / 255.0
+
+        pixels = tf.reshape(img, [-1, 3]).numpy()    # [50176, 3]
+        batch_n = len(pixels)
+
+        # parallel Welford merge (Chan's parallel algorithm)
+        batch_mean = pixels.mean(axis=0)
+        batch_M2   = pixels.var(axis=0) * batch_n
+
+        delta  = batch_mean - mean # delta between batch mean and current mean
+        total  = n + batch_n       # total count of pixels after adding this batch
+
+        mean  += delta * (batch_n / total) # adjust the running mean based on the current batch
+
+        # squared difference between means measures how far apart the means are from each other
+        # variance is based on the squared differences from the mean
+        # 
+        M2    += batch_M2 + delta**2 * (n * batch_n / total) # running total of squared differences from the mean, adjusted for the new batch
+        n      = total # update total count of pixels
+
+    std = np.sqrt(M2 / n) # variance is M2/n, std is sqrt of variance; this is std of the entire dataset after processing all batches
+
+    return mean.astype(np.float32), std.astype(np.float32)
+
+
+
 def compute_mean_std_welford_fast(image_paths, image_size=256, crop_size=224):
     """Vectorized Welford — updates per image batch of pixels, not per pixel."""
     tf, _, _, _ = import_tensorflow_keras()
@@ -328,7 +389,7 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
 def collect_generated_tflite(tf_model_path, onnx_model_path):
     base_name = os.path.splitext(os.path.basename(onnx_model_path))[0]
     preferred_files = [
-        os.path.join(tf_model_path, f"{base_name}_float32.tflite"),
+        os.path.join(tf_model_path, f"{base_name}_float32.tflite"), 
         os.path.join(tf_model_path, f"{base_name}_float16.tflite"),
         os.path.join(tf_model_path, f"{base_name}.tflite"),
     ]
@@ -360,6 +421,49 @@ def finalize_tflite_output(tf_model_path, model_folder, onnx_model_path):
             'error': str(e)
         }
 
+def tf_to_tflite(tf_model_path, tflite_model_path, loader):
+    tf, _, _, _ = import_tensorflow_keras()
+
+    try:
+        converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        # converter.representative_dataset = representative_data_gen
+        converter.representative_dataset = lambda: rep_test(loader)
+        converter.target_spec.supported_ops = [
+            tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
+            tf.lite.OpsSet.TFLITE_BUILTINS,
+        ]
+        converter.inference_input_type = tf.uint8
+        converter.inference_output_type = tf.float32
+        tflite_model = converter.convert()
+
+        with open(tflite_model_path, "wb") as f:
+            f.write(tflite_model)
+
+        print(f"TFLite model saved to: {tflite_model_path}")
+        return {
+            'success': True,
+            'tflite_model': tflite_model_path
+        }
+    except Exception as e:
+        print(f"Error converting TF to TFLite: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
+class RepVGGWithPreprocess(pl.LightningModule):
+    def __init__(self, base_model):
+        super().__init__()
+        self.model = base_model
+        self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+        self.register_buffer('std', torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+
+    def forward(self, x):
+        x = x / 255.0
+        x = (x - self.mean) / self.std
+        logits = self.model(x)
+        return torch.softmax(logits, dim=1)
+
 # Functions are declared above and used here
 if __name__ == "__main__":
     # Check for required arguments
@@ -376,13 +480,15 @@ if __name__ == "__main__":
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
     pretrained_model_name = sys.argv[4]
+
+    labels_json = json.loads(labels_json_str)
     
     print(json.dumps(labels_json_str, indent=2))
 
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
 
-    pl.seed_everything(42, workers=True)
+    pl.seed_everything(77, workers=True)
 
     data_module = ImageDataModule(
         data_dir="./data",
@@ -390,7 +496,7 @@ if __name__ == "__main__":
         img_size=224,
         num_workers=0,
         val_split=0.2,
-        seed=42,
+        seed=77,
         cifar10=False,
         labels_json=labels_json_str,
     )
@@ -398,7 +504,7 @@ if __name__ == "__main__":
     # Load and prepare images from the JSON label map
     model = RepVGGClassifier(
         model_name=pretrained_model_name,
-        num_classes=10,    # CIFAR-10
+        num_classes=len(labels_json),    # CIFAR-10
         lr=3e-4,
         hidden_dim=512,
     )
@@ -407,7 +513,7 @@ if __name__ == "__main__":
         monitor="val_acc",
         mode="max",
         save_top_k=1,
-        filename="repvgg-a2-cifar10-{epoch:02d}-{val_acc:.4f}",
+        filename="repvgg-{epoch:02d}-{val_acc:.4f}",
     )
 
     early_stop_cb = EarlyStopping(
@@ -418,7 +524,7 @@ if __name__ == "__main__":
 
     lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
 
-    csv_logger = CSVLogger("logs", name="repvgg_a2_cifar10")
+    csv_logger = CSVLogger("logs", name="repvgg")
 
     trainer = pl.Trainer(
         max_epochs=epochs,
@@ -437,9 +543,16 @@ if __name__ == "__main__":
     trainer.fit(model, datamodule=data_module)
 
     model.eval()
+    # Patch forward for export
+    # original_forward = model.forward
+    # model.forward = lambda x: torch.softmax(original_forward(x), dim=1)
+    # mean, std = compute_mean_std_welford_fast_test(data_module.representative_dataloader())
+    wrapped_model = RepVGGWithPreprocess(model)
+    wrapped_model.to(trainer.strategy.root_device)
+
 
     print("Converting model to ONNX format...")
-    onnx_conversion_result = convert_pt_to_onnx(model, model_folder)
+    onnx_conversion_result = convert_pt_to_onnx(wrapped_model, model_folder)
     if not onnx_conversion_result['success']:
         print(f"Error: ONNX conversion failed: {onnx_conversion_result['error']}")
         sys.exit(1)
@@ -477,11 +590,17 @@ if __name__ == "__main__":
     
     print("Finalizing TFLite model output...")
     tf_model_path = tf_conversion_result.get('tf_model')
-    tflite_conversion_result = finalize_tflite_output(tf_model_path, model_folder, onnx_model_path)
-    if not tflite_conversion_result['success']:
-        print(f"Error: TFLite output finalization failed: {tflite_conversion_result['error']}")
+    tf_to_tflite_result = tf_to_tflite(tf_model_path, os.path.join(model_folder, "model.tflite"), data_module.representative_dataloader())
+    if not tf_to_tflite_result['success']:
+        print(f"Error: TF to TFLite conversion failed: {tf_to_tflite_result['error']}")
         sys.exit(1)
+    # tflite_conversion_result = finalize_tflite_output(tf_model_path, model_folder, onnx_model_path)
+    # if not tflite_conversion_result['success']:
+    #     print(f"Error: TFLite output finalization failed: {tflite_conversion_result['error']}")
+    #     sys.exit(1)
     print("TFLite model conversion completed successfully")
+
+    print("Number of classes: ", len(labels_json))
     
-    tflite_model_path = tflite_conversion_result.get('tflite_model')
-    print(f"TFLite model path: {tflite_model_path}")
+    # tflite_model_path = tflite_conversion_result.get('tflite_model')
+    # print(f"TFLite model path: {tflite_model_path}")

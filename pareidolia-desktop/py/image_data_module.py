@@ -106,6 +106,13 @@ class ImageDataModule(pl.LightningDataModule):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
+        self.rep_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(img_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
     def load_images_from_json(self, labels_json):
         """Load images from a JSON mapping of label names to arrays of folder paths."""
 
@@ -184,6 +191,9 @@ class ImageDataModule(pl.LightningDataModule):
 
         generator = torch.Generator().manual_seed(self.seed)
         all_indices = torch.randperm(n_total, generator=generator).tolist()
+
+        print("All indices: ", all_indices)  # Print the first 10 shuffled indices for debugging
+
         train_indices = all_indices[:n_train]
         val_indices = all_indices[n_train:n_train + n_val]
         test_indices = all_indices[n_train + n_val:]
@@ -214,6 +224,9 @@ class ImageDataModule(pl.LightningDataModule):
             n_total = len(images)
             train_indices, val_indices, test_indices = self._get_split_indices(n_total)
             eval_base = NumpyImageDataset(images, labels, transform=self.eval_transform)
+
+            rep_base = NumpyImageDataset(images, labels, transform=self.rep_transform)
+            self.rep_ds = torch.utils.data.Subset(rep_base, test_indices)
 
             if stage in ("fit", None):
                 train_base = NumpyImageDataset(images, labels, transform=self.train_transform)
@@ -306,6 +319,16 @@ class ImageDataModule(pl.LightningDataModule):
     def predict_dataloader(self):
         return DataLoader(
             self.predict_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=self.num_workers > 0,
+        )
+    
+    def representative_dataloader(self):
+        return DataLoader(
+            self.rep_ds,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
