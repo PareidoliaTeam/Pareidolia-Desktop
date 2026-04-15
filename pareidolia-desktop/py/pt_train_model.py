@@ -57,11 +57,13 @@ from epoch_history_printer import EpochHistoryPrinter
 from pathlib import Path
 import glob
 import subprocess
+import tempfile
 
 # Model constants
 IMG_HEIGHT = 224
 IMG_WIDTH = 224
 IMG_CHANNELS = 3
+REPRESENTATIVE_SAMPLE_COUNT = 128
 # NUM_CLASSES is now determined dynamically from the labels JSON at runtime
 LEARNING_RATE = 0.001
 CONVERTER_VENV_NAME = "converter-venv-macos-tf219"
@@ -248,6 +250,34 @@ def rep_test(loader):
             img = tf.expand_dims(img, axis=0)                         # add batch dim [1, 224, 224, 3]
             yield [img]
 
+def build_representative_samples(loader, max_samples=REPRESENTATIVE_SAMPLE_COUNT):
+    """
+    Materializes representative calibration samples as NHWC float32 arrays.
+    This keeps TF conversion in a clean subprocess and avoids TF/PyTorch
+    runtime lock contention inside one process on macOS.
+    """
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+    samples = []
+
+    for image_batch, _ in loader:
+        batch_size = image_batch.shape[0]
+        for i in range(batch_size):
+            img = image_batch[i].permute(1, 2, 0).cpu().numpy().astype(np.float32)
+            img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_LINEAR)
+            offset = (256 - 224) // 2
+            img = img[offset:offset + 224, offset:offset + 224, :]
+            img = (img - mean) / std
+            samples.append(img)
+
+            if len(samples) >= max_samples:
+                return np.stack(samples, axis=0).astype(np.float32)
+
+    if not samples:
+        raise RuntimeError("Representative dataset is empty; cannot run TFLite quantization.")
+
+    return np.stack(samples, axis=0).astype(np.float32)
+
 def compute_mean_std_welford_fast_test(loader, image_size=256, crop_size=224):
     """Vectorized Welford — updates per image batch of pixels, not per pixel."""
     tf, _, _, _ = import_tensorflow_keras()
@@ -385,60 +415,64 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
             'error': str(e)
         }
 
-
-def collect_generated_tflite(tf_model_path, onnx_model_path):
-    base_name = os.path.splitext(os.path.basename(onnx_model_path))[0]
-    preferred_files = [
-        os.path.join(tf_model_path, f"{base_name}_float32.tflite"), 
-        os.path.join(tf_model_path, f"{base_name}_float16.tflite"),
-        os.path.join(tf_model_path, f"{base_name}.tflite"),
-    ]
-    for candidate in preferred_files:
-        if os.path.exists(candidate):
-            return candidate
-
-    fallback = sorted(glob.glob(os.path.join(tf_model_path, "*.tflite")))
-    return fallback[0] if fallback else None
-
-
-def finalize_tflite_output(tf_model_path, model_folder, onnx_model_path):
+def tf_to_tflite(tf_model_path, tflite_model_path, representative_samples, converter_python):
+    representative_path = None
     try:
-        generated_tflite = collect_generated_tflite(tf_model_path, onnx_model_path)
-        if generated_tflite is None:
-            raise FileNotFoundError(f"No .tflite file generated in {tf_model_path}")
+        os.makedirs(os.path.dirname(tflite_model_path), exist_ok=True)
 
-        final_tflite_path = os.path.join(model_folder, "model.tflite")
-        shutil.copy2(generated_tflite, final_tflite_path)
-        print(f"Copied TFLite model to: {final_tflite_path}")
-        return {
-            'success': True,
-            'tflite_model': final_tflite_path
-        }
-    except Exception as e:
-        print(f"Error finalizing TFLite output: {str(e)}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        if sys.platform == "darwin":
+            # macOS-only isolation to avoid TF/PyTorch runtime lock contention.
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                suffix=".npy",
+                prefix="representative_",
+                dir=os.path.dirname(tflite_model_path),
+                delete=False,
+            ) as temp_file:
+                representative_path = temp_file.name
 
-def tf_to_tflite(tf_model_path, tflite_model_path, loader):
-    tf, _, _, _ = import_tensorflow_keras()
+            np.save(representative_path, representative_samples)
 
-    try:
-        converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-        # converter.representative_dataset = representative_data_gen
-        converter.representative_dataset = lambda: rep_test(loader)
-        converter.target_spec.supported_ops = [
-            tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
-            tf.lite.OpsSet.TFLITE_BUILTINS,
-        ]
-        converter.inference_input_type = tf.uint8
-        converter.inference_output_type = tf.float32
-        tflite_model = converter.convert()
+            worker_script = str(Path(__file__).resolve().with_name("tflite_convert_worker.py"))
+            env = os.environ.copy()
+            env.setdefault("TF_CPP_MIN_LOG_LEVEL", "1")
+            env.setdefault("TF_NUM_INTEROP_THREADS", "1")
+            env.setdefault("TF_NUM_INTRAOP_THREADS", "1")
+            env.setdefault("OMP_NUM_THREADS", "1")
 
-        with open(tflite_model_path, "wb") as f:
-            f.write(tflite_model)
+            run_logged_subprocess(
+                [
+                    converter_python,
+                    worker_script,
+                    "--saved-model",
+                    tf_model_path,
+                    "--output",
+                    tflite_model_path,
+                    "--rep-data",
+                    representative_path,
+                ],
+                env=env,
+            )
+        else:
+            tf, _, _, _ = import_tensorflow_keras()
+
+            def representative_dataset():
+                for sample in representative_samples:
+                    yield [np.expand_dims(sample.astype(np.float32), axis=0)]
+
+            converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]
+            converter.representative_dataset = representative_dataset
+            converter.target_spec.supported_ops = [
+                tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
+                tf.lite.OpsSet.TFLITE_BUILTINS,
+            ]
+            converter.inference_input_type = tf.uint8
+            converter.inference_output_type = tf.float32
+            tflite_model = converter.convert()
+
+            with open(tflite_model_path, "wb") as f:
+                f.write(tflite_model)
 
         print(f"TFLite model saved to: {tflite_model_path}")
         return {
@@ -451,6 +485,13 @@ def tf_to_tflite(tf_model_path, tflite_model_path, loader):
             'success': False,
             'error': str(e)
         }
+    finally:
+        if representative_path and os.path.exists(representative_path):
+            try:
+                os.remove(representative_path)
+            except OSError:
+                print(f"Could not delete temporary representative data file: {representative_path}")
+
 class RepVGGWithPreprocess(pl.LightningModule):
     def __init__(self, base_model):
         super().__init__()
@@ -504,7 +545,7 @@ if __name__ == "__main__":
     # Load and prepare images from the JSON label map
     model = RepVGGClassifier(
         model_name=pretrained_model_name,
-        num_classes=len(labels_json),    # CIFAR-10
+        num_classes=len(labels_json),
         lr=3e-4,
         hidden_dim=512,
     )
@@ -590,17 +631,18 @@ if __name__ == "__main__":
     
     print("Finalizing TFLite model output...")
     tf_model_path = tf_conversion_result.get('tf_model')
-    tf_to_tflite_result = tf_to_tflite(tf_model_path, os.path.join(model_folder, "model.tflite"), data_module.representative_dataloader())
+    representative_loader = data_module.representative_dataloader()
+    representative_samples = build_representative_samples(representative_loader)
+    tf_to_tflite_result = tf_to_tflite(
+        tf_model_path,
+        os.path.join(model_folder, "model.tflite"),
+        representative_samples,
+        converter_python
+    )
     if not tf_to_tflite_result['success']:
         print(f"Error: TF to TFLite conversion failed: {tf_to_tflite_result['error']}")
         sys.exit(1)
-    # tflite_conversion_result = finalize_tflite_output(tf_model_path, model_folder, onnx_model_path)
-    # if not tflite_conversion_result['success']:
-    #     print(f"Error: TFLite output finalization failed: {tflite_conversion_result['error']}")
-    #     sys.exit(1)
+
     print("TFLite model conversion completed successfully")
 
     print("Number of classes: ", len(labels_json))
-    
-    # tflite_model_path = tflite_conversion_result.get('tflite_model')
-    # print(f"TFLite model path: {tflite_model_path}")
