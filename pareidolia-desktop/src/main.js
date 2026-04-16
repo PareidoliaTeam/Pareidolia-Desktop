@@ -618,12 +618,12 @@ ipcMain.handle('execute-train', async (event, params) => {
   // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    // pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
-    pythonScriptPath = path.join(__dirname, '../../py/pt_train_model.py');
+    pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    // pythonScriptPath = path.join(__dirname, '../../py/pt_train_model.py');
 
   } else {
-    // pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
-    pythonScriptPath = path.join(process.resourcesPath, 'py/pt_train_model.py');
+    pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    // pythonScriptPath = path.join(process.resourcesPath, 'py/pt_train_model.py');
 
   }
 
@@ -646,9 +646,9 @@ ipcMain.handle('execute-train', async (event, params) => {
     "repvgg_a2"                 // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
     
   ];
-  console.log("Running with trainingParamsPt:", trainingParamsPt);
+  // console.log("Running with trainingParamsPt:", trainingParamsPt);
 
-  return await executePythonScript(pythonScriptPath, trainingParamsPt, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
+  return await executePythonScript(pythonScriptPath, trainingParamsTf, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
 });
 /**
  * Handle getting the images in a selected project

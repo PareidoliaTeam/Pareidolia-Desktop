@@ -35,6 +35,7 @@ import cv2
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
+from sklearn.model_selection import train_test_split
 
 # Model constants
 IMG_HEIGHT = 224
@@ -82,7 +83,7 @@ def create_cnn_model(num_classes):
     
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
-        loss='categorical_crossentropy',
+        loss='sparse_categorical_crossentropy',
         metrics=['accuracy']
     )
     
@@ -95,7 +96,7 @@ def load_images_from_json(labels_json):
                         Example: {"Apple": ["/path/to/folder1"], "Orange": ["/path/a", "/path/b"]}
     @returns: (images, labels, num_classes, label_names)
               images      - float32 numpy array normalized to [0, 1]
-              labels      - one-hot encoded label array
+              labels      - integer array of label indices
               num_classes - number of unique labels found
               label_names - ordered list of label names (index matches one-hot position)
     """
@@ -136,7 +137,8 @@ def load_images_from_json(labels_json):
         return None, None, 0, []
  
     images = np.array(images, dtype='float32') / 255.0
-    labels = keras.utils.to_categorical(labels, num_classes)
+    # labels = keras.utils.to_categorical(labels, num_classes)
+    labels = np.array(labels, dtype='int32')
 
     return images, labels, num_classes, label_names
 
@@ -252,7 +254,8 @@ if __name__ == "__main__":
     print(f"Training for {epochs} epochs")
     
     # Load and prepare images from the JSON label map
-    X_train, y_train, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
+    X, y, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
     if X_train is None or len(X_train) == 0:
         print("Error: No images found or failed to load images")
