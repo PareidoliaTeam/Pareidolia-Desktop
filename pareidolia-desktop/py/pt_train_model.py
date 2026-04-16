@@ -229,10 +229,14 @@ def verify_onnx_integrity(onnx_model_path):
         return False
     
 def rep_test(loader):
+    """
+    Deprecated: this function was an initial test for building representative samples directly as a generator, 
+    but was found to cause TF/PyTorch runtime lock contention issues on macOS when both frameworks are used in 
+    the same process. The current implementation materializes the representative samples into a numpy array in a 
+    separate function, and on macOS the TFLite conversion is done in a separate subprocess to avoid these issues.
+    """
     tf, _, _, _ = import_tensorflow_keras()
-    # mean, std = compute_mean_std_welford_fast_test(loader)
-    # print("Calculated mean:", mean)
-    # print("Calculated std:", std)
+
     MEAN = tf.constant([0.485, 0.456, 0.406], dtype=tf.float32)
     STD  = tf.constant([0.229, 0.224, 0.225], dtype=tf.float32)
 
@@ -255,6 +259,9 @@ def build_representative_samples(loader, max_samples=REPRESENTATIVE_SAMPLE_COUNT
     Materializes representative calibration samples as NHWC float32 arrays.
     This keeps TF conversion in a clean subprocess and avoids TF/PyTorch
     runtime lock contention inside one process on macOS.
+
+    Basically takes images from a DataLoader and applies the same resizing, cropping, and normalization that the model expects,
+    and puts them into a numpy array.
     """
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
@@ -279,7 +286,12 @@ def build_representative_samples(loader, max_samples=REPRESENTATIVE_SAMPLE_COUNT
     return np.stack(samples, axis=0).astype(np.float32)
 
 def compute_mean_std_welford_fast_test(loader, image_size=256, crop_size=224):
-    """Vectorized Welford — updates per image batch of pixels, not per pixel."""
+    """
+    Deprecated: this function was the initial welford's algorithm implementation for calculating mean and std for the representative dataset,
+    but will be used in the future for a user if they build their own model with their own dataset.
+
+    Vectorized Welford — updates per image batch of pixels, not per pixel. Used a dataloader instead of file paths. Creates threading issues on MacOS.
+    """
     tf, _, _, _ = import_tensorflow_keras()
 
     n     = 0
@@ -318,7 +330,12 @@ def compute_mean_std_welford_fast_test(loader, image_size=256, crop_size=224):
 
 
 def compute_mean_std_welford_fast(image_paths, image_size=256, crop_size=224):
-    """Vectorized Welford — updates per image batch of pixels, not per pixel."""
+    """
+    Deprecated: this function was the initial welford's algorithm implementation for calculating mean and std for the representative dataset,
+    but will be used in the future for a user if they build their own model with their own dataset.
+
+    Vectorized Welford — updates per image batch of pixels, not per pixel.
+    """
     tf, _, _, _ = import_tensorflow_keras()
 
     n     = 0
@@ -416,6 +433,12 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
         }
 
 def tf_to_tflite(tf_model_path, tflite_model_path, representative_samples, converter_python):
+    """
+    Checks for the current OS and creates a subprocess to run the TF to TFLite conversion with the representative dataset, 
+    passing the representative samples via a temporary file on disk for macOS to avoid TF/PyTorch runtime lock contention issues. 
+    
+    On non-macOS platforms, it runs the conversion directly in-process since these issues are not present.
+    """
     representative_path = None
     try:
         os.makedirs(os.path.dirname(tflite_model_path), exist_ok=True)
@@ -453,7 +476,7 @@ def tf_to_tflite(tf_model_path, tflite_model_path, representative_samples, conve
                 ],
                 env=env,
             )
-        else:
+        else: # Windows route and fallback for non-macOS
             tf, _, _, _ = import_tensorflow_keras()
 
             def representative_dataset():
@@ -493,6 +516,11 @@ def tf_to_tflite(tf_model_path, tflite_model_path, representative_samples, conve
                 print(f"Could not delete temporary representative data file: {representative_path}")
 
 class RepVGGWithPreprocess(pl.LightningModule):
+    """
+    Model wrapper that applies the necessary preprocessing (resizing, cropping, normalization) before forwarding to the base model.
+    This allows the ONNX export to include the preprocessing steps, ensuring the exported model can be used directly without needing 
+    to replicate preprocessing separately in the TFLite conversion or in the final application.
+    """
     def __init__(self, base_model):
         super().__init__()
         self.model = base_model
@@ -584,13 +612,10 @@ if __name__ == "__main__":
     trainer.fit(model, datamodule=data_module)
 
     model.eval()
-    # Patch forward for export
-    # original_forward = model.forward
-    # model.forward = lambda x: torch.softmax(original_forward(x), dim=1)
-    # mean, std = compute_mean_std_welford_fast_test(data_module.representative_dataloader())
+
+    # wrap model to allow for preproccessing in onnx export
     wrapped_model = RepVGGWithPreprocess(model)
     wrapped_model.to(trainer.strategy.root_device)
-
 
     print("Converting model to ONNX format...")
     onnx_conversion_result = convert_pt_to_onnx(wrapped_model, model_folder)
@@ -633,6 +658,7 @@ if __name__ == "__main__":
     tf_model_path = tf_conversion_result.get('tf_model')
     representative_loader = data_module.representative_dataloader()
     representative_samples = build_representative_samples(representative_loader)
+
     tf_to_tflite_result = tf_to_tflite(
         tf_model_path,
         os.path.join(model_folder, "model.tflite"),
