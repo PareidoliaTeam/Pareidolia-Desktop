@@ -582,9 +582,10 @@ ipcMain.handle('setup-python-venv', async () => {
  *                                      e.g. { "Apple": ["/path/folder1"], "Orange": ["/path/a", "/path/b"] }
  * @param {string} params.modelFolderPath - Path to the model folder where outputs will be saved
  * @param {number} params.epochs      - Number of training epochs
+ * @param {string} params.toggle      - Model toggle option (e.g., 'tensorflow' or 'pytorch')
  */
 ipcMain.handle('execute-train', async (event, params) => {
-  const { labelsJson, modelFolderPath, epochs } = params;
+  const { labelsJson, modelFolderPath, epochs, toggle } = params;
 
   // Validate labelsJson
   if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
@@ -615,15 +616,21 @@ ipcMain.handle('execute-train', async (event, params) => {
 
   const modelPath = modelFolderPath;
 
+  
   // Determine the correct Python script path (dev vs production)
   let pythonScriptPath;
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    // pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
-    pythonScriptPath = path.join(__dirname, '../../py/pt_train_model.py');
-
+    if(toggle === 'tensorflow') {
+      pythonScriptPath = path.join(__dirname, '../../py/train_model.py');
+    } else {
+      pythonScriptPath = path.join(__dirname, '../../py/pt_train_model.py');
+    }
   } else {
-    // pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
-    pythonScriptPath = path.join(process.resourcesPath, 'py/pt_train_model.py');
+    if(toggle === 'tensorflow') {
+      pythonScriptPath = path.join(process.resourcesPath, 'py/train_model.py');
+    } else {
+      pythonScriptPath = path.join(process.resourcesPath, 'py/pt_train_model.py');
+    }
 
   }
 
@@ -648,7 +655,14 @@ ipcMain.handle('execute-train', async (event, params) => {
   ];
   console.log("Running with trainingParamsPt:", trainingParamsPt);
 
-  return await executePythonScript(pythonScriptPath, trainingParamsPt, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
+  if(toggle === 'tensorflow') {
+    console.log("Using TensorFlow training script.");
+    return await executePythonScript(pythonScriptPath, trainingParamsTf, venvPath);
+  }
+   else { 
+    console.log("Using PyTorch training script.");
+    return await executePythonScript(pythonScriptPath, trainingParamsPt, venvPath); // Change to trainingParamsTf if using the TensorFlow training script
+   }
 });
 /**
  * Handle getting the images in a selected project

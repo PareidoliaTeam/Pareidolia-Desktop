@@ -45,6 +45,7 @@ const epochSlider = document.getElementById('epoch-slider');
 const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
+const modelToggle = document.getElementsByName('train');
 
 // Gallery
 const galleryContainer = document.querySelector('.gallery-grid');
@@ -778,6 +779,8 @@ datasetModal.addEventListener('click', (e) => {
 modelTrainBtn.addEventListener('click', async () => {
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
+    const toggle = modelToggle[0].checked ? 'tensorflow' : 'pytorch';
+    console.log(`[UI] Train button clicked for model "${currentModelName}" with ${epochs} epochs and toggle "${toggle}"`);
     console.log(`%c[UI] Training started with ${epochs} epochs!`, 'color: #007acc; font-weight: bold;');
 
     try {
@@ -793,7 +796,8 @@ modelTrainBtn.addEventListener('click', async () => {
         const result = await window.electronAPI.executeTrain({
             labelsJson,
             modelFolderPath,
-            epochs: parseInt(epochs)
+            epochs: parseInt(epochs),
+            toggle: toggle
         });
 
         const callDuration = Math.round((Date.now() - callStartTime) / 1000);
