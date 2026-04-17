@@ -89,6 +89,31 @@ def create_cnn_model(num_classes):
     
     return model
 
+def create_imported_model():
+    base_model = tf.keras.applications.MobileNetV2(
+        input_shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
+        include_top=False,
+        weights='imagenet',
+    )
+    base_model.trainable = False
+
+    inputs = tf.keras.Input(shape=(224, 224, 3))
+    x = base_model(inputs, training=False)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
+    outputs = tf.keras.layers.Dense(10, activation='softmax')(x)  # 10 classes
+
+    model = tf.keras.Model(inputs, outputs)
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+
+    return model
+
+
 def load_images_from_json(labels_json):
     """Load images from a JSON mapping of label names to arrays of folder paths.
     
