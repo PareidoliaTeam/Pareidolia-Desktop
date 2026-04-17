@@ -87,7 +87,11 @@
             <input id="epoch-slider" type="range" min="1" max="100" value="1">
             <span id="epoch-value">1</span>
             <p class="setting-desc">How many passes through the dataset?</p>
-          </div>
+            <br>
+            
+            
+            
+
           <!-- Training Results -->
           <h3>Results</h3>
           <div id="model-train-results" class="model-train-results">
@@ -98,6 +102,8 @@
 
       <!-- Footer -->
       <footer class="project-footer">
+        <input type="radio" name="train" value="true" checked> Use Tensorflow<br>
+            <input type="radio" name="train" value="false"> Use PyTorch<br>
         <span class="last-trained">Last Trained: Never</span>
         <div class="footer-btns">
           <button id="model-train-btn" class="train-btn">Train Model</button>
