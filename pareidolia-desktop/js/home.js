@@ -45,7 +45,7 @@ const epochSlider = document.getElementById('epoch-slider');
 const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
-const modelToggle = document.getElementsByName('train');
+//const modelToggle = document.getElementsByName('train');
 
 // Gallery
 const galleryContainer = document.querySelector('.gallery-grid');
@@ -69,7 +69,24 @@ const availableDatasetsList = document.getElementById('available-datasets-list')
 // Current model settings state
 let modelSettings = null;
 let currentLabelName = null;
+let activeBlock = null;
 
+// builder ids
+const builderModal = document.getElementById('builder-modal');
+const builderModalBtn = document.getElementById('builder-modal-btn');
+const builderModalCloseBtn = document.getElementById('builder-modal-close');
+const layerItems = document.querySelectorAll('.layer-item');
+const builderCanvas = document.getElementById('builder-canvas');
+const viewCodeBtn = document.getElementById('view-code-btn');
+const viewBlockBtn = document.getElementById('view-blocks-btn');
+
+// charts
+let accuracyChart, lossChart;
+
+// prediction ids
+const dropZone = document.getElementById('drop-zone');
+const predictionPreview = document.getElementById('prediction-preview');
+const resultsArea = document.getElementById('prediction-results');
 
 // ============================================================
 // Functions
@@ -127,7 +144,9 @@ function showDataset(datasetName,datasetPath) {
     showView('view-dataset-info');
     loadCarousel();
 }
-
+/**
+ * Shows the dataset gallery view and loads the appropriate gallery
+ */
 function showDatasetGallery() {
     showView('view-dataset-gallery');
     loadGallery();
@@ -204,7 +223,7 @@ function openOptionsModal(imgData) {
 }
 
 /**
- * Opens the imageoptions model
+ * Opens the image options model
  */
 function closeOptionsModal() {
     optionsModal.style.display = 'none';
@@ -222,9 +241,28 @@ function closeOptionsModal() {
 async function loadModelSettingsForView(modelName) {
     try {
         modelSettings = await window.electronAPI.invoke('get-model-settings', modelName);
+        // epochs and labels
         if (!modelSettings.labels) modelSettings.labels = {};
         epochSlider.value = modelSettings.epochs ?? 10;
         epochValueDisplay.textContent = epochSlider.value;
+
+        // clears builder canvas
+        builderCanvas.innerHTML = '';
+
+        // adds saved layers
+        if(modelSettings.layers && modelSettings.layers.length > 0){
+            modelSettings.layers.forEach(layer => {
+                addLayerToCanvas(layer.type, layer.parameters);
+            });
+        } else {
+            builderCanvas.innerHTML = '<div class="builder-block-window">Drag Here</div>';
+        }
+
+        // loads last trained timestamp
+        const lastTrainedSpan = document.querySelector('.last-trained');
+        if (lastTrainedSpan) {
+            lastTrainedSpan.textContent = `Last Trained: ${modelSettings.lastTrained || 'Never'}`;
+        }
     } catch (error) {
         console.error('Error loading model settings:', error);
         modelSettings = { labels: {}, epochs: 10 };
@@ -237,7 +275,18 @@ async function loadModelSettingsForView(modelName) {
  */
 async function saveModelSettings() {
     if (!modelSettings) return;
-    const modelName = sessionStorage.getItem('projectName');
+    const modelName = sessionStorage.getItem('projectName')
+    const blocks = document.querySelectorAll('.model-block');
+    modelSettings.layers = Array.from(blocks).map(block => {
+        const params = { ...block.dataset };
+        const type = params.type;
+        delete params.type;
+
+        return {
+            type: type,
+            parameters: params
+        };
+    });
     try {
         await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: modelSettings });
         console.log('Model settings saved');
@@ -289,11 +338,11 @@ function renderLabels() {
  */
 function addLabel(labelName) {
     const trimmedName = labelName.trim();
-    if (!trimmedName) { 
-        //replace with pop up modals, screws up texet cursor on windows
+    if (!trimmedName) {
+        //replace with pop up modals, screws up text cursor on Windows
         // alert('Label name cannot be empty'); 
         return; }
-    if (trimmedName in modelSettings.labels) { 
+    if (trimmedName in modelSettings.labels) {
         // alert('Label already exists'); 
         return; }
 
@@ -331,6 +380,20 @@ async function openDatasetModal(labelName) {
 function closeDatasetModal() {
     datasetModal.style.display = 'none';
     currentLabelName = null;
+}
+
+/**
+ * Opens the builder modal.
+ */
+function openBuilderModal(){
+    builderModal.style.display = 'flex';
+}
+
+/**
+ * Closes the builder modal.
+ */
+function closeBuilderModal(){
+    builderModal.style.display = 'none';
 }
 
 /**
@@ -499,7 +562,7 @@ async function generateQRCode() {
         // Clear the container
         qrCodeContainer.innerHTML = '';
 
-        // Generate QR code using qrcodejs library
+        // Generate QR code using qrcode.js library
         new QRCode(qrCodeContainer, {
             text: serverURL,
             width: 180,
@@ -601,7 +664,7 @@ async function loadModelsFromFolder() {
     }
 }
 /**
- * Loads carousel and attatches images into it
+ * Loads carousel and attaches images into it
  */
 async function loadCarousel() {
     const currentPath = sessionStorage.getItem('projectPath');
@@ -624,7 +687,7 @@ async function loadCarousel() {
 }
 
 /**
- * Loads gallery and attatches images into it
+ * Loads gallery and attaches images into it
  */
 async function loadGallery(){
     const currentPath = sessionStorage.getItem('projectPath');
@@ -647,6 +710,185 @@ async function loadGallery(){
             galleryContainer.appendChild(imgElement);
         });
     }
+}
+
+// ============================================================
+// BUILDER RELATED FUNCTIONS
+// ============================================================
+
+/**
+ * Adds a layer via a drag and drop system
+ * @param type
+ * @param savedParams
+ */
+function addLayerToCanvas(type, savedParams = null) {
+    // block creation
+    const block = document.createElement('div');
+    block.className = 'model-block';
+    block.draggable = true;
+    block.dataset.type = type;
+    block.innerHTML = `<strong>${type}</strong>`;
+
+    // checks for saved parameters if not default
+    if (savedParams) {
+        Object.assign(block.dataset, savedParams);
+    } else {
+        if (type === 'Dense') block.dataset.units = 32;
+    }
+
+    block.innerHTML = `<strong>${type}</strong>`;
+
+    // show settings
+    block.onclick = () => {
+        if(activeBlock) activeBlock.style.border = "none";
+        activeBlock = block;
+        block.style.border = "2px solid #ffcc00";
+        showSettings(type, block);
+    };
+
+    // drag logic
+    block.ondragstart = (e) => {
+        e.dataTransfer.setData('isNew', 'false');
+        block.style.opacity = "0.5";
+    };
+
+    // deleting logic
+    block.ondragend = async(e) => {
+        block.style.opacity = "1";
+        const rect = builderCanvas.getBoundingClientRect();
+        const isInside = (
+            e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom
+        );
+
+        if (!isInside) {
+            block.remove();
+            document.getElementById('settings-content').innerHTML = '<p class="hint">Layer removed.</p>';
+            await saveModelSettings();
+        }
+    };
+    // attaches block
+    builderCanvas.appendChild(block);
+}
+
+/**
+ * Dynamically shows the various parameters of a layer if applicable
+ * @param type
+ * @param block
+ */
+function showSettings(type, block) {
+    const container = document.getElementById('settings-content');
+    let html = `<h4>${type} Configuration</h4>`;
+
+    // the most complex ones
+    if (type === 'Dense' || type === 'Conv2D') {
+        const label = (type === 'Dense') ? 'Units' : 'Filters';
+        html += `<label>${label}:</label>
+                 <input type="number" id="set-units" value="${block.dataset.units || (type === 'Dense' ? 128 : 32)}">`;
+
+        html += `<label>Activation:</label>
+                 <select id="set-activation">
+                    <option value="relu" ${block.dataset.activation === 'relu' ? 'selected' : ''}>ReLU</option>
+                    <option value="sigmoid" ${block.dataset.activation === 'sigmoid' ? 'selected' : ''}>Sigmoid</option>
+                    <option value="tanh" ${block.dataset.activation === 'tanh' ? 'selected' : ''}>Tanh</option>
+                 </select>`;
+    }
+
+    // Layers that use pooling
+    else if (type.includes('Pooling2D') && !type.includes('Global')) {
+        html += `<label>Pool Size:</label>
+                 <input type="number" id="set-pool" value="${block.dataset.pool_size || 2}">`;
+    }
+    // Layers that use a float parameter
+    else if (['Dropout', 'RandomRotation', 'RandomZoom', 'RandomContrast'].includes(type)) {
+        const label = (type === 'Dropout') ? 'Rate (0-1)' : 'Factor (0-1)';
+        const key = (type === 'Dropout') ? 'rate' : 'factor';
+        html += `<label>${label}:</label>
+                 <input type="number" step="0.1" id="set-factor" value="${block.dataset[key] || 0.2}">`;
+    }
+
+    // Layers that just need a dropdown
+    else if (type === 'RandomFlip') {
+        html += `<label>Mode:</label>
+                 <select id="set-flip">
+                    <option value="horizontal" ${block.dataset.mode === 'horizontal' ? 'selected' : ''}>Horizontal</option>
+                    <option value="vertical" ${block.dataset.mode === 'vertical' ? 'selected' : ''}>Vertical</option>
+                    <option value="horizontal_and_vertical" ${block.dataset.mode === 'horizontal_and_vertical' ? 'selected' : ''}>Both</option>
+                 </select>`;
+    } else {
+        html += `<p>No modifiable parameters.</p>`;
+    }
+
+    html += `<button id="apply-btn" class="train-btn" style="margin-top:10px">Apply</button>`;
+    container.innerHTML = html;
+
+    document.getElementById('apply-btn').onclick = async () => {
+        const units = document.getElementById('set-units');
+        const act = document.getElementById('set-activation');
+        const factor = document.getElementById('set-factor');
+        const pool = document.getElementById('set-pool');
+        const flip = document.getElementById('set-flip');
+
+        if (units) block.dataset.units = units.value;
+        if (act) block.dataset.activation = act.value;
+        if (pool) block.dataset.pool_size = pool.value;
+        if (flip) block.dataset.mode = flip.value;
+        if (factor) {
+            if (type === 'Dropout') block.dataset.rate = factor.value;
+            else block.dataset.factor = factor.value;
+        }
+        await saveModelSettings();
+        alert("Settings Saved!");
+    };
+}
+
+/**
+ * Turns the ez block builder mode into the JSON advanced mode
+ */
+function syncBlocksToCode() {
+    const blocks = document.querySelectorAll('.model-block');
+    const layers = Array.from(blocks).map(block => ({
+        type: block.dataset.type,
+        parameters: { ...block.dataset }
+    }));
+    layers.forEach(l => delete l.parameters.type);
+
+    editor.setValue(JSON.stringify(layers, null, 2));
+}
+
+/**
+ * Turns the advanced mode layers into ez mode blocks
+ */
+function syncCodeToBlocks() {
+    try {
+        const layers = JSON.parse(editor.getValue());
+        const canvas = document.getElementById('builder-canvas');
+        canvas.innerHTML = '';
+
+        layers.forEach(layer => {
+            addLayerToCanvas(layer.type, layer.parameters);
+        });
+    } catch (e) {
+        //alert("INVALID.");
+    }
+}
+
+/**
+ * Switches the tab that the model page is currently on
+ * @param event
+ * @param tabId
+ */
+function openTab(event, tabId) {
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabContents.forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach(btn => btn.classList.remove('active'));
+
+    document.getElementById(tabId).classList.add('active');
+    event.currentTarget.classList.add('active');
 }
 
 // ============================================================
@@ -733,6 +975,54 @@ optionsModalClose.addEventListener('click', (e) => {
     closeOptionsModal();
 })
 
+// Open Block Builder Modal
+builderModalBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openBuilderModal();
+})
+// Close Block Builder Modal
+builderModalCloseBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeBuilderModal();
+})
+
+// adds dragging and layer logic to layer items
+layerItems.forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('layerType', e.target.getAttribute('data-type'));
+        e.dataTransfer.setData('isNew', 'true');
+    });
+});
+
+// Implements drag
+builderCanvas.addEventListener('dragover', (e) => e.preventDefault());
+
+// Implements drop
+builderCanvas.addEventListener('drop', async(e) => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('layerType');
+    const isNew = e.dataTransfer.getData('isNew') === 'true';
+
+    if (isNew) {
+        addLayerToCanvas(type);
+        await saveModelSettings();
+    }
+});
+
+// Switch to "code" mode for sequential model editor
+viewCodeBtn.addEventListener('click', () => {
+    syncBlocksToCode();
+    document.getElementById('visual-workspace').style.display = 'none';
+    document.getElementById('code-workspace').style.display = 'block';
+});
+
+// Switch to "block" mode for sequential model editor
+viewBlockBtn.addEventListener('click', () => {
+    syncCodeToBlocks();
+    document.getElementById('code-workspace').style.display = 'none';
+    document.getElementById('visual-workspace').style.display = 'flex';
+});
+
 // EpochSlider to change
 epochSlider.addEventListener('input', (event) => {
     const val = event.target.value;
@@ -748,7 +1038,7 @@ epochSlider.addEventListener('change', async (event) => {
     await saveModelSettings();
 });
 
-// carpousel animation
+// carousel animation
 carousel.addEventListener('animationiteration', () => {
     // Reset carousel position for seamless looping
     carousel.style.animation = 'none';
@@ -777,9 +1067,21 @@ datasetModal.addEventListener('click', (e) => {
 
 // Train Model button click handler
 modelTrainBtn.addEventListener('click', async () => {
+
+    //Chart updating
+    if (accuracyChart && lossChart) {
+        accuracyChart.data.labels = [];
+        accuracyChart.data.datasets.forEach(d => d.data = []);
+        lossChart.data.datasets.forEach(d => d.data = []);
+        accuracyChart.update();
+        lossChart.update();
+    }
+
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
-    const toggle = modelToggle[0].checked ? 'tensorflow' : 'pytorch';
+    const selectedRadio = document.querySelector('input[name="train"]:checked');
+    const toggle = selectedRadio ? (selectedRadio.value === 'true' ? 'tensorflow' : 'pytorch') : 'tensorflow';
+    console.log(`[UI] : ${toggle}`);
     console.log(`[UI] Train button clicked for model "${currentModelName}" with ${epochs} epochs and toggle "${toggle}"`);
     console.log(`%c[UI] Training started with ${epochs} epochs!`, 'color: #007acc; font-weight: bold;');
 
@@ -797,7 +1099,8 @@ modelTrainBtn.addEventListener('click', async () => {
             labelsJson,
             modelFolderPath,
             epochs: parseInt(epochs),
-            toggle: toggle
+            toggle: toggle,
+            layers: modelSettings.layers
         });
 
         const callDuration = Math.round((Date.now() - callStartTime) / 1000);
@@ -808,6 +1111,38 @@ modelTrainBtn.addEventListener('click', async () => {
             modelTrainResults.textContent = `Training completed successfully!${execTime}`;
             modelTrainResults.style.color = '#28a745';
             console.log('%c[UI] Training successful!', 'color: #28a745; font-weight: bold;');
+            document.getElementById('epoch-progress-fill').style.width = `100%`;
+            document.getElementById('progress-label').textContent = `Overall Progress: 100%`;
+
+            const summaryCard = document.getElementById('final-summary-card');
+            summaryCard.style.display = 'block';
+
+            const lastIdx = accuracyChart.data.datasets[0].data.length - 1;
+
+            const finalAcc = accuracyChart.data.datasets[0].data[lastIdx];
+            const finalValAcc = accuracyChart.data.datasets[1].data[lastIdx];
+            const finalLoss = lossChart.data.datasets[0].data[lastIdx];
+            const finalValLoss = lossChart.data.datasets[1].data[lastIdx];
+
+            document.getElementById('sum-acc').textContent = (finalAcc * 100).toFixed(2) + "%";
+            document.getElementById('sum-val-acc').textContent = (finalValAcc * 100).toFixed(2) + "%";
+            document.getElementById('sum-loss').textContent = parseFloat(finalLoss).toFixed(4);
+            document.getElementById('sum-val-loss').textContent = parseFloat(finalValLoss).toFixed(4);
+
+            // timestamp stuff
+            const now = new Date();
+            const timestamp = now.toLocaleString();
+
+            const lastTrainedSpan = document.querySelector('.last-trained');
+            if (lastTrainedSpan) {
+                lastTrainedSpan.textContent = `Last Trained: ${timestamp}`;
+            }
+            // save to JSON
+            if(modelSettings){
+                modelSettings.lastTrained = timestamp;
+                await saveModelSettings();
+            }
+
         } else {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
             modelTrainResults.textContent = `Training failed.${execTime} Check console for details.`;
@@ -835,7 +1170,182 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadModelsFromFolder();
     await generateQRCode();
+
+    // Initialize and setup charts
+    initCharts();
+    if (window.electronAPI && window.electronAPI.onTrainingStdout) {
+        window.electronAPI.onTrainingStdout((data) => {
+            const regex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
+            const lines = data.split('\n');
+
+            lines.forEach(line => {
+                const match = line.match(regex);
+                if (match && accuracyChart && lossChart) {
+                    const [_, epoch, tLoss, tAcc, vLoss, vAcc] = match;
+                    const eLabel = `E${epoch}`;
+
+                    const currentEpoch = parseInt(epoch);
+                    const totalEpochs = parseInt(epochSlider.value);
+                    const percent = Math.round((currentEpoch / totalEpochs) * 100);
+
+                    document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
+                    document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
+
+                    // Accuracy Chart Data
+                    accuracyChart.data.labels.push(eLabel);
+                    accuracyChart.data.datasets[0].data.push(parseFloat(tAcc));
+                    accuracyChart.data.datasets[1].data.push(parseFloat(vAcc));
+                    accuracyChart.update();
+
+                    // loss Chart Data
+                    lossChart.data.labels.push(eLabel);
+                    lossChart.data.datasets[0].data.push(parseFloat(tLoss));
+                    lossChart.data.datasets[1].data.push(parseFloat(vLoss));
+                    lossChart.update();
+                }
+            });
+        });
+    }
 });
 
 
 window.electronAPI.invoke('setup-python-venv')
+
+// Load monaco editor
+let editor;
+require.config({
+    paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'}
+});
+
+//
+require(['vs/editor/editor.main'], function() {
+    editor = monaco.editor.create(document.getElementById('monaco-editor-container'), {
+        value: "[]",
+        language: 'json',
+        theme: 'vs-light',
+        automaticLayout: true
+    });
+});
+
+
+// Implements Chart JS need to reorg
+function initCharts() {
+    const commonOptions = {
+        responsive: true,
+        scales: { y: { beginAtZero: true } },
+        animation: true,
+    };
+    accuracyChart = new Chart(document.getElementById('accuracyChart'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Train Acc', data: [], borderColor: '#28a745', tension: 0.1 },
+                { label: 'Val Acc', data: [], borderColor: '#17a2b8', tension: 0.1 }
+            ]
+        },
+        options: commonOptions
+    });
+
+    lossChart = new Chart(document.getElementById('lossChart'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Train Loss', data: [], borderColor: '#dc3545', tension: 0.1 },
+                { label: 'Val Loss', data: [], borderColor: '#ffc107', tension: 0.1 }
+            ]
+        },
+        options: commonOptions
+    });
+}
+
+// Prediction Tab Logic (definetly need to reorganize into different files after this PR) - Actually leaving it here because the breakup into different JS files will be done as part of the polish phase
+
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(name => {
+    dropZone.addEventListener(name, e => { e.preventDefault(); e.stopPropagation(); });
+});
+
+dropZone.addEventListener('dragover', () => dropZone.classList.add('drag-over'));
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+
+dropZone.addEventListener('drop', (e) => {
+    dropZone.classList.remove('drag-over');
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+
+        const filePath = window.electronAPI.getPathForFile(file);
+
+        console.log("Real File Path found:", filePath);
+
+        if (file.type.startsWith('image/')) {
+            processPrediction(filePath);
+        }
+    }
+});
+
+const predictFileInput = document.getElementById('predict-file-input');
+
+// delete
+dropZone.addEventListener('click', () => {
+    if (predictionPreview.style.display === 'none') {
+        predictFileInput.click();
+    }
+});
+
+
+predictFileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+        const file = e.target.files[0];
+        const filePath = window.electronAPI.getPathForFile(file);
+        processPrediction(filePath);
+    }
+});
+
+function resetPredictionZone() {
+    // clears area
+    predictionPreview.src = "";
+    predictionPreview.style.display = 'none';
+    document.querySelector('.drop-zone-content').style.display = 'block';
+
+
+    resultsArea.style.display = 'none';
+    predictFileInput.value = "";
+}
+predictionPreview.addEventListener('click', (e) => {
+    e.stopPropagation();
+    resetPredictionZone();
+});
+
+async function processPrediction(imagePath) {
+    predictionPreview.src = `file://${imagePath}`;
+    predictionPreview.style.display = 'block';
+    document.querySelector('.drop-zone-content').style.display = 'none';
+
+    resultsArea.style.display = 'block';
+    document.getElementById('predicted-label').textContent = "Analyzing...";
+    document.getElementById('confidence-fill').style.width = '0%';
+
+    const currentModelName = sessionStorage.getItem('projectName');
+    const result = await window.electronAPI.invoke('predict-image', {
+        modelName: currentModelName,
+        imagePath: imagePath
+    });
+
+
+    if (result.success) {
+        const labelKeys = Object.keys(modelSettings?.labels || {});
+        const classIdx = result.label.includes('Class') ? result.label.split(' ')[1] : null;
+        const displayLabel = (classIdx !== null && labelKeys[classIdx]) ? labelKeys[classIdx] : result.label;
+        document.getElementById('predicted-label').textContent = displayLabel;
+
+        const confidencePct = (result.confidence * 100).toFixed(2);
+        document.getElementById('confidence-fill').style.width = `${confidencePct}%`;
+        document.getElementById('confidence-text').textContent = `Model Confidence: ${confidencePct}%`;
+    } else {
+        document.getElementById('predicted-label').textContent = "Error during prediction";
+        console.error(result.error);
+    }
+}
