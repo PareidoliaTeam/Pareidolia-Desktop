@@ -89,19 +89,19 @@ def create_cnn_model(num_classes):
     
     return model
 
-def create_imported_model():
+def create_imported_model(num_classes):
     base_model = tf.keras.applications.MobileNetV2(
         input_shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
         include_top=False,
         weights='imagenet',
     )
-    base_model.trainable = False
+    # base_model.trainable = False
 
     inputs = tf.keras.Input(shape=(224, 224, 3))
-    x = base_model(inputs, training=False)
+    x = base_model(inputs)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.Dropout(0.2)(x)
-    outputs = tf.keras.layers.Dense(10, activation='softmax')(x)  # 10 classes
+    outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)  # Dynamic number of classes
 
     model = tf.keras.Model(inputs, outputs)
 
@@ -289,7 +289,8 @@ if __name__ == "__main__":
     print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
     
     # Create the model with the dynamic class count
-    model = create_cnn_model(NUM_CLASSES)
+    # model = create_cnn_model(NUM_CLASSES)
+    model = create_imported_model(NUM_CLASSES)
     print("Model created successfully")
     
     # Train the model
