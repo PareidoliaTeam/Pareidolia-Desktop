@@ -565,7 +565,7 @@ if __name__ == "__main__":
         img_size=224,
         num_workers=0,
         val_split=0.2,
-        seed=77,
+        seed=42,
         cifar10=False,
         labels_json=labels_json_str,
     )
@@ -582,6 +582,7 @@ if __name__ == "__main__":
         monitor="val_acc",
         mode="max",
         save_top_k=1,
+        dirpath=model_folder,
         filename="repvgg-{epoch:02d}-{val_acc:.4f}",
     )
 
