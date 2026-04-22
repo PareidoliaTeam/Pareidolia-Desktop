@@ -46,6 +46,7 @@ const epochSlider = document.getElementById('epoch-slider');
 const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
+const trainProjectTypeInputs = document.querySelectorAll('input[name="train-project-type"]');
 //const modelToggle = document.getElementsByName('train');
 
 // Gallery
@@ -263,6 +264,14 @@ async function loadModelSettingsForView(modelName) {
         const lastTrainedSpan = document.querySelector('.last-trained');
         if (lastTrainedSpan) {
             lastTrainedSpan.textContent = `Last Trained: ${modelSettings.lastTrained || 'Never'}`;
+        }
+
+        if (!modelSettings.projectType) modelSettings.projectType = 'scratch';
+
+        const selectedType = modelSettings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
+        const selectedTypeInput = document.querySelector(`input[name="train-project-type"][value="${selectedType}"]`);
+        if (selectedTypeInput) {
+            selectedTypeInput.checked = true;
         }
     } catch (error) {
         console.error('Error loading model settings:', error);
@@ -1042,6 +1051,16 @@ epochSlider.addEventListener('change', async (event) => {
     await saveModelSettings();
 });
 
+// Project type radio buttons change in training menu
+trainProjectTypeInputs.forEach((input) => {
+  input.addEventListener('change', async () => {
+    if (!input.checked || !modelSettings) return;
+    modelSettings.projectType = input.value;
+    await saveModelSettings();
+  });
+});
+
+
 // carousel animation
 carousel.addEventListener('animationiteration', () => {
     // Reset carousel position for seamless looping
@@ -1099,12 +1118,15 @@ modelTrainBtn.addEventListener('click', async () => {
 
         const { labelsJson, modelFolderPath } = await window.electronAPI.invoke('get-model-details-for-python', currentModelName);
 
+        const projectType = modelSettings?.projectType || 'scratch';
+
         const result = await window.electronAPI.executeTrain({
             labelsJson,
             modelFolderPath,
             epochs: parseInt(epochs),
             toggle: toggle,
-            layers: modelSettings.layers
+            layers: modelSettings.layers,
+            projectType: projectType
         });
 
         const callDuration = Math.round((Date.now() - callStartTime) / 1000);

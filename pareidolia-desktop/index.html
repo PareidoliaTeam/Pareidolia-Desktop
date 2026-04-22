@@ -145,6 +145,12 @@
           </div>
           <!-- Footer -->
           <footer class="project-footer">
+            <input type="radio" id="train-type-scratch" name="train-project-type" value="scratch">
+            <label for="train-type-scratch">Start From Scratch</label>
+            <br>
+            <input type="radio" id="train-type-pretrained" name="train-project-type" value="pretrained">
+            <label for="train-type-pretrained">Use Pretrained Model</label>
+
             <input type="radio" name="train" value="true" checked> Use Tensorflow<br>
             <input type="radio" name="train" value="false"> Use PyTorch<br>
             <span class="last-trained">Last Trained: Never</span>

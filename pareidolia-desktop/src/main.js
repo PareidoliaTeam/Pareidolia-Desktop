@@ -592,9 +592,11 @@ ipcMain.handle('setup-python-venv', async () => {
  * @param {string} params.modelFolderPath - Path to the model folder where outputs will be saved
  * @param {number} params.epochs      - Number of training epochs
  * @param {string} params.toggle      - Model toggle option (e.g., 'tensorflow' or 'pytorch')
+ * @param {string} params.projectType - Training strategy ('scratch' or 'pretrained')
  */
 ipcMain.handle('execute-train', async (event, params) => {
-  const { labelsJson, modelFolderPath, epochs, toggle, layers } = params;
+  const { labelsJson, modelFolderPath, epochs, toggle, layers, projectType } = params;
+  const normalizedProjectType = projectType === 'pretrained' ? 'pretrained' : 'scratch';
 
   // Validate labelsJson
   if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
@@ -648,6 +650,7 @@ ipcMain.handle('execute-train', async (event, params) => {
   console.log('Model path:', modelPath);
   console.log('Epochs:', epochs);
   console.log('Toggle:', toggle);
+  console.log('Project Type:', normalizedProjectType);
 
   // Pass labels_json, model_path, and epochs as arguments
   const venvPath = getVenvPath();
