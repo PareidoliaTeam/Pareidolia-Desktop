@@ -20,6 +20,7 @@ const addModelBtn = document.querySelector('.create-btn');
 // Model modal elements
 const addProjectModal = document.getElementById('add-model-modal');
 const projectNameInput = document.getElementById('project-name-input');
+const projectTypeInputs = document.getElementsByName('project-type');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalClose = document.querySelector('.modal-close');
@@ -515,7 +516,8 @@ async function switchMode(viewId, sidebarClass) {
  */
 async function handleAddProject() {
     const modelName = projectNameInput.value.trim();
-
+    const projectType = Array.from(projectTypeInputs).find(input => input.checked)?.value || 'scratch';
+    
     if (!modelName) {
 
         // need to make a new modal for this pop up
@@ -524,7 +526,9 @@ async function handleAddProject() {
     }
 
     try {
-        const modelPath = await window.electronAPI.invoke('create-model-folder', modelName);
+        const modelPath = await window.electronAPI.invoke('create-model-folder', 
+            { modelName, projectType }
+        );
         console.log('Model created at:', modelPath);
 
         // Reset input and close modal

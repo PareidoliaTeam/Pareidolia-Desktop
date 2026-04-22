@@ -223,11 +223,18 @@ export async function createDatasetFolder(projectName) {
 /**
  * Creates a model folder inside the models folder within Pareidolia.
  * Also creates a model-settings.json file with initial configuration.
- * @param {string} modelName - The name of the model folder to create
+ * @param {string|Object} input - The model name string or an object with modelName and projectType
  * @returns {Promise<string>} The full path to the created model folder
  */
-export async function createModelFolder(modelName) {
+export async function createModelFolder(input) {
   try {
+    const modelName = typeof input === 'string' ? input : input?.modelName;
+    const projectType = typeof input === 'string' ? 'scratch' : (input?.projectType || 'scratch');
+
+    if (!modelName) {
+      throw new Error('Model name is required');
+    }
+
     const pareidoliaPath = await ensurePareidoliaFolder();
     const modelsPath = path.join(pareidoliaPath, 'models');
     const modelPath = path.join(modelsPath, modelName);
@@ -250,7 +257,8 @@ export async function createModelFolder(modelName) {
     const settingsPath = path.join(modelPath, 'model-settings.json');
     const defaultSettings = {
       labels: {},
-      epochs: 10
+      epochs: 10,
+      projectType: projectType // 'scratch' or 'pretrained'
     };
 
     if (!fs.existsSync(settingsPath)) {
