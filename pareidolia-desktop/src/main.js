@@ -258,7 +258,91 @@ export async function createModelFolder(input) {
     const defaultSettings = {
       labels: {},
       epochs: 10,
-      projectType: projectType // 'scratch' or 'pretrained'
+      projectType: projectType, // 'scratch' or 'pretrained'
+      layers: [
+        {
+          "type": "Conv2D",
+          "parameters": {
+            "units": "16",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "MaxPooling2D",
+          "parameters": {
+            "pool_size": "2"
+          }
+        },
+        {
+          "type": "Conv2D",
+          "parameters": {
+            "units": "32",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "MaxPooling2D",
+          "parameters": {
+            "pool_size": "2"
+          }
+        },
+        {
+          "type": "Conv2D",
+          "parameters": {
+            "units": "64",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "MaxPooling2D",
+          "parameters": {
+            "pool_size": "2"
+          }
+        },
+        {
+          "type": "Dropout",
+          "parameters": {
+            "rate": "0.2"
+          }
+        },
+        {
+          "type": "Flatten",
+          "parameters": {}
+        },
+        {
+          "type": "Dense",
+          "parameters": {
+            "units": "128",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "Dropout",
+          "parameters": {
+            "rate": "0.3"
+          }
+        },
+        {
+          "type": "Dense",
+          "parameters": {
+            "units": "64",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "Dropout",
+          "parameters": {
+            "rate": "0.2"
+          }
+        },
+        {
+          "type": "Dense",
+          "parameters": {
+            "units": "32",
+            "activation": "relu"
+          }
+        }
+      ]
     };
 
     if (!fs.existsSync(settingsPath)) {
