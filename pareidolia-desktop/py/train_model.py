@@ -102,6 +102,79 @@ def get_data_augmentation():
         name="data_augmentation"
     )
 
+def create_model_new(num_classes,layers_json):
+    """Creates a CNN model for image classification. Utilized https://github.com/Wei-HaiMing/workflowExample/blob/main/workflow.ipynb?short_path=b61c709
+
+    @param num_classes: Number of output classes, determined from labels JSON
+    """
+    model = models.Sequential()
+    model.add(layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)))
+
+    has_flattened = False
+    loss_func = ''
+
+    for layer_data in layers_json:
+        layer_type = layer_data['type']
+        parameters = layer_data['parameters']
+
+
+        # make dictionary for layers to clean up code
+
+        # data augmentation layers
+        if layer_type == 'RandomFlip':
+            model.add(layers.RandomFlip(parameters.get('mode', 'horizontal'), name="data_augmentation"))
+        elif layer_type == 'RandomRotation':
+            model.add(layers.RandomRotation(float(parameters.get('factor', 0.1))))
+        elif layer_type == 'RandomZoom':
+            model.add(layers.RandomZoom(float(parameters.get('factor', 0.1))))
+        elif layer_type == 'RandomContrast':
+            model.add(layers.RandomContrast(float(parameters.get('factor', 0.2))))
+
+        # layers
+        elif layer_type == 'Conv2D':
+            model.add(layers.Conv2D(
+                filters=int(parameters.get('units', 32)),
+                kernel_size=3, padding='same',
+                activation=parameters.get('activation', 'relu')
+            ))
+        elif layer_type == 'MaxPooling2D':
+            model.add(layers.MaxPooling2D(pool_size=int(parameters.get('pool_size', 2))))
+        elif layer_type == 'AveragePooling2D':
+            model.add(layers.AveragePooling2D(pool_size=int(parameters.get('pool_size', 2))))
+        elif layer_type == 'GlobalAveragePooling2D':
+            model.add(layers.GlobalAveragePooling2D())
+            has_flattened = True
+        elif layer_type == 'Flatten':
+            model.add(layers.Flatten())
+            has_flattened = True
+        elif layer_type == 'Dense':
+            if not has_flattened:
+                model.add(layers.Flatten())
+                has_flattened = True
+            model.add(layers.Dense(
+                int(parameters.get('units', 128)),
+                activation=parameters.get('activation', 'relu')
+            ))
+        elif layer_type == 'Dropout':
+            model.add(layers.Dropout(float(parameters.get('rate', 0.2))))
+
+    # saftey check to make sure its flattened
+    if not has_flattened:
+        model.add(layers.Flatten())
+
+    if num_classes == 1:
+           model.add(layers.Dense(1, activation='sigmoid'))
+           loss_func = 'binary_crossentropy'
+    else:
+        model.add(layers.Dense(num_classes, activation='softmax'))
+        loss_func = 'categorical_crossentropy'
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss=loss_func,
+        metrics=['accuracy']
+    )
+    return model
 
 def create_imported_model(num_classes):
     preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input

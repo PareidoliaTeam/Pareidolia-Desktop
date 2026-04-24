@@ -84,6 +84,19 @@ CONVERTER_REQUIREMENTS = [
 ]
 
 
+def delete_existing_checkpoints(model_folder):
+    """
+    Removes any existing Lightning checkpoint files so each training run starts
+    with a clean checkpoint directory and retains only the new best checkpoint.
+    """
+    for ckpt_path in Path(model_folder).glob("*.ckpt"):
+        try:
+            ckpt_path.unlink()
+            print(f"Deleted old checkpoint: {ckpt_path}")
+        except Exception as e:
+            print(f"Warning: could not delete {ckpt_path}: {e}")
+
+
 def run_logged_subprocess(command, env=None, cwd=None):
     """
     Runs a converter-related subprocess command, prints stdout/stderr so
@@ -691,6 +704,8 @@ if __name__ == "__main__":
         lr=3e-4,
         hidden_dim=512,
     )
+
+    delete_existing_checkpoints(model_folder)
 
     checkpoint_cb = ModelCheckpoint(
         monitor="val_acc",
