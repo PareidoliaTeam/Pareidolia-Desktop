@@ -682,34 +682,40 @@ ipcMain.handle('execute-train', async (event, params) => {
   // Need to spawn for live data
   const pythonExe = process.platform === 'win32' ? path.join(venvPath, 'Scripts', 'python.exe') : path.join(venvPath, 'bin', 'python');
 
-  // Args for spawn
-  const args = [
-      '-u',
-    pythonScriptPath,
-    JSON.stringify(labelsJson),
-    modelFolderPath,
-    epochs.toString(),
-    normalizedProjectType,
-    // TODO: add in layers to training pipeline
-    layers.toString()
-  ];
-
-  if (toggle !== 'tensorflow') {
-    // needs a model name for pytorch
-    args.push("repvgg_a2");
-  }
+  // TensorFlow and PyTorch currently accept different argv layouts.
+  const args = toggle === 'tensorflow'
+    ? [
+        '-u',
+        pythonScriptPath,
+        JSON.stringify(labelsJson),
+        modelFolderPath,
+        epochs.toString(),
+        normalizedProjectType,
+        // TODO: add in layers to training pipeline
+        String(layers ?? '')
+      ]
+    : [
+        '-u',
+        pythonScriptPath,
+        JSON.stringify(labelsJson),
+        modelFolderPath,
+        epochs.toString(),
+        'repvgg_a2'
+      ];
 
   return new Promise((resolve, reject) => {
     const pythonProcess = spawn(pythonExe, args);
 
     pythonProcess.stdout.on('data', (data) => {
       const output = data.toString();
-      const win = BrowserWindow.getFocusedWindow();
-      if (win) win.webContents.send('training-stdout', output);
+      console.log(`[Python stdout]: ${output}`);
+      event.sender.send('training-stdout', output);
     });
 
     pythonProcess.stderr.on('data', (data) => {
-      console.error(`[Python Error]: ${data}`);
+      const output = data.toString();
+      console.error(`[Python stderr]: ${output}`);
+      event.sender.send('training-stderr', output);
     });
 
     pythonProcess.on('close', (code) => {
