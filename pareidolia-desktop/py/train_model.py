@@ -43,6 +43,8 @@ IMG_WIDTH = 224
 IMG_CHANNELS = 3
 # NUM_CLASSES is now determined dynamically from the labels JSON at runtime
 LEARNING_RATE = 1e-5
+MODEL_TYPE_SCRATCH = "scratch"
+MODEL_TYPE_PRETRAINED = "pretrained"
 
 def create_cnn_model(num_classes):
     """Creates a CNN model for image classification.
@@ -89,7 +91,7 @@ def create_cnn_model(num_classes):
     
     return model
 
-def data_augmentation():
+def get_data_augmentation():
     return keras.Sequential([
         layers.RandomFlip("horizontal"),
         layers.RandomRotation(0.08),
@@ -103,7 +105,7 @@ def data_augmentation():
 
 def create_imported_model(num_classes):
     preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
-    data_augmentation = data_augmentation()
+    data_augmentation = get_data_augmentation()
 
     base_model = tf.keras.applications.MobileNetV2(
         input_shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
@@ -122,16 +124,34 @@ def create_imported_model(num_classes):
 
     model = tf.keras.Model(inputs, outputs)
 
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    
     return model
 
 
-def load_images_from_json(labels_json):
+def normalize_images_for_model(images, model_type):
+    """Convert image tensors into the range expected by the selected model."""
+    images = np.array(images, dtype='float32')
+
+    if model_type == MODEL_TYPE_PRETRAINED:
+        # MobileNetV2 preprocess_input expects RGB pixels in the 0..255 range.
+        return images
+
+    return images / 255.0
+
+
+def load_images_from_json(labels_json, model_type):
     """Load images from a JSON mapping of label names to arrays of folder paths.
     
     @param labels_json: JSON string (or dict) mapping label names to lists of folder paths.
                         Example: {"Apple": ["/path/to/folder1"], "Orange": ["/path/a", "/path/b"]}
+    @param model_type: Which model input contract to prepare images for.
     @returns: (images, labels, num_classes, label_names)
-              images      - float32 numpy array normalized to [0, 1]
+              images      - float32 numpy array prepared for the selected model
               labels      - integer array of label indices
               num_classes - number of unique labels found
               label_names - ordered list of label names (index matches one-hot position)
@@ -171,9 +191,8 @@ def load_images_from_json(labels_json):
 
     if len(images) == 0:
         return None, None, 0, []
- 
-    # TODO: add paths for normalization between scratch model and mobilenetv2
-    images = np.array(images, dtype='float32') / 255.0
+
+    images = normalize_images_for_model(images, model_type)
     # labels = keras.utils.to_categorical(labels, num_classes)
     labels = np.array(labels, dtype='int32')
 
@@ -183,7 +202,7 @@ def preprocess_frame(frame, model_type):
     """Preprocess a frame for prediction."""
     img = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.astype('float32') / 255.0
+    img = normalize_images_for_model([img], model_type)[0]
     img = np.expand_dims(img, axis=0)
     return img
 
@@ -216,8 +235,12 @@ def convert_model_to_tflite(model, X_train, model_folder):
         def representative_dataset():
             for i in range(min(200, len(X_train))):
                 x = X_train[i:i+1].astype(np.float32)
-                # Data should already be normalized (0..1) from preprocessing
+                # Samples must match the inference model's input domain before
+                # any in-graph preprocessing like MobileNetV2 preprocess_input.
                 yield [x]
+                # TODO: specify representative dataset that is different from 
+                # training data and matches the inference model's expected input 
+                # range (e.g. 0..255 for MobileNetV2)
         
         # Convert to TFLite with quantization
         converter = tf.lite.TFLiteConverter.from_keras_model(inference_model)
@@ -287,18 +310,19 @@ if __name__ == "__main__":
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
     projectType = sys.argv[4]
-    layers = sys.argv[5]
-    layers = layers.split(",")
+    selected_layers_arg = sys.argv[5]
+    selected_layers = selected_layers_arg.split(",")
+    model_type = MODEL_TYPE_PRETRAINED if projectType == MODEL_TYPE_PRETRAINED else MODEL_TYPE_SCRATCH
 
     print("=== TRAINING CONFIGURATION ===")
     print(f"Project Type: {projectType}")
-    print(f"Layers to include: {layers}")
+    print(f"Layers to include: {selected_layers}")
     
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
     
     # Load and prepare images from the JSON label map
-    X, y, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
+    X, y, NUM_CLASSES, label_names = load_images_from_json(labels_json_str, model_type)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, random_state=42) # split training data into training and validation data
 
@@ -310,8 +334,10 @@ if __name__ == "__main__":
     print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
     
     # Create the model with the dynamic class count
-    # model = create_cnn_model(NUM_CLASSES)
-    model = create_imported_model(NUM_CLASSES)
+    if model_type == MODEL_TYPE_PRETRAINED:
+        model = create_imported_model(NUM_CLASSES)
+    else:
+        model = create_cnn_model(NUM_CLASSES)
     print("Model created successfully")
     
     # Train the model
@@ -350,4 +376,3 @@ if __name__ == "__main__":
     print(f"FINAL_ACCURACY:{final_accuracy}")
     print(f"FINAL_VAL_LOSS:{final_val_loss}")
     print(f"FINAL_VAL_ACCURACY:{final_val_accuracy}")
-
