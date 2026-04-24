@@ -30,6 +30,7 @@ Multiple folders per label are supported:
 """
 import sys
 import os
+import json
 import numpy as np
 import cv2
 import tensorflow as tf
@@ -102,6 +103,56 @@ def get_data_augmentation():
         name="data_augmentation"
     )
 
+def parse_selected_layers(layers_arg):
+    """Parse the incoming layers JSON into a Python list of layer dictionaries."""
+    def validate_layers(layer_items):
+        if not isinstance(layer_items, list):
+            raise ValueError("layers must be a JSON array")
+
+        normalized_layers = []
+        for index, layer_item in enumerate(layer_items):
+            if not isinstance(layer_item, dict):
+                raise ValueError(f"layer at index {index} must be an object")
+
+            layer_type = layer_item.get("type")
+            parameters = layer_item.get("parameters", {})
+
+            if not isinstance(layer_type, str) or not layer_type.strip():
+                raise ValueError(f"layer at index {index} is missing a valid 'type'")
+
+            if parameters is None:
+                parameters = {}
+            elif not isinstance(parameters, dict):
+                raise ValueError(f"layer at index {index} has invalid 'parameters'; expected an object")
+
+            normalized_layers.append({
+                "type": layer_type,
+                "parameters": parameters
+            })
+
+        return normalized_layers
+
+    if layers_arg is None:
+        return []
+
+    if isinstance(layers_arg, list):
+        return validate_layers(layers_arg)
+
+    if isinstance(layers_arg, str):
+        layers_arg = layers_arg.strip()
+        if not layers_arg:
+            return []
+
+        parsed_layers = json.loads(layers_arg)
+        if isinstance(parsed_layers, list):
+            return validate_layers(parsed_layers)
+        if isinstance(parsed_layers, dict):
+            if "layers" not in parsed_layers:
+                raise ValueError("layers object must contain a 'layers' array")
+            return validate_layers(parsed_layers["layers"])
+
+    raise ValueError("layers argument must be a JSON array or an object containing a 'layers' array")
+
 def create_model_new(num_classes,layers_json):
     """Creates a CNN model for image classification. Utilized https://github.com/Wei-HaiMing/workflowExample/blob/main/workflow.ipynb?short_path=b61c709
 
@@ -167,7 +218,8 @@ def create_model_new(num_classes,layers_json):
            loss_func = 'binary_crossentropy'
     else:
         model.add(layers.Dense(num_classes, activation='softmax'))
-        loss_func = 'categorical_crossentropy'
+        # Labels are loaded as integer class indices, not one-hot vectors.
+        loss_func = 'sparse_categorical_crossentropy'
 
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
@@ -229,8 +281,6 @@ def load_images_from_json(labels_json, model_type):
               num_classes - number of unique labels found
               label_names - ordered list of label names (index matches one-hot position)
     """
-    import json
-
     if isinstance(labels_json, str):
         labels_dict = json.loads(labels_json)
     else:
@@ -382,9 +432,9 @@ if __name__ == "__main__":
     labels_json_str = sys.argv[1]
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
-    projectType = sys.argv[4]
-    selected_layers_arg = sys.argv[5]
-    selected_layers = selected_layers_arg.split(",")
+    projectType = sys.argv[4] if len(sys.argv) > 4 else MODEL_TYPE_SCRATCH
+    selected_layers_arg = sys.argv[5] if len(sys.argv) > 5 else None
+    selected_layers = parse_selected_layers(selected_layers_arg)
     model_type = MODEL_TYPE_PRETRAINED if projectType == MODEL_TYPE_PRETRAINED else MODEL_TYPE_SCRATCH
 
     print("=== TRAINING CONFIGURATION ===")
@@ -410,7 +460,7 @@ if __name__ == "__main__":
     if model_type == MODEL_TYPE_PRETRAINED:
         model = create_imported_model(NUM_CLASSES)
     else:
-        model = create_cnn_model(NUM_CLASSES)
+        model = create_model_new(NUM_CLASSES, selected_layers) if selected_layers else create_cnn_model(NUM_CLASSES)
     print("Model created successfully")
     
     # Train the model
@@ -424,7 +474,7 @@ if __name__ == "__main__":
     # )
     history = model.fit(
         X_train, y_train,
-        epochs=15,
+        epochs=epochs,
         validation_data=(X_val, y_val),  
         verbose=1  
     )

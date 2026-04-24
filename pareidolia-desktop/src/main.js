@@ -775,8 +775,7 @@ ipcMain.handle('execute-train', async (event, params) => {
         modelFolderPath,
         epochs.toString(),
         normalizedProjectType,
-        // TODO: add in layers to training pipeline
-        String(layers ?? '')
+        JSON.stringify(Array.isArray(layers) ? layers : [])
       ]
     : [
         '-u',
