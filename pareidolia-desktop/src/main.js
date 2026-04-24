@@ -690,6 +690,7 @@ ipcMain.handle('execute-train', async (event, params) => {
     modelFolderPath,
     epochs.toString(),
     normalizedProjectType,
+    // TODO: add in layers to training pipeline
     layers.toString()
   ];
 
