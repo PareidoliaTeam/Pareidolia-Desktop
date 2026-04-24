@@ -42,7 +42,7 @@ IMG_HEIGHT = 224
 IMG_WIDTH = 224
 IMG_CHANNELS = 3
 # NUM_CLASSES is now determined dynamically from the labels JSON at runtime
-LEARNING_RATE = 0.001
+LEARNING_RATE = 1e-5
 
 def create_cnn_model(num_classes):
     """Creates a CNN model for image classification.
@@ -89,27 +89,38 @@ def create_cnn_model(num_classes):
     
     return model
 
+def data_augmentation():
+    return keras.Sequential([
+        layers.RandomFlip("horizontal"),
+        layers.RandomRotation(0.08),
+        layers.RandomZoom(0.15),
+        layers.RandomTranslation(0.08, 0.08),
+        layers.RandomContrast(0.1),
+    ], 
+        name="data_augmentation"
+    )
+
+
 def create_imported_model(num_classes):
+    preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
+    data_augmentation = data_augmentation()
+
     base_model = tf.keras.applications.MobileNetV2(
         input_shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
         include_top=False,
         weights='imagenet',
     )
-    # base_model.trainable = False
+    base_model.trainable = True
 
-    inputs = tf.keras.Input(shape=(224, 224, 3))
-    x = base_model(inputs)
+    inputs = tf.keras.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
+    x = data_augmentation(inputs)
+    x = tf.keras.layers.Lambda(preprocess_input)(x)
+    x = base_model(x, training=False)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
-    x = tf.keras.layers.Dropout(0.2)(x)
-    outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)  # Dynamic number of classes
+    x = tf.keras.layers.Dropout(0.3)(x)
+    outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
 
     model = tf.keras.Model(inputs, outputs)
-
-    model.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
 
     return model
 
@@ -161,13 +172,14 @@ def load_images_from_json(labels_json):
     if len(images) == 0:
         return None, None, 0, []
  
+    # TODO: add paths for normalization between scratch model and mobilenetv2
     images = np.array(images, dtype='float32') / 255.0
     # labels = keras.utils.to_categorical(labels, num_classes)
     labels = np.array(labels, dtype='int32')
 
     return images, labels, num_classes, label_names
 
-def preprocess_frame(frame):
+def preprocess_frame(frame, model_type):
     """Preprocess a frame for prediction."""
     img = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -274,6 +286,13 @@ if __name__ == "__main__":
     labels_json_str = sys.argv[1]
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
+    projectType = sys.argv[4]
+    layers = sys.argv[5]
+    layers = layers.split(",")
+
+    print("=== TRAINING CONFIGURATION ===")
+    print(f"Project Type: {projectType}")
+    print(f"Layers to include: {layers}")
     
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
@@ -281,7 +300,9 @@ if __name__ == "__main__":
     # Load and prepare images from the JSON label map
     X, y, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, random_state=42) # split training data into training and validation data
+
+
     if X_train is None or len(X_train) == 0:
         print("Error: No images found or failed to load images")
         sys.exit(1)
@@ -295,12 +316,18 @@ if __name__ == "__main__":
     
     # Train the model
     print(f"Starting training for {epochs} epochs...")
+    # history = model.fit(
+    #     X_train, y_train,
+    #     epochs=epochs,
+    #     batch_size=32,
+    #     validation_split=0.2,
+    #     verbose=1
+    # )
     history = model.fit(
         X_train, y_train,
-        epochs=epochs,
-        batch_size=32,
-        validation_split=0.2,
-        verbose=1
+        epochs=15,
+        validation_data=(X_val, y_val),  
+        verbose=1  
     )
     
     # Get final metrics

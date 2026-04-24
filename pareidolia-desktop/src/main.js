@@ -689,6 +689,8 @@ ipcMain.handle('execute-train', async (event, params) => {
     JSON.stringify(labelsJson),
     modelFolderPath,
     epochs.toString(),
+    normalizedProjectType,
+    layers.toString()
   ];
 
   if (toggle !== 'tensorflow') {
