@@ -117,9 +117,8 @@ class ImageDataModule(pl.LightningDataModule):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        self.rep_transform = transforms.Compose([ # representative data matches the evaluation crop, but stays in raw pixel space
+        self.rep_transform = transforms.Compose([ # representative data should match the wrapped TF/TFLite model's raw input domain
             transforms.Resize((self.resize_size, self.resize_size)),
-            transforms.CenterCrop(img_size),
             transforms.PILToTensor(),
         ])
 

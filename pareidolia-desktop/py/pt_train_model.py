@@ -200,13 +200,80 @@ def ensure_onnx2tf_test_image_data(working_dir):
     if os.path.exists(sample_path):
         return sample_path
 
-    sample_images = np.random.default_rng(77).random(
+    sample_images = np.random.default_rng(42).random(
         (20, 128, 128, 3),
         dtype=np.float32,
     )
     np.save(sample_path, sample_images)
     print(f"[Conversion] Wrote local onnx2tf test data: {sample_path}")
     return sample_path
+
+
+def wrap_tf_saved_model_with_preprocess(base_saved_model_path, wrapped_saved_model_path, converter_python=None):
+    """
+    Wraps the converted TensorFlow SavedModel with TF-native resize and center
+    crop preprocessing. This avoids asking onnx2tf to translate the crop path
+    from ONNX while still producing a final model that owns the full
+    preprocessing contract.
+    """
+    if sys.platform == "darwin":
+        worker_script = str(Path(__file__).resolve().with_name("tf_wrap_saved_model_worker.py"))
+        env = os.environ.copy()
+        env.setdefault("TF_CPP_MIN_LOG_LEVEL", "1")
+        env.setdefault("TF_NUM_INTEROP_THREADS", "1")
+        env.setdefault("TF_NUM_INTRAOP_THREADS", "1")
+        env.setdefault("OMP_NUM_THREADS", "1")
+        run_logged_subprocess(
+            [
+                converter_python or sys.executable,
+                worker_script,
+                "--base-saved-model",
+                base_saved_model_path,
+                "--output",
+                wrapped_saved_model_path,
+            ],
+            env=env,
+        )
+        return wrapped_saved_model_path
+
+    tf, _, _, _ = import_tensorflow_keras()
+
+    if os.path.exists(wrapped_saved_model_path):
+        shutil.rmtree(wrapped_saved_model_path)
+
+    base_model = tf.saved_model.load(base_saved_model_path)
+    serving_fn = base_model.signatures["serving_default"]
+    input_key = next(iter(serving_fn.structured_input_signature[1].keys()))
+    output_key = next(iter(serving_fn.structured_outputs.keys()))
+
+    class WrappedModule(tf.Module):
+        @tf.function(
+            input_signature=[
+                tf.TensorSpec(
+                    shape=[1, None, None, IMG_CHANNELS],
+                    dtype=tf.float32,
+                    name="input",
+                )
+            ]
+        )
+        def serving_default(self, x):
+            x = tf.image.resize(
+                x,
+                [EXPORT_IMG_HEIGHT, EXPORT_IMG_WIDTH],
+                method=tf.image.ResizeMethod.BILINEAR,
+            )
+            x = tf.image.resize_with_crop_or_pad(x, IMG_HEIGHT, IMG_WIDTH)
+            outputs = serving_fn(**{input_key: x})
+            return {"output": outputs[output_key]}
+
+    wrapped_model = WrappedModule()
+    tf.saved_model.save(
+        wrapped_model,
+        wrapped_saved_model_path,
+        signatures={"serving_default": wrapped_model.serving_default},
+    )
+    print(f"[Conversion] Wrapped TensorFlow model saved to: {wrapped_saved_model_path}")
+    return wrapped_saved_model_path
 
 def convert_pt_to_onnx(model, model_folder):
     try:
@@ -604,7 +671,7 @@ if __name__ == "__main__":
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
 
-    pl.seed_everything(77, workers=True)
+    pl.seed_everything(42, workers=True)
 
     data_module = ImageDataModule(
         data_dir="./data",
@@ -697,19 +764,32 @@ if __name__ == "__main__":
         print("Using current Python environment for conversion (non-macOS).")
         converter_python = sys.executable
 
+    tf_inner_model_path = os.path.join(model_folder, "tf_out_inner")
+    tf_wrapped_model_path = os.path.join(model_folder, "tf_out")
+
     print("Converting ONNX model to TF format...")
     tf_conversion_result = convert_onnx_to_tf(
         onnx_model_path,
-        os.path.join(model_folder, "tf_out"),
+        tf_inner_model_path,
         converter_python
     )
     if not tf_conversion_result['success']:
         print(f"Error: ONNX to TF conversion failed: {tf_conversion_result['error']}")
         sys.exit(1)
     print("ONNX to TF conversion completed successfully")
+
+    print("Wrapping TensorFlow model with resize and center crop preprocessing...")
+    try:
+        tf_model_path = wrap_tf_saved_model_with_preprocess(
+            tf_conversion_result.get('tf_model'),
+            tf_wrapped_model_path,
+            converter_python,
+        )
+    except Exception as e:
+        print(f"Error wrapping TF model with preprocessing: {str(e)}")
+        sys.exit(1)
     
     print("Finalizing TFLite model output...")
-    tf_model_path = tf_conversion_result.get('tf_model')
     representative_loader = data_module.representative_dataloader()
     representative_samples = build_representative_samples(representative_loader)
 
