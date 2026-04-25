@@ -233,7 +233,7 @@ class ImageDataModule(pl.LightningDataModule):
             eval_base = NumpyImageDataset(images, labels, transform=self.eval_transform)
 
             rep_base = NumpyImageDataset(images, labels, transform=self.rep_transform)
-            self.rep_ds = torch.utils.data.Subset(rep_base, test_indices)
+            self.rep_ds = torch.utils.data.Subset(rep_base, train_indices)
 
             if stage in ("fit", None):
                 train_base = NumpyImageDataset(images, labels, transform=self.train_transform)
