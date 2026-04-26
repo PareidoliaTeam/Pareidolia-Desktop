@@ -10,6 +10,9 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms, datasets
 from numpy_image_dataset import NumpyImageDataset
 
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+
 class NumpyImageDataset(Dataset):
     """
     Author: Armando Vega
@@ -76,6 +79,8 @@ class ImageDataModule(pl.LightningDataModule):
         cifar10=False, 
         labels_json=None, # this is a string btw
         test_split=0.1,   # the fraction of the dataset to use for testing when loading from a directory or JSON; ignored if cifar10=True since CIFAR-10 has a predefined train/test split
+        normalization_mean=None,
+        normalization_std=None,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -90,6 +95,8 @@ class ImageDataModule(pl.LightningDataModule):
         self._json_dataset_cache = None
         self._split_indices_cache = None
         self.resize_size = 256
+        self.normalization_mean = list(normalization_mean or IMAGENET_MEAN)
+        self.normalization_std = list(normalization_std or IMAGENET_STD)
 
         if not (0 <= self.val_split < 1):
             raise ValueError(f"val_split must be in [0, 1), got {self.val_split}")
@@ -100,27 +107,43 @@ class ImageDataModule(pl.LightningDataModule):
                 f"val_split + test_split must be < 1, got {self.val_split + self.test_split}"
             )
 
+        self._build_transforms()
+
+    def _build_transforms(self):
+        normalize = transforms.Normalize(mean=self.normalization_mean, std=self.normalization_std)
+
         self.train_transform = transforms.Compose([ # training preprocessing: resize up, augment, then crop to model size
             transforms.Resize((self.resize_size, self.resize_size)),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(degrees=15),
             transforms.ColorJitter(brightness=0.2, contrast=0.2),
-            transforms.RandomCrop(img_size),
+            transforms.RandomCrop(self.img_size),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            normalize,
         ])
 
         self.eval_transform = transforms.Compose([ # evaluation preprocessing matches exported model preprocessing
             transforms.Resize((self.resize_size, self.resize_size)),
-            transforms.CenterCrop(img_size),
+            transforms.CenterCrop(self.img_size),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            normalize,
         ])
 
         self.rep_transform = transforms.Compose([ # representative data should match the wrapped TF/TFLite model's raw input domain
             transforms.Resize((self.resize_size, self.resize_size)),
             transforms.PILToTensor(),
         ])
+
+        self.stats_transform = transforms.Compose([
+            transforms.Resize((self.resize_size, self.resize_size)),
+            transforms.CenterCrop(self.img_size),
+            transforms.ToTensor(),
+        ])
+
+    def set_normalization(self, mean, std):
+        self.normalization_mean = [float(value) for value in mean]
+        self.normalization_std = [max(float(value), 1e-6) for value in std]
+        self._build_transforms()
 
     def load_images_from_json(self, labels_json):
         """Load images from a JSON mapping of label names to arrays of folder paths."""
@@ -336,6 +359,34 @@ class ImageDataModule(pl.LightningDataModule):
     def representative_dataloader(self):
         return DataLoader(
             self.rep_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=self.num_workers > 0,
+        )
+
+    def normalization_stats_dataloader(self):
+        if self.labels_json is not None:
+            images, labels, _, _ = self._get_json_dataset()
+            train_indices, _, _ = self._get_split_indices(len(images))
+            stats_base = NumpyImageDataset(images, labels, transform=self.stats_transform)
+            stats_ds = torch.utils.data.Subset(stats_base, train_indices)
+        elif self.cifar10:
+            stats_base = datasets.CIFAR10(root=self.data_dir, train=True, transform=self.stats_transform, download=False)
+            n_total = len(stats_base)
+            n_val = int(self.val_split * n_total)
+            n_train = n_total - n_val
+            generator = torch.Generator().manual_seed(self.seed)
+            train_indices = torch.randperm(n_total, generator=generator).tolist()[:n_train]
+            stats_ds = torch.utils.data.Subset(stats_base, train_indices)
+        else:
+            stats_base = datasets.ImageFolder(self.data_dir, transform=self.stats_transform)
+            train_indices, _, _ = self._get_split_indices(len(stats_base))
+            stats_ds = torch.utils.data.Subset(stats_base, train_indices)
+
+        return DataLoader(
+            stats_ds,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,

@@ -783,7 +783,9 @@ ipcMain.handle('execute-train', async (event, params) => {
         JSON.stringify(labelsJson),
         modelFolderPath,
         epochs.toString(),
-        'repvgg_a2'
+        normalizedProjectType,
+        'repvgg_a2',
+        JSON.stringify(Array.isArray(layers) ? layers : [])
       ];
 
   return new Promise((resolve, reject) => {
