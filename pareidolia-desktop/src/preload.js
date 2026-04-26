@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   executeTrain: (epochs) => ipcRenderer.invoke('execute-train', epochs),
 
   onTrainingStdout: (callback) => ipcRenderer.on('training-stdout', (event, value) => callback(value)),
+  onTrainingStderr: (callback) => ipcRenderer.on('training-stderr', (event, value) => callback(value)),
 
   getPathForFile: (file) => webUtils.getPathForFile(file)
 });

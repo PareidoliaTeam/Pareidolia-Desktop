@@ -81,8 +81,8 @@ export async function setupPythonVenv() {
         console.log('Virtual environment created successfully');
         // install packages after venv creation
         const torchPackages = ['torch', 'torchvision'];
-        // const torchIndexUrl = 'https://download.pytorch.org/whl/cu130'; // note that cu130 is for CUDA 13.0 which works on my NVIDIA RTX 5070
-        const torchIndexUrl = 'https://download.pytorch.org/whl/cpu'; // CPU-only version for better compatibility across different hardware
+        const torchIndexUrl = 'https://download.pytorch.org/whl/cu130'; // note that cu130 is for CUDA 13.0 which works on my NVIDIA RTX 5070
+        // const torchIndexUrl = 'https://download.pytorch.org/whl/cpu'; // CPU-only version for better compatibility across different hardware
         await installPythonPackages(torchPackages, torchIndexUrl);
 
         const otherPackages = [
@@ -105,8 +105,8 @@ export async function setupPythonVenv() {
           'torch-metrics',
           'opencv-python',
           'pandas',
+          'psutil',
           'scikit-learn',
-          'psutil'
         ];
         await installPythonPackages(otherPackages);
         

@@ -19,8 +19,9 @@ class NumpyImageDataset(Dataset):
     Last Modified By: Armando Vega
     Date Last Modified: 7 April 2026
 
-    A dataset class that wraps numpy arrays of images and labels, applying optional transformations. 
-    Images are expected to be in the format of a numpy array with shape (N, H, W, C) and pixel values in the range [0, 1].
+    A dataset class that wraps an indexable collection of images and labels,
+    applying optional transformations. Individual images should be HWC numpy
+    arrays. Both uint8 0..255 images and float images are supported.
     """
 
     def __init__(self, images, labels, transform=None):
@@ -32,7 +33,15 @@ class NumpyImageDataset(Dataset):
         return len(self.images)
 
     def __getitem__(self, idx):
-        image = Image.fromarray((self.images[idx] * 255).astype(np.uint8))
+        image = self.images[idx]
+        if image.dtype != np.uint8:
+            if np.issubdtype(image.dtype, np.floating):
+                scale = 255.0 if image.max() <= 1.0 else 1.0
+                image = np.clip(image * scale, 0, 255).astype(np.uint8)
+            else:
+                image = np.clip(image, 0, 255).astype(np.uint8)
+
+        image = Image.fromarray(image)
         label = int(self.labels[idx])
         if self.transform is not None:
             image = self.transform(image)
@@ -61,7 +70,7 @@ class ImageDataModule(pl.LightningDataModule):
         self,
         data_dir=None, # the directory to load data from; ignored if labels_json is provided or cifar10=True
         batch_size=32, # the batch size to use for all dataloaders
-        img_size=224,  # the size to which all images will be resized (square) for both training and evaluation; default is 224 for compatibility with common pretrained models, but can be set to 32 for CIFAR-10 or smaller datasets
+        img_size=224,  # final crop size presented to the backbone after preprocessing
         val_split=0.2, # the fraction of the dataset to use for validation when loading from a directory or JSON; ignored if cifar10=True since CIFAR-10 has a predefined train/test split
         num_workers=4, # the number of worker processes to use for data loading; set to 0 for Windows to avoid issues with multiprocessing
         seed=42,       # reproducibility seed
@@ -81,6 +90,7 @@ class ImageDataModule(pl.LightningDataModule):
         self.labels_json = labels_json
         self._json_dataset_cache = None
         self._split_indices_cache = None
+        self.resize_size = 256
 
         if not (0 <= self.val_split < 1):
             raise ValueError(f"val_split must be in [0, 1), got {self.val_split}")
@@ -91,27 +101,26 @@ class ImageDataModule(pl.LightningDataModule):
                 f"val_split + test_split must be < 1, got {self.val_split + self.test_split}"
             )
 
-        self.train_transform = transforms.Compose([ # training tranformations
-            transforms.Resize((img_size, img_size)),
+        self.train_transform = transforms.Compose([ # training preprocessing: resize up, augment, then crop to model size
+            transforms.Resize((self.resize_size, self.resize_size)),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(degrees=15),
             transforms.ColorJitter(brightness=0.2, contrast=0.2),
+            transforms.RandomCrop(img_size),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        self.eval_transform = transforms.Compose([ # evaluation tranformations (no augmentation, just resizing and normalization)
-            transforms.Resize(256),
+        self.eval_transform = transforms.Compose([ # evaluation preprocessing matches exported model preprocessing
+            transforms.Resize((self.resize_size, self.resize_size)),
             transforms.CenterCrop(img_size),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        self.rep_transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(img_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        self.rep_transform = transforms.Compose([ # representative data should match the wrapped TF/TFLite model's raw input domain
+            transforms.Resize((self.resize_size, self.resize_size)),
+            transforms.PILToTensor(),
         ])
 
     def load_images_from_json(self, labels_json):
@@ -150,7 +159,6 @@ class ImageDataModule(pl.LightningDataModule):
                         if img is None:
                             continue
 
-                        img = cv2.resize(img, (self.img_size, self.img_size))
                         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
                         images.append(img)
@@ -159,7 +167,6 @@ class ImageDataModule(pl.LightningDataModule):
         if len(images) == 0:
             return None, None, 0, []
 
-        images = np.array(images, dtype=np.float32) / 255.0
         labels = np.array(labels, dtype=np.int64)
 
         print(f"Loaded {len(images)} images across {num_classes} classes from JSON dataset.", file=sys.stderr)
@@ -227,7 +234,7 @@ class ImageDataModule(pl.LightningDataModule):
             eval_base = NumpyImageDataset(images, labels, transform=self.eval_transform)
 
             rep_base = NumpyImageDataset(images, labels, transform=self.rep_transform)
-            self.rep_ds = torch.utils.data.Subset(rep_base, test_indices)
+            self.rep_ds = torch.utils.data.Subset(rep_base, train_indices)
 
             if stage in ("fit", None):
                 train_base = NumpyImageDataset(images, labels, transform=self.train_transform)

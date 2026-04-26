@@ -20,6 +20,7 @@ const addModelBtn = document.querySelector('.create-btn');
 // Model modal elements
 const addProjectModal = document.getElementById('add-model-modal');
 const projectNameInput = document.getElementById('project-name-input');
+const projectTypeInputs = document.getElementsByName('project-type');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalClose = document.querySelector('.modal-close');
@@ -45,6 +46,7 @@ const epochSlider = document.getElementById('epoch-slider');
 const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
+const trainProjectTypeInputs = document.querySelectorAll('input[name="train-project-type"]');
 //const modelToggle = document.getElementsByName('train');
 
 // Gallery
@@ -265,6 +267,14 @@ async function loadModelSettingsForView(modelName) {
         const lastTrainedSpan = document.querySelector('.last-trained');
         if (lastTrainedSpan) {
             lastTrainedSpan.textContent = `Last Trained: ${modelSettings.lastTrained || 'Never'}`;
+        }
+
+        if (!modelSettings.projectType) modelSettings.projectType = 'scratch';
+
+        const selectedType = modelSettings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
+        const selectedTypeInput = document.querySelector(`input[name="train-project-type"][value="${selectedType}"]`);
+        if (selectedTypeInput) {
+            selectedTypeInput.checked = true;
         }
     } catch (error) {
         console.error('Error loading model settings:', error);
@@ -519,7 +529,8 @@ async function switchMode(viewId, sidebarClass) {
  */
 async function handleAddProject() {
     const modelName = projectNameInput.value.trim();
-
+    const projectType = Array.from(projectTypeInputs).find(input => input.checked)?.value || 'scratch';
+    
     if (!modelName) {
 
         // need to make a new modal for this pop up
@@ -528,7 +539,9 @@ async function handleAddProject() {
     }
 
     try {
-        const modelPath = await window.electronAPI.invoke('create-model-folder', modelName);
+        const modelPath = await window.electronAPI.invoke('create-model-folder', 
+            { modelName, projectType }
+        );
         console.log('Model created at:', modelPath);
 
         // Reset input and close modal
@@ -1042,6 +1055,16 @@ epochSlider.addEventListener('change', async (event) => {
     await saveModelSettings();
 });
 
+// Project type radio buttons change in training menu
+trainProjectTypeInputs.forEach((input) => {
+  input.addEventListener('change', async () => {
+    if (!input.checked || !modelSettings) return;
+    modelSettings.projectType = input.value;
+    await saveModelSettings();
+  });
+});
+
+
 // carousel animation
 carousel.addEventListener('animationiteration', () => {
     // Reset carousel position for seamless looping
@@ -1099,12 +1122,15 @@ modelTrainBtn.addEventListener('click', async () => {
 
         const { labelsJson, modelFolderPath } = await window.electronAPI.invoke('get-model-details-for-python', currentModelName);
 
+        const projectType = modelSettings?.projectType || 'scratch';
+
         const result = await window.electronAPI.executeTrain({
             labelsJson,
             modelFolderPath,
             epochs: parseInt(epochs),
             toggle: toggle,
-            layers: modelSettings.layers
+            layers: modelSettings.layers,
+            projectType: projectType
         });
 
         const callDuration = Math.round((Date.now() - callStartTime) / 1000);
@@ -1194,38 +1220,65 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize and setup charts
     initCharts();
-    if (window.electronAPI && window.electronAPI.onTrainingStdout) {
-        window.electronAPI.onTrainingStdout((data) => {
-            const regex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
-            const lines = data.split('\n');
+    const epochRegex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
 
-            lines.forEach(line => {
-                const match = line.match(regex);
-                if (match && accuracyChart && lossChart) {
-                    const [_, epoch, tLoss, tAcc, vLoss, vAcc] = match;
-                    const eLabel = `E${epoch}`;
+    const processTrainingChunk = (chunk, source) => {
+        const normalizedChunk = chunk.replace(/\r/g, '\n');
+        const nextBuffer = (source === 'stderr' ? stderrBuffer : stdoutBuffer) + normalizedChunk;
+        const lines = nextBuffer.split('\n');
+        const remainder = lines.pop() ?? '';
 
-                    const currentEpoch = parseInt(epoch);
-                    const totalEpochs = parseInt(epochSlider.value);
-                    const percent = Math.round((currentEpoch / totalEpochs) * 100);
+        if (source === 'stderr') {
+            stderrBuffer = remainder;
+        } else {
+            stdoutBuffer = remainder;
+        }
 
-                    document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
-                    document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
+        lines.forEach((line) => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) return;
 
-                    // Accuracy Chart Data
-                    accuracyChart.data.labels.push(eLabel);
-                    accuracyChart.data.datasets[0].data.push(parseFloat(tAcc));
-                    accuracyChart.data.datasets[1].data.push(parseFloat(vAcc));
-                    accuracyChart.update();
+            if (source === 'stderr') {
+                console.error(`[Python stderr] ${trimmedLine}`);
+            } else {
+                console.log(`[Python stdout] ${trimmedLine}`);
+            }
 
-                    // loss Chart Data
-                    lossChart.data.labels.push(eLabel);
-                    lossChart.data.datasets[0].data.push(parseFloat(tLoss));
-                    lossChart.data.datasets[1].data.push(parseFloat(vLoss));
-                    lossChart.update();
-                }
-            });
+            const match = trimmedLine.match(epochRegex);
+            if (match && accuracyChart && lossChart) {
+                const [_, epoch, tLoss, tAcc, vLoss, vAcc] = match;
+                const eLabel = `E${epoch}`;
+
+                const currentEpoch = parseInt(epoch);
+                const totalEpochs = parseInt(epochSlider.value);
+                const percent = Math.round((currentEpoch / totalEpochs) * 100);
+
+                document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
+                document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
+
+                // Accuracy Chart Data
+                accuracyChart.data.labels.push(eLabel);
+                accuracyChart.data.datasets[0].data.push(parseFloat(tAcc));
+                accuracyChart.data.datasets[1].data.push(parseFloat(vAcc));
+                accuracyChart.update();
+
+                // loss Chart Data
+                lossChart.data.labels.push(eLabel);
+                lossChart.data.datasets[0].data.push(parseFloat(tLoss));
+                lossChart.data.datasets[1].data.push(parseFloat(vLoss));
+                lossChart.update();
+            }
         });
+    };
+
+    if (window.electronAPI?.onTrainingStdout) {
+        window.electronAPI.onTrainingStdout((data) => processTrainingChunk(data, 'stdout'));
+    }
+
+    if (window.electronAPI?.onTrainingStderr) {
+        window.electronAPI.onTrainingStderr((data) => processTrainingChunk(data, 'stderr'));
     }
 });
 

@@ -223,11 +223,18 @@ export async function createDatasetFolder(projectName) {
 /**
  * Creates a model folder inside the models folder within Pareidolia.
  * Also creates a model-settings.json file with initial configuration.
- * @param {string} modelName - The name of the model folder to create
+ * @param {string|Object} input - The model name string or an object with modelName and projectType
  * @returns {Promise<string>} The full path to the created model folder
  */
-export async function createModelFolder(modelName) {
+export async function createModelFolder(input) {
   try {
+    const modelName = typeof input === 'string' ? input : input?.modelName;
+    const projectType = typeof input === 'string' ? 'scratch' : (input?.projectType || 'scratch');
+
+    if (!modelName) {
+      throw new Error('Model name is required');
+    }
+
     const pareidoliaPath = await ensurePareidoliaFolder();
     const modelsPath = path.join(pareidoliaPath, 'models');
     const modelPath = path.join(modelsPath, modelName);
@@ -250,7 +257,92 @@ export async function createModelFolder(modelName) {
     const settingsPath = path.join(modelPath, 'model-settings.json');
     const defaultSettings = {
       labels: {},
-      epochs: 10
+      epochs: 10,
+      projectType: projectType, // 'scratch' or 'pretrained'
+      layers: [
+        {
+          "type": "Conv2D",
+          "parameters": {
+            "units": "16",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "MaxPooling2D",
+          "parameters": {
+            "pool_size": "2"
+          }
+        },
+        {
+          "type": "Conv2D",
+          "parameters": {
+            "units": "32",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "MaxPooling2D",
+          "parameters": {
+            "pool_size": "2"
+          }
+        },
+        {
+          "type": "Conv2D",
+          "parameters": {
+            "units": "64",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "MaxPooling2D",
+          "parameters": {
+            "pool_size": "2"
+          }
+        },
+        {
+          "type": "Dropout",
+          "parameters": {
+            "rate": "0.2"
+          }
+        },
+        {
+          "type": "Flatten",
+          "parameters": {}
+        },
+        {
+          "type": "Dense",
+          "parameters": {
+            "units": "128",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "Dropout",
+          "parameters": {
+            "rate": "0.3"
+          }
+        },
+        {
+          "type": "Dense",
+          "parameters": {
+            "units": "64",
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "Dropout",
+          "parameters": {
+            "rate": "0.2"
+          }
+        },
+        {
+          "type": "Dense",
+          "parameters": {
+            "units": "32",
+            "activation": "relu"
+          }
+        }
+      ]
     };
 
     if (!fs.existsSync(settingsPath)) {
@@ -584,9 +676,11 @@ ipcMain.handle('setup-python-venv', async () => {
  * @param {string} params.modelFolderPath - Path to the model folder where outputs will be saved
  * @param {number} params.epochs      - Number of training epochs
  * @param {string} params.toggle      - Model toggle option (e.g., 'tensorflow' or 'pytorch')
+ * @param {string} params.projectType - Training strategy ('scratch' or 'pretrained')
  */
 ipcMain.handle('execute-train', async (event, params) => {
-  const { labelsJson, modelFolderPath, epochs, toggle, layers } = params;
+  const { labelsJson, modelFolderPath, epochs, toggle, layers, projectType } = params;
+  const normalizedProjectType = projectType === 'pretrained' ? 'pretrained' : 'scratch';
 
   // Validate labelsJson
   if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
@@ -640,6 +734,7 @@ ipcMain.handle('execute-train', async (event, params) => {
   console.log('Model path:', modelPath);
   console.log('Epochs:', epochs);
   console.log('Toggle:', toggle);
+  console.log('Project Type:', normalizedProjectType);
 
   // Pass labels_json, model_path, and epochs as arguments
   const venvPath = getVenvPath();
@@ -671,31 +766,39 @@ ipcMain.handle('execute-train', async (event, params) => {
   // Need to spawn for live data
   const pythonExe = process.platform === 'win32' ? path.join(venvPath, 'Scripts', 'python.exe') : path.join(venvPath, 'bin', 'python');
 
-  // Args for spawn
-  const args = [
-      '-u',
-    pythonScriptPath,
-    JSON.stringify(labelsJson),
-    modelFolderPath,
-    epochs.toString(),
-  ];
-
-  if (toggle !== 'tensorflow') {
-    // needs a model name for pytorch
-    args.push("repvgg_a2");
-  }
+  // TensorFlow and PyTorch currently accept different argv layouts.
+  const args = toggle === 'tensorflow'
+    ? [
+        '-u',
+        pythonScriptPath,
+        JSON.stringify(labelsJson),
+        modelFolderPath,
+        epochs.toString(),
+        normalizedProjectType,
+        JSON.stringify(Array.isArray(layers) ? layers : [])
+      ]
+    : [
+        '-u',
+        pythonScriptPath,
+        JSON.stringify(labelsJson),
+        modelFolderPath,
+        epochs.toString(),
+        'repvgg_a2'
+      ];
 
   return new Promise((resolve, reject) => {
     const pythonProcess = spawn(pythonExe, args);
 
     pythonProcess.stdout.on('data', (data) => {
       const output = data.toString();
-      const win = BrowserWindow.getFocusedWindow();
-      if (win) win.webContents.send('training-stdout', output);
+      console.log(`[Python stdout]: ${output}`);
+      event.sender.send('training-stdout', output);
     });
 
     pythonProcess.stderr.on('data', (data) => {
-      console.error(`[Python Error]: ${data}`);
+      const output = data.toString();
+      console.error(`[Python stderr]: ${output}`);
+      event.sender.send('training-stderr', output);
     });
 
     pythonProcess.on('close', (code) => {

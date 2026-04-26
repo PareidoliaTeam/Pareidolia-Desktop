@@ -40,6 +40,7 @@ import json
 import sys
 import os
 import shutil
+import copy
 import numpy as np
 import cv2
 import timm
@@ -62,6 +63,8 @@ import tempfile
 # Model constants
 IMG_HEIGHT = 224
 IMG_WIDTH = 224
+EXPORT_IMG_HEIGHT = 256
+EXPORT_IMG_WIDTH = 256
 IMG_CHANNELS = 3
 REPRESENTATIVE_SAMPLE_COUNT = 128
 # NUM_CLASSES is now determined dynamically from the labels JSON at runtime
@@ -81,13 +84,26 @@ CONVERTER_REQUIREMENTS = [
 ]
 
 
-def run_logged_subprocess(command, env=None):
+def delete_existing_checkpoints(model_folder):
+    """
+    Removes any existing Lightning checkpoint files so each training run starts
+    with a clean checkpoint directory and retains only the new best checkpoint.
+    """
+    for ckpt_path in Path(model_folder).glob("*.ckpt"):
+        try:
+            ckpt_path.unlink()
+            print(f"Deleted old checkpoint: {ckpt_path}")
+        except Exception as e:
+            print(f"Warning: could not delete {ckpt_path}: {e}")
+
+
+def run_logged_subprocess(command, env=None, cwd=None):
     """
     Runs a converter-related subprocess command, prints stdout/stderr so
     conversion logs are visible, and raises if the command fails.
     """
     print("[Conversion] Running:", " ".join(command))
-    result = subprocess.run(command, capture_output=True, text=True, env=env)
+    result = subprocess.run(command, capture_output=True, text=True, env=env, cwd=cwd)
     if result.stdout:
         print(result.stdout)
     if result.stderr:
@@ -182,11 +198,112 @@ def import_tensorflow_keras():
     from tensorflow.keras import layers, models
     return tf, keras, layers, models
 
+
+def ensure_onnx2tf_test_image_data(working_dir):
+    """
+    onnx2tf attempts to load a local dummy image npy from the current working
+    directory before falling back to a network download. Create a valid local
+    file so conversion remains deterministic in restricted environments.
+    """
+    os.makedirs(working_dir, exist_ok=True)
+    sample_path = os.path.join(
+        working_dir,
+        "calibration_image_sample_data_20x128x128x3_float32.npy",
+    )
+    if os.path.exists(sample_path):
+        return sample_path
+
+    sample_images = np.random.default_rng(42).random(
+        (20, 128, 128, 3),
+        dtype=np.float32,
+    )
+    np.save(sample_path, sample_images)
+    print(f"[Conversion] Wrote local onnx2tf test data: {sample_path}")
+    return sample_path
+
+
+def wrap_tf_saved_model_with_preprocess(base_saved_model_path, wrapped_saved_model_path, converter_python=None):
+    """
+    Wraps the converted TensorFlow SavedModel with TF-native resize and center
+    crop preprocessing. This avoids asking onnx2tf to translate the crop path
+    from ONNX while still producing a final model that owns the full
+    preprocessing contract.
+    """
+    if sys.platform == "darwin":
+        worker_script = str(Path(__file__).resolve().with_name("tf_wrap_saved_model_worker.py"))
+        env = os.environ.copy()
+        env.setdefault("TF_CPP_MIN_LOG_LEVEL", "1")
+        env.setdefault("TF_NUM_INTEROP_THREADS", "1")
+        env.setdefault("TF_NUM_INTRAOP_THREADS", "1")
+        env.setdefault("OMP_NUM_THREADS", "1")
+        run_logged_subprocess(
+            [
+                converter_python or sys.executable,
+                worker_script,
+                "--base-saved-model",
+                base_saved_model_path,
+                "--output",
+                wrapped_saved_model_path,
+            ],
+            env=env,
+        )
+        return wrapped_saved_model_path
+
+    tf, _, _, _ = import_tensorflow_keras()
+
+    if os.path.exists(wrapped_saved_model_path):
+        shutil.rmtree(wrapped_saved_model_path)
+
+    base_model = tf.saved_model.load(base_saved_model_path)
+    serving_fn = base_model.signatures["serving_default"]
+    input_key = next(iter(serving_fn.structured_input_signature[1].keys()))
+    output_key = next(iter(serving_fn.structured_outputs.keys()))
+
+    class WrappedModule(tf.Module):
+        @tf.function(
+            input_signature=[
+                tf.TensorSpec(
+                    shape=[1, None, None, IMG_CHANNELS],
+                    dtype=tf.float32,
+                    name="input",
+                )
+            ]
+        )
+        def serving_default(self, x):
+            x = tf.image.resize(
+                x,
+                [EXPORT_IMG_HEIGHT, EXPORT_IMG_WIDTH],
+                method=tf.image.ResizeMethod.BILINEAR,
+            )
+            x = tf.image.resize_with_crop_or_pad(x, IMG_HEIGHT, IMG_WIDTH)
+            outputs = serving_fn(**{input_key: x})
+            return {"output": outputs[output_key]}
+
+    wrapped_model = WrappedModule()
+    tf.saved_model.save(
+        wrapped_model,
+        wrapped_saved_model_path,
+        signatures={"serving_default": wrapped_model.serving_default},
+    )
+    print(f"[Conversion] Wrapped TensorFlow model saved to: {wrapped_saved_model_path}")
+    return wrapped_saved_model_path
+
 def convert_pt_to_onnx(model, model_folder):
     try:
         os.makedirs(model_folder, exist_ok=True)
 
-        dummy_input = torch.randn(1, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH)
+        # Export on CPU to avoid MPS/ONNX tracing device issues on macOS.
+        model = copy.deepcopy(model).to("cpu")
+        model.eval()
+
+        model_device = next(model.parameters()).device
+        dummy_input = torch.randn(
+            1,
+            IMG_CHANNELS,
+            IMG_HEIGHT,
+            IMG_WIDTH,
+            device=model_device,
+        )
         
         model.to_onnx(
             file_path=os.path.join(model_folder, "model.onnx"),
@@ -196,10 +313,6 @@ def convert_pt_to_onnx(model, model_folder):
             dynamo=False,
             input_names=['input'],
             output_names=['output'],
-            dynamic_axes={
-                'input': {0: 'batch_size'},
-                'output': {0: 'batch_size'}
-            }
         )
     
         print(f"Model exported to ONNX format at {os.path.join(model_folder, 'model.onnx')}")
@@ -256,25 +369,19 @@ def rep_test(loader):
 
 def build_representative_samples(loader, max_samples=REPRESENTATIVE_SAMPLE_COUNT):
     """
-    Materializes representative calibration samples as NHWC float32 arrays.
-    This keeps TF conversion in a clean subprocess and avoids TF/PyTorch
-    runtime lock contention inside one process on macOS.
+    Materializes representative calibration samples as NHWC float32 arrays in
+    the exported model's input domain.
 
-    Basically takes images from a DataLoader and applies the same resizing, cropping, and normalization that the model expects,
-    and puts them into a numpy array.
+    The representative loader already applies the same spatial resize used by
+    training/evaluation, so calibration should consume raw 0..255 pixels here
+    and let the exported model wrapper handle normalization.
     """
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
     samples = []
 
     for image_batch, _ in loader:
         batch_size = image_batch.shape[0]
         for i in range(batch_size):
-            img = image_batch[i].permute(1, 2, 0).cpu().numpy().astype(np.float32)
-            img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_LINEAR)
-            offset = (256 - 224) // 2
-            img = img[offset:offset + 224, offset:offset + 224, :]
-            img = (img - mean) / std
+            img = image_batch[i].detach().cpu().permute(1, 2, 0).numpy().astype(np.float32)
             samples.append(img)
 
             if len(samples) >= max_samples:
@@ -396,6 +503,8 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
             shutil.rmtree(tf_model_path)
 
         os.makedirs(os.path.dirname(tf_model_path), exist_ok=True)
+        conversion_workdir = os.path.dirname(tf_model_path)
+        ensure_onnx2tf_test_image_data(conversion_workdir)
         print("[Conversion] ONNX model path:", onnx_model_path)
         print("[Conversion] onnx2tf output folder:", tf_model_path)
 
@@ -403,7 +512,7 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
         env = os.environ.copy()
         env["PATH"] = converter_bin_dir + os.pathsep + env.get("PATH", "")
 
-        onnx2tf_command = [
+        onnx2tf_base_command = [
             converter_python,
             "-m",
             "onnx2tf",
@@ -413,12 +522,28 @@ def convert_onnx_to_tf(onnx_model_path, tf_model_path, converter_python):
             tf_model_path,
             "-v",
             "warn",
+            "-ois",
+            f"input:1,{IMG_CHANNELS},{IMG_HEIGHT},{IMG_WIDTH}",
         ]
+
+        onnx2tf_command = list(onnx2tf_base_command)
+
         # macOS-specific stability workaround: skip onnx optimizer subprocess
         if sys.platform == "darwin":
             onnx2tf_command.append("-nuo")
 
-        run_logged_subprocess(onnx2tf_command, env=env)
+        try:
+            run_logged_subprocess(onnx2tf_command, env=env, cwd=conversion_workdir)
+        except Exception:
+            auto_json_path = os.path.join(tf_model_path, "model_auto.json")
+            if not os.path.exists(auto_json_path):
+                raise
+
+            print(f"[Conversion] Retrying with auto-generated parameter replacement: {auto_json_path}")
+            retry_command = list(onnx2tf_base_command) + ["-prf", auto_json_path]
+            if sys.platform == "darwin":
+                retry_command.append("-nuo")
+            run_logged_subprocess(retry_command, env=env, cwd=conversion_workdir)
 
         print(f"ONNX model converted to TensorFlow format at: {tf_model_path}")
         return {
@@ -517,9 +642,11 @@ def tf_to_tflite(tf_model_path, tflite_model_path, representative_samples, conve
 
 class RepVGGWithPreprocess(pl.LightningModule):
     """
-    Model wrapper that applies the necessary preprocessing (resizing, cropping, normalization) before forwarding to the base model.
-    This allows the ONNX export to include the preprocessing steps, ensuring the exported model can be used directly without needing 
-    to replicate preprocessing separately in the TFLite conversion or in the final application.
+    Model wrapper that applies the exported model's normalization before
+    forwarding to the base model.
+
+    The exported model expects RGB images that have already been center-cropped
+    to 224x224 and are provided as raw 0..255 pixel values in NCHW layout.
     """
     def __init__(self, base_model):
         super().__init__()
@@ -578,10 +705,13 @@ if __name__ == "__main__":
         hidden_dim=512,
     )
 
+    delete_existing_checkpoints(model_folder)
+
     checkpoint_cb = ModelCheckpoint(
         monitor="val_acc",
         mode="max",
         save_top_k=1,
+        dirpath=model_folder,
         filename="repvgg-{epoch:02d}-{val_acc:.4f}",
     )
 
@@ -613,12 +743,17 @@ if __name__ == "__main__":
 
     final_ckpt_path = os.path.join(model_folder, "model.ckpt")
     trainer.save_checkpoint(final_ckpt_path)
+    best_model_path = checkpoint_cb.best_model_path
+    if best_model_path:
+        print(f"Loading best checkpoint for export: {best_model_path}")
+        model = RepVGGClassifier.load_from_checkpoint(best_model_path)
+    else:
+        print("No best checkpoint found; exporting the current in-memory model.")
 
     model.eval()
 
     # wrap model to allow for preproccessing in onnx export
     wrapped_model = RepVGGWithPreprocess(model)
-    wrapped_model.to(trainer.strategy.root_device)
 
     print("Converting model to ONNX format...")
     onnx_conversion_result = convert_pt_to_onnx(wrapped_model, model_folder)
@@ -646,19 +781,32 @@ if __name__ == "__main__":
         print("Using current Python environment for conversion (non-macOS).")
         converter_python = sys.executable
 
+    tf_inner_model_path = os.path.join(model_folder, "tf_out_inner")
+    tf_wrapped_model_path = os.path.join(model_folder, "tf_out")
+
     print("Converting ONNX model to TF format...")
     tf_conversion_result = convert_onnx_to_tf(
         onnx_model_path,
-        os.path.join(model_folder, "tf_out"),
+        tf_inner_model_path,
         converter_python
     )
     if not tf_conversion_result['success']:
         print(f"Error: ONNX to TF conversion failed: {tf_conversion_result['error']}")
         sys.exit(1)
     print("ONNX to TF conversion completed successfully")
+
+    print("Wrapping TensorFlow model with resize and center crop preprocessing...")
+    try:
+        tf_model_path = wrap_tf_saved_model_with_preprocess(
+            tf_conversion_result.get('tf_model'),
+            tf_wrapped_model_path,
+            converter_python,
+        )
+    except Exception as e:
+        print(f"Error wrapping TF model with preprocessing: {str(e)}")
+        sys.exit(1)
     
     print("Finalizing TFLite model output...")
-    tf_model_path = tf_conversion_result.get('tf_model')
     representative_loader = data_module.representative_dataloader()
     representative_samples = build_representative_samples(representative_loader)
 

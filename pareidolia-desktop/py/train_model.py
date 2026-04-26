@@ -30,18 +30,22 @@ Multiple folders per label are supported:
 """
 import sys
 import os
+import json
 import numpy as np
 import cv2
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, models
+from sklearn.model_selection import train_test_split
 
 # Model constants
 IMG_HEIGHT = 224
 IMG_WIDTH = 224
 IMG_CHANNELS = 3
 # NUM_CLASSES is now determined dynamically from the labels JSON at runtime
-LEARNING_RATE = 0.001
+LEARNING_RATE = 1e-5
+MODEL_TYPE_SCRATCH = "scratch"
+MODEL_TYPE_PRETRAINED = "pretrained"
 
 def create_cnn_model(num_classes):
     """Creates a CNN model for image classification.
@@ -82,25 +86,201 @@ def create_cnn_model(num_classes):
     
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
-        loss='categorical_crossentropy',
+        loss='sparse_categorical_crossentropy',
         metrics=['accuracy']
     )
     
     return model
 
-def load_images_from_json(labels_json):
+def get_data_augmentation():
+    return keras.Sequential([
+        layers.RandomFlip("horizontal"),
+        layers.RandomRotation(0.08),
+        layers.RandomZoom(0.15),
+        layers.RandomTranslation(0.08, 0.08),
+        layers.RandomContrast(0.1),
+    ], 
+        name="data_augmentation"
+    )
+
+def parse_selected_layers(layers_arg):
+    """Parse the incoming layers JSON into a Python list of layer dictionaries."""
+    def validate_layers(layer_items):
+        if not isinstance(layer_items, list):
+            raise ValueError("layers must be a JSON array")
+
+        normalized_layers = []
+        for index, layer_item in enumerate(layer_items):
+            if not isinstance(layer_item, dict):
+                raise ValueError(f"layer at index {index} must be an object")
+
+            layer_type = layer_item.get("type")
+            parameters = layer_item.get("parameters", {})
+
+            if not isinstance(layer_type, str) or not layer_type.strip():
+                raise ValueError(f"layer at index {index} is missing a valid 'type'")
+
+            if parameters is None:
+                parameters = {}
+            elif not isinstance(parameters, dict):
+                raise ValueError(f"layer at index {index} has invalid 'parameters'; expected an object")
+
+            normalized_layers.append({
+                "type": layer_type,
+                "parameters": parameters
+            })
+
+        return normalized_layers
+
+    if layers_arg is None:
+        return []
+
+    if isinstance(layers_arg, list):
+        return validate_layers(layers_arg)
+
+    if isinstance(layers_arg, str):
+        layers_arg = layers_arg.strip()
+        if not layers_arg:
+            return []
+
+        parsed_layers = json.loads(layers_arg)
+        if isinstance(parsed_layers, list):
+            return validate_layers(parsed_layers)
+        if isinstance(parsed_layers, dict):
+            if "layers" not in parsed_layers:
+                raise ValueError("layers object must contain a 'layers' array")
+            return validate_layers(parsed_layers["layers"])
+
+    raise ValueError("layers argument must be a JSON array or an object containing a 'layers' array")
+
+def create_model_new(num_classes,layers_json):
+    """Creates a CNN model for image classification. Utilized https://github.com/Wei-HaiMing/workflowExample/blob/main/workflow.ipynb?short_path=b61c709
+
+    @param num_classes: Number of output classes, determined from labels JSON
+    """
+    model = models.Sequential()
+    model.add(layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)))
+
+    has_flattened = False
+    loss_func = ''
+
+    for layer_data in layers_json:
+        layer_type = layer_data['type']
+        parameters = layer_data['parameters']
+
+
+        # make dictionary for layers to clean up code
+
+        # data augmentation layers
+        if layer_type == 'RandomFlip':
+            model.add(layers.RandomFlip(parameters.get('mode', 'horizontal'), name="data_augmentation"))
+        elif layer_type == 'RandomRotation':
+            model.add(layers.RandomRotation(float(parameters.get('factor', 0.1))))
+        elif layer_type == 'RandomZoom':
+            model.add(layers.RandomZoom(float(parameters.get('factor', 0.1))))
+        elif layer_type == 'RandomContrast':
+            model.add(layers.RandomContrast(float(parameters.get('factor', 0.2))))
+
+        # layers
+        elif layer_type == 'Conv2D':
+            model.add(layers.Conv2D(
+                filters=int(parameters.get('units', 32)),
+                kernel_size=3, padding='same',
+                activation=parameters.get('activation', 'relu')
+            ))
+        elif layer_type == 'MaxPooling2D':
+            model.add(layers.MaxPooling2D(pool_size=int(parameters.get('pool_size', 2))))
+        elif layer_type == 'AveragePooling2D':
+            model.add(layers.AveragePooling2D(pool_size=int(parameters.get('pool_size', 2))))
+        elif layer_type == 'GlobalAveragePooling2D':
+            model.add(layers.GlobalAveragePooling2D())
+            has_flattened = True
+        elif layer_type == 'Flatten':
+            model.add(layers.Flatten())
+            has_flattened = True
+        elif layer_type == 'Dense':
+            if not has_flattened:
+                model.add(layers.Flatten())
+                has_flattened = True
+            model.add(layers.Dense(
+                int(parameters.get('units', 128)),
+                activation=parameters.get('activation', 'relu')
+            ))
+        elif layer_type == 'Dropout':
+            model.add(layers.Dropout(float(parameters.get('rate', 0.2))))
+
+    # saftey check to make sure its flattened
+    if not has_flattened:
+        model.add(layers.Flatten())
+
+    if num_classes == 1:
+           model.add(layers.Dense(1, activation='sigmoid'))
+           loss_func = 'binary_crossentropy'
+    else:
+        model.add(layers.Dense(num_classes, activation='softmax'))
+        # Labels are loaded as integer class indices, not one-hot vectors.
+        loss_func = 'sparse_categorical_crossentropy'
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss=loss_func,
+        metrics=['accuracy']
+    )
+    return model
+
+def create_imported_model(num_classes):
+    preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
+    data_augmentation = get_data_augmentation()
+
+    base_model = tf.keras.applications.MobileNetV2(
+        input_shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
+        include_top=False,
+        weights='imagenet',
+    )
+    base_model.trainable = True
+
+    inputs = tf.keras.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
+    x = data_augmentation(inputs)
+    x = tf.keras.layers.Lambda(preprocess_input)(x)
+    x = base_model(x, training=False)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+
+    model = tf.keras.Model(inputs, outputs)
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    return model
+
+
+def normalize_images_for_model(images, model_type):
+    """Convert image tensors into the range expected by the selected model."""
+    images = np.array(images, dtype='float32')
+
+    if model_type == MODEL_TYPE_PRETRAINED:
+        # MobileNetV2 preprocess_input expects RGB pixels in the 0..255 range.
+        return images
+
+    return images / 255.0
+
+
+def load_images_from_json(labels_json, model_type):
     """Load images from a JSON mapping of label names to arrays of folder paths.
     
     @param labels_json: JSON string (or dict) mapping label names to lists of folder paths.
                         Example: {"Apple": ["/path/to/folder1"], "Orange": ["/path/a", "/path/b"]}
+    @param model_type: Which model input contract to prepare images for.
     @returns: (images, labels, num_classes, label_names)
-              images      - float32 numpy array normalized to [0, 1]
-              labels      - one-hot encoded label array
+              images      - float32 numpy array prepared for the selected model
+              labels      - integer array of label indices
               num_classes - number of unique labels found
               label_names - ordered list of label names (index matches one-hot position)
     """
-    import json
-
     if isinstance(labels_json, str):
         labels_dict = json.loads(labels_json)
     else:
@@ -134,17 +314,18 @@ def load_images_from_json(labels_json):
 
     if len(images) == 0:
         return None, None, 0, []
- 
-    images = np.array(images, dtype='float32') / 255.0
-    labels = keras.utils.to_categorical(labels, num_classes)
+
+    images = normalize_images_for_model(images, model_type)
+    # labels = keras.utils.to_categorical(labels, num_classes)
+    labels = np.array(labels, dtype='int32')
 
     return images, labels, num_classes, label_names
 
-def preprocess_frame(frame):
+def preprocess_frame(frame, model_type):
     """Preprocess a frame for prediction."""
     img = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.astype('float32') / 255.0
+    img = normalize_images_for_model([img], model_type)[0]
     img = np.expand_dims(img, axis=0)
     return img
 
@@ -177,8 +358,12 @@ def convert_model_to_tflite(model, X_train, model_folder):
         def representative_dataset():
             for i in range(min(200, len(X_train))):
                 x = X_train[i:i+1].astype(np.float32)
-                # Data should already be normalized (0..1) from preprocessing
+                # Samples must match the inference model's input domain before
+                # any in-graph preprocessing like MobileNetV2 preprocess_input.
                 yield [x]
+                # TODO: specify representative dataset that is different from 
+                # training data and matches the inference model's expected input 
+                # range (e.g. 0..255 for MobileNetV2)
         
         # Convert to TFLite with quantization
         converter = tf.lite.TFLiteConverter.from_keras_model(inference_model)
@@ -247,13 +432,24 @@ if __name__ == "__main__":
     labels_json_str = sys.argv[1]
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
+    projectType = sys.argv[4] if len(sys.argv) > 4 else MODEL_TYPE_SCRATCH
+    selected_layers_arg = sys.argv[5] if len(sys.argv) > 5 else None
+    selected_layers = parse_selected_layers(selected_layers_arg)
+    model_type = MODEL_TYPE_PRETRAINED if projectType == MODEL_TYPE_PRETRAINED else MODEL_TYPE_SCRATCH
+
+    print("=== TRAINING CONFIGURATION ===")
+    print(f"Project Type: {projectType}")
+    print(f"Layers to include: {selected_layers}")
     
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
     
     # Load and prepare images from the JSON label map
-    X_train, y_train, NUM_CLASSES, label_names = load_images_from_json(labels_json_str)
-    
+    X, y, NUM_CLASSES, label_names = load_images_from_json(labels_json_str, model_type)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, random_state=42) # split training data into training and validation data
+
+
     if X_train is None or len(X_train) == 0:
         print("Error: No images found or failed to load images")
         sys.exit(1)
@@ -261,17 +457,26 @@ if __name__ == "__main__":
     print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
     
     # Create the model with the dynamic class count
-    model = create_cnn_model(NUM_CLASSES)
+    if model_type == MODEL_TYPE_PRETRAINED:
+        model = create_imported_model(NUM_CLASSES)
+    else:
+        model = create_model_new(NUM_CLASSES, selected_layers) if selected_layers else create_cnn_model(NUM_CLASSES)
     print("Model created successfully")
     
     # Train the model
     print(f"Starting training for {epochs} epochs...")
+    # history = model.fit(
+    #     X_train, y_train,
+    #     epochs=epochs,
+    #     batch_size=32,
+    #     validation_split=0.2,
+    #     verbose=1
+    # )
     history = model.fit(
         X_train, y_train,
         epochs=epochs,
-        batch_size=32,
-        validation_split=0.2,
-        verbose=1
+        validation_data=(X_val, y_val),  
+        verbose=1  
     )
     
     # Get final metrics
@@ -294,4 +499,3 @@ if __name__ == "__main__":
     print(f"FINAL_ACCURACY:{final_accuracy}")
     print(f"FINAL_VAL_LOSS:{final_val_loss}")
     print(f"FINAL_VAL_ACCURACY:{final_val_accuracy}")
-

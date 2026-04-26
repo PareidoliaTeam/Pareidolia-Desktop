@@ -145,6 +145,12 @@
           </div>
           <!-- Footer -->
           <footer class="project-footer">
+            <input type="radio" id="train-type-scratch" name="train-project-type" value="scratch">
+            <label for="train-type-scratch">Start From Scratch</label>
+            <br>
+            <input type="radio" id="train-type-pretrained" name="train-project-type" value="pretrained">
+            <label for="train-type-pretrained">Use Pretrained Model</label>
+
             <input type="radio" name="train" value="true" checked> Use Tensorflow<br>
             <input type="radio" name="train" value="false"> Use PyTorch<br>
             <span class="last-trained">Last Trained: Never</span>
@@ -312,6 +318,14 @@
     <span class="modal-close">&times;</span>
     <h2>Create New Model</h2>
     <input type="text" id="project-name-input" class="modal-input" placeholder="Enter model name" />
+    
+    <br>
+    <input type="radio" id="type-scratch" name="project-type" value="scratch" checked>
+    <label for="type-scratch">Start From Scratch</label>
+    <br>
+    <input type="radio" id="type-pretrained" name="project-type" value="pretrained">
+    <label for="type-pretrained">Use Pretrained Model</label>
+
     <div class="modal-buttons">
       <button id="modal-create-btn" class="modal-btn-modal-create">Create</button>
       <button id="modal-cancel-btn" class="negative-btn">Cancel</button>
