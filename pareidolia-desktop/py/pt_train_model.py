@@ -557,7 +557,7 @@ if __name__ == "__main__":
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
 
-    pl.seed_everything(77, workers=True)
+    pl.seed_everything(42, workers=True)
 
     data_module = ImageDataModule(
         data_dir="./data",
@@ -565,7 +565,7 @@ if __name__ == "__main__":
         img_size=224,
         num_workers=0,
         val_split=0.2,
-        seed=77,
+        seed=42,
         cifar10=False,
         labels_json=labels_json_str,
     )
@@ -610,6 +610,9 @@ if __name__ == "__main__":
     model = model.to(trainer.strategy.root_device)
 
     trainer.fit(model, datamodule=data_module)
+
+    final_ckpt_path = os.path.join(model_folder, "model.ckpt")
+    trainer.save_checkpoint(final_ckpt_path)
 
     model.eval()
 

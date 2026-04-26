@@ -1,5 +1,6 @@
 # Cell 2: DataModule
 import json
+import sys
 import os
 import cv2
 import numpy as np
@@ -161,7 +162,7 @@ class ImageDataModule(pl.LightningDataModule):
         images = np.array(images, dtype=np.float32) / 255.0
         labels = np.array(labels, dtype=np.int64)
 
-        print(f"Loaded {len(images)} images across {num_classes} classes from JSON dataset.")
+        print(f"Loaded {len(images)} images across {num_classes} classes from JSON dataset.", file=sys.stderr)
 
         return images, labels, num_classes, label_names
 
@@ -192,7 +193,7 @@ class ImageDataModule(pl.LightningDataModule):
         generator = torch.Generator().manual_seed(self.seed)
         all_indices = torch.randperm(n_total, generator=generator).tolist()
 
-        print("All indices: ", all_indices)  # Print the first 10 shuffled indices for debugging
+        print("All indices: ", all_indices, file=sys.stderr)  # Print the first 10 shuffled indices for debugging
 
         train_indices = all_indices[:n_train]
         val_indices = all_indices[n_train:n_train + n_val]

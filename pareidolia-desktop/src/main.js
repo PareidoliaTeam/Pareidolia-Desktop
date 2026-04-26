@@ -746,7 +746,15 @@ ipcMain.handle('predict-image', async (event, params) => {
   const { modelName, imagePath } = params;
   const pareidoliaPath = getPareidoliaFolderPath();
   const venvPath = getVenvPath();
-  const modelPath = path.join(pareidoliaPath, 'models', modelName, 'models', 'model.keras');
+  const settings = await getModelSettings(modelName);
+  let modelFile
+
+  if (settings.modelType === 'tensorflow'){
+    modelFile = 'model.keras';
+  } else {
+    modelFile = 'model.ckpt';
+  }
+  const modelPath = path.join(pareidoliaPath, 'models', modelName, 'models', modelFile);
 
   let scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
       ? path.join(__dirname, '../../py/predict.py')
@@ -767,6 +775,48 @@ ipcMain.handle('predict-image', async (event, params) => {
     return JSON.parse(cleanedOutput);
   } catch (error) {
     console.error("Predict IPC Error:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Handle model testing via IPC from renderer process
+ */
+
+ipcMain.handle('test-model', async (event, params) => {
+  const {modelName} = params;
+  const pareidoliaPath = getPareidoliaFolderPath();
+  const venvPath = getVenvPath();
+  const { labelsJson, settings } = await modelDetailsForPython(modelName);
+  let modelFile, scriptPath, args;
+
+  // Checks type of model and selects the correct script and filepath.
+  if (settings.modelType === 'tensorflow') {
+    modelFile = 'model.keras';
+    scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
+        ? path.join(__dirname, '../../py/tf_test_model.py')
+        : path.join(process.resourcesPath, 'py/tf_test_model.py');
+    args = [
+        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile), JSON.stringify(labelsJson)];
+  } else{
+    modelFile = 'model.ckpt';
+    scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
+        ? path.join(__dirname, '../../py/pt_test_model.py')
+        : path.join(process.resourcesPath, 'py/pt_test_model.py');
+    args = [path.join(pareidoliaPath, 'models', modelName, 'models', modelFile), JSON.stringify(labelsJson)
+    ];
+  }
+  // Excutes the selected script and returns a the JSON output
+  try {
+    const result = await executePythonScript(scriptPath, args, venvPath);
+    const outputString = result.output || result.stdout || result;
+    const jsonLine = String(outputString).split('\n').find(line => {
+      try { JSON.parse(line.trim()); return true; }
+      catch { return false; }
+    });
+    if (!jsonLine) return { success: false, error: 'No JSON output found' };
+    return JSON.parse(jsonLine.trim());
+  } catch (error) {
     return { success: false, error: error.message };
   }
 });
