@@ -52,8 +52,8 @@ import math
 import torch
 import torch.nn as nn
 from torchmetrics import Accuracy
-from pt_model import RepVGGClassifier
-from image_data_module import ImageDataModule
+from pt_model import RepVGGClassifier, ScratchCNNClassifier
+from image_data_module import ImageDataModule, IMAGENET_MEAN, IMAGENET_STD
 from epoch_history_printer import EpochHistoryPrinter
 from pathlib import Path
 import glob
@@ -69,6 +69,8 @@ IMG_CHANNELS = 3
 REPRESENTATIVE_SAMPLE_COUNT = 128
 # NUM_CLASSES is now determined dynamically from the labels JSON at runtime
 LEARNING_RATE = 0.001
+MODEL_TYPE_SCRATCH = "scratch"
+MODEL_TYPE_PRETRAINED = "pretrained"
 CONVERTER_VENV_NAME = "converter-venv-macos-tf219"
 CONVERTER_REQUIREMENTS = [
     "tensorflow==2.19.1",
@@ -82,6 +84,73 @@ CONVERTER_REQUIREMENTS = [
     "onnxruntime==1.24.4",
     "onnxsim==0.4.36",
 ]
+
+DEFAULT_SCRATCH_LAYERS = [
+    {"type": "Conv2D", "parameters": {"units": "16", "activation": "relu"}},
+    {"type": "MaxPooling2D", "parameters": {"pool_size": "2"}},
+    {"type": "Conv2D", "parameters": {"units": "32", "activation": "relu"}},
+    {"type": "MaxPooling2D", "parameters": {"pool_size": "2"}},
+    {"type": "Conv2D", "parameters": {"units": "64", "activation": "relu"}},
+    {"type": "MaxPooling2D", "parameters": {"pool_size": "2"}},
+    {"type": "Dropout", "parameters": {"rate": "0.2"}},
+    {"type": "Flatten", "parameters": {}},
+    {"type": "Dense", "parameters": {"units": "128", "activation": "relu"}},
+    {"type": "Dropout", "parameters": {"rate": "0.3"}},
+    {"type": "Dense", "parameters": {"units": "64", "activation": "relu"}},
+    {"type": "Dropout", "parameters": {"rate": "0.2"}},
+    {"type": "Dense", "parameters": {"units": "32", "activation": "relu"}},
+]
+
+
+def parse_selected_layers(layers_arg):
+    """Parse the incoming layers JSON into a normalized list of layer dictionaries."""
+    def validate_layers(layer_items):
+        if not isinstance(layer_items, list):
+            raise ValueError("layers must be a JSON array")
+
+        normalized_layers = []
+        for index, layer_item in enumerate(layer_items):
+            if not isinstance(layer_item, dict):
+                raise ValueError(f"layer at index {index} must be an object")
+
+            layer_type = layer_item.get("type")
+            parameters = layer_item.get("parameters", {})
+
+            if not isinstance(layer_type, str) or not layer_type.strip():
+                raise ValueError(f"layer at index {index} is missing a valid 'type'")
+
+            if parameters is None:
+                parameters = {}
+            elif not isinstance(parameters, dict):
+                raise ValueError(f"layer at index {index} has invalid 'parameters'; expected an object")
+
+            normalized_layers.append({
+                "type": layer_type,
+                "parameters": parameters
+            })
+
+        return normalized_layers
+
+    if layers_arg is None:
+        return []
+
+    if isinstance(layers_arg, list):
+        return validate_layers(layers_arg)
+
+    if isinstance(layers_arg, str):
+        layers_arg = layers_arg.strip()
+        if not layers_arg:
+            return []
+
+        parsed_layers = json.loads(layers_arg)
+        if isinstance(parsed_layers, list):
+            return validate_layers(parsed_layers)
+        if isinstance(parsed_layers, dict):
+            if "layers" not in parsed_layers:
+                raise ValueError("layers object must contain a 'layers' array")
+            return validate_layers(parsed_layers["layers"])
+
+    raise ValueError("layers argument must be a JSON array or an object containing a 'layers' array")
 
 
 def delete_existing_checkpoints(model_folder):
@@ -392,6 +461,41 @@ def build_representative_samples(loader, max_samples=REPRESENTATIVE_SAMPLE_COUNT
 
     return np.stack(samples, axis=0).astype(np.float32)
 
+
+@torch.no_grad()
+def compute_mean_std_welford_from_loader(loader):
+    """
+    Calculates channel mean/std from a PyTorch dataloader using a vectorized
+    Welford/Chan merge. The loader should yield unnormalized images.
+    """
+    n = 0
+    mean = torch.zeros(3, dtype=torch.float64)
+    M2 = torch.zeros(3, dtype=torch.float64)
+
+    for images, _ in loader:
+        images = images.detach().cpu().to(torch.float64)
+        if images.max() > 2.0:
+            images = images / 255.0
+
+        pixels = images.permute(0, 2, 3, 1).reshape(-1, 3)
+        batch_n = pixels.shape[0]
+        batch_mean = pixels.mean(dim=0)
+        batch_M2 = pixels.var(dim=0, unbiased=False) * batch_n
+
+        delta = batch_mean - mean
+        total = n + batch_n
+
+        mean += delta * (batch_n / total)
+        M2 += batch_M2 + delta.pow(2) * (n * batch_n / total)
+        n = total
+
+    if n == 0:
+        raise RuntimeError("Cannot calculate normalization stats from an empty dataloader.")
+
+    std = torch.sqrt(M2 / n).clamp_min(1e-6)
+    return mean.float().tolist(), std.float().tolist()
+
+
 def compute_mean_std_welford_fast_test(loader, image_size=256, crop_size=224):
     """
     Deprecated: this function was the initial welford's algorithm implementation for calculating mean and std for the representative dataset,
@@ -648,11 +752,11 @@ class RepVGGWithPreprocess(pl.LightningModule):
     The exported model expects RGB images that have already been center-cropped
     to 224x224 and are provided as raw 0..255 pixel values in NCHW layout.
     """
-    def __init__(self, base_model):
+    def __init__(self, base_model, mean=None, std=None):
         super().__init__()
         self.model = base_model
-        self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
-        self.register_buffer('std', torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+        self.register_buffer('mean', torch.tensor(mean or IMAGENET_MEAN).view(1, 3, 1, 1))
+        self.register_buffer('std', torch.tensor(std or IMAGENET_STD).view(1, 3, 1, 1))
 
     def forward(self, x):
         x = x / 255.0
@@ -663,19 +767,31 @@ class RepVGGWithPreprocess(pl.LightningModule):
 # Functions are declared above and used here
 if __name__ == "__main__":
     # Check for required arguments
-    # Usage: python pt_train_model.py <labels_json> <model_path> <epochs> <pretrained_model_name>
+    # Usage:
+    #   Legacy pretrained:
+    #     python pt_train_model.py <labels_json> <model_path> <epochs> <pretrained_model_name>
+    #   Current:
+    #     python pt_train_model.py <labels_json> <model_path> <epochs> <project_type> <pretrained_model_name> <layers_json>
     #   labels_json - JSON string mapping label names to arrays of folder paths
     #                 e.g. '{"Apple": ["/path/to/apples"], "Orange": ["/path/a", "/path/b"]}'
     if len(sys.argv) < 5:
         print("Error: Missing required arguments")
-        print('Usage: python pt_train_model.py <labels_json> <model_path> <epochs> <pretrained_model_name>')
+        print('Usage: python pt_train_model.py <labels_json> <model_path> <epochs> <project_type|pretrained_model_name> [pretrained_model_name] [layers_json]')
         sys.exit(1)
     
     # Get command line arguments
     labels_json_str = sys.argv[1]
     model_folder = sys.argv[2]
     epochs = int(sys.argv[3])
-    pretrained_model_name = sys.argv[4]
+    arg4 = sys.argv[4]
+    if arg4 in (MODEL_TYPE_SCRATCH, MODEL_TYPE_PRETRAINED):
+        project_type = arg4
+        pretrained_model_name = sys.argv[5] if len(sys.argv) > 5 else "repvgg_a2"
+        selected_layers = parse_selected_layers(sys.argv[6] if len(sys.argv) > 6 else None)
+    else:
+        project_type = MODEL_TYPE_PRETRAINED
+        pretrained_model_name = arg4
+        selected_layers = []
 
     labels_json = json.loads(labels_json_str)
     
@@ -683,9 +799,12 @@ if __name__ == "__main__":
 
     print(f"Model will be saved to folder: {model_folder}")
     print(f"Training for {epochs} epochs")
+    print(f"PyTorch project type: {project_type}")
 
     pl.seed_everything(42, workers=True)
 
+    normalization_mean = IMAGENET_MEAN
+    normalization_std = IMAGENET_STD
     data_module = ImageDataModule(
         data_dir="./data",
         batch_size=64,
@@ -695,15 +814,40 @@ if __name__ == "__main__":
         seed=42,
         cifar10=False,
         labels_json=labels_json_str,
+        normalization_mean=normalization_mean,
+        normalization_std=normalization_std,
     )
-    
-    # Load and prepare images from the JSON label map
-    model = RepVGGClassifier(
-        model_name=pretrained_model_name,
-        num_classes=len(labels_json),
-        lr=3e-4,
-        hidden_dim=512,
-    )
+
+    if project_type == MODEL_TYPE_SCRATCH:
+        selected_layers = selected_layers or DEFAULT_SCRATCH_LAYERS
+
+        print(f"Building PyTorch scratch model with {len(selected_layers)} user-configured layers.")
+        print("Calculating scratch normalization mean/std from the training split...")
+
+        stats_loader = data_module.normalization_stats_dataloader()
+        normalization_mean, normalization_std = compute_mean_std_welford_from_loader(stats_loader)
+        data_module.set_normalization(normalization_mean, normalization_std)
+
+        print(f"Calculated normalization mean: {normalization_mean}")
+        print(f"Calculated normalization std: {normalization_std}")
+
+        model = ScratchCNNClassifier(
+            layers_json=selected_layers,
+            num_classes=len(labels_json),
+            lr=LEARNING_RATE,
+        )
+        checkpoint_prefix = "scratch"
+        model_class = ScratchCNNClassifier
+    else:
+        print(f"Building PyTorch pretrained model with timm backbone: {pretrained_model_name}")
+        model = RepVGGClassifier(
+            model_name=pretrained_model_name,
+            num_classes=len(labels_json),
+            lr=3e-4,
+            hidden_dim=512,
+        )
+        checkpoint_prefix = "repvgg"
+        model_class = RepVGGClassifier
 
     delete_existing_checkpoints(model_folder)
 
@@ -712,7 +856,7 @@ if __name__ == "__main__":
         mode="max",
         save_top_k=1,
         dirpath=model_folder,
-        filename="repvgg-{epoch:02d}-{val_acc:.4f}",
+        filename=f"{checkpoint_prefix}" + "-{epoch:02d}-{val_acc:.4f}",
     )
 
     early_stop_cb = EarlyStopping(
@@ -723,7 +867,7 @@ if __name__ == "__main__":
 
     lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
 
-    csv_logger = CSVLogger("logs", name="repvgg")
+    csv_logger = CSVLogger("logs", name=checkpoint_prefix)
 
     trainer = pl.Trainer(
         max_epochs=epochs,
@@ -746,14 +890,14 @@ if __name__ == "__main__":
     best_model_path = checkpoint_cb.best_model_path
     if best_model_path:
         print(f"Loading best checkpoint for export: {best_model_path}")
-        model = RepVGGClassifier.load_from_checkpoint(best_model_path)
+        model = model_class.load_from_checkpoint(best_model_path)
     else:
         print("No best checkpoint found; exporting the current in-memory model.")
 
     model.eval()
 
     # wrap model to allow for preproccessing in onnx export
-    wrapped_model = RepVGGWithPreprocess(model)
+    wrapped_model = RepVGGWithPreprocess(model, mean=normalization_mean, std=normalization_std)
 
     print("Converting model to ONNX format...")
     onnx_conversion_result = convert_pt_to_onnx(wrapped_model, model_folder)
