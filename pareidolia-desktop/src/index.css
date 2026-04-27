@@ -1,6 +1,28 @@
 /* Made by Alexangelo Orozco Gutierrez on January 23, 2026 */
 /* Shared CSS for all pages */
 
+:root {
+  --white-smoke: #f2f2f2ff;
+  --silver: #b8bbbbff;
+  --onyx: #060a0eff;
+  --dim-grey: #737376ff;
+  --platinum: #ecececff;
+  --lemon-chiffon: #fffbb7ff;
+  --light-green: #adffb5ff;
+  --vibrant-coral: #ff5f5fff;
+  --bright-blue: #0084ff;
+
+  --app-bg: var(--platinum);
+  --surface: var(--white-smoke);
+  --text-primary: var(--onyx);
+  --text-secondary: var(--dim-grey);
+  --border: var(--silver);
+  --button-shadow: 0 2px 0 rgba(6, 10, 14, 0.22), 0 8px 16px rgba(6, 10, 14, 0.12);
+  --button-shadow-hover: 0 3px 0 rgba(6, 10, 14, 0.24), 0 12px 20px rgba(6, 10, 14, 0.16);
+  --button-shadow-quirky: 0 2px 0 rgba(6, 10, 14, 0.28), 3px 3px 0 rgba(255, 251, 183, 0.7), 0 12px 20px rgba(6, 10, 14, 0.14);
+  --button-shadow-quirky-hover: 0 3px 0 rgba(6, 10, 14, 0.3), 4px 4px 0 rgba(255, 251, 183, 0.8), 0 16px 24px rgba(6, 10, 14, 0.16);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -11,6 +33,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   margin: 0;
   padding: 0;
+  color: var(--text-primary);
+  background-color: var(--app-bg);
 }
 
 /* ========================= */
@@ -21,68 +45,82 @@ body {
 .add-project-btn {
   width: 100%;
   padding: 0.75rem 1rem;
-  background-color: #697782;
-  color: white;
-  border: none;
-  border-radius: 8px;
+  background-color: var(--onyx);
+  color: var(--white-smoke);
+  border: 1px solid rgba(242, 242, 242, 0.12);
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 600;
   margin-bottom: 1.5rem;
-  transition: background-color 0.2s;
+  box-shadow: var(--button-shadow);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .add-project-btn:hover {
-  background-color: #4a555c;
+  background-color: var(--dim-grey);
+  transform: translateY(-1px);
+  box-shadow: var(--button-shadow-hover);
 }
 
 /* NAVBAR BUTTONS */
 .navbar-btn {
-  background-color: #697782;
-  color: white;
-  border: none;
+  background-color: var(--onyx);
+  color: var(--white-smoke);
+  border: 1px solid rgba(242, 242, 242, 0.12);
   padding: 0.75rem 1.5rem;
-  border-radius: 4px;
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 600;
   font-size: 0.9rem;
-  transition: background-color 0.2s;
+  box-shadow: var(--button-shadow);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .navbar-btn:hover {
-  background-color: #4a555c;
+  background-color: var(--dim-grey);
+  transform: translateY(-1px);
+  box-shadow: var(--button-shadow-hover);
 }
 
 .navbar-btn:active {
-  transform: translateY(0);
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 rgba(6, 10, 14, 0.22);
 }
 
 /* MODAL BUTTONS */
 .modal-btn {
   padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 4px;
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 600;
   font-size: 0.95rem;
-  transition: background-color 0.2s;
+  box-shadow: var(--button-shadow);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .modal-create {
-  background-color: #007acc;
-  color: white;
+  background-color: var(--onyx);
+  color: var(--white-smoke);
+  border: 1px solid rgba(242, 242, 242, 0.12);
 }
 
 .modal-create:hover {
-  background-color: #005a9e;
+  background-color: var(--dim-grey);
+  transform: translateY(-1px);
+  box-shadow: var(--button-shadow-hover);
 }
 
 .modal-cancel {
-  background-color: #e0e0e0;
-  color: #333;
+  background-color: var(--silver);
+  color: var(--onyx);
+  border: 1px solid rgba(6, 10, 14, 0.1);
 }
 
 .modal-cancel:hover {
-  background-color: #d0d0d0;
+  background-color: var(--dim-grey);
+  color: var(--white-smoke);
+  transform: translateY(-1px);
+  box-shadow: var(--button-shadow-hover);
 }
 
 /* ========================= */
@@ -92,7 +130,7 @@ body {
 .modal-input {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--silver);
   border-radius: 4px;
   font-size: 1rem;
   box-sizing: border-box;
@@ -102,14 +140,14 @@ body {
 
 .modal-input:focus {
   outline: none;
-  border-color: #007acc;
-  box-shadow: 0 0 5px rgba(0, 122, 204, 0.3);
+  border-color: var(--onyx);
+  box-shadow: 0 0 5px rgba(6, 10, 14, 0.18);
 }
 
 #project-name-input {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--silver);
   border-radius: 4px;
   font-size: 1rem;
   box-sizing: border-box;
@@ -118,8 +156,8 @@ body {
 
 #project-name-input:focus {
   outline: none;
-  border-color: #007acc;
-  box-shadow: 0 0 5px rgba(0, 122, 204, 0.3);
+  border-color: var(--onyx);
+  box-shadow: 0 0 5px rgba(6, 10, 14, 0.18);
 }
 
 /* ========================= */
@@ -134,7 +172,7 @@ body {
   top: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(6, 10, 14, 0.62);
 }
 
 .modal.show {
@@ -144,10 +182,10 @@ body {
 }
 
 .modal-content {
-  background-color: white;
+  background-color: var(--white-smoke);
   padding: 2rem;
   border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 6px rgba(6, 10, 14, 0.2);
   max-width: 400px;
   width: 90%;
   position: relative;
@@ -155,12 +193,12 @@ body {
 
 .modal-content h2 {
   margin-top: 0;
-  color: #333;
+  color: var(--onyx);
 }
 
 .modal-close,
 .close-btn {
-  color: #aaa;
+  color: var(--silver);
   position: absolute;
   top: 15px;
   right: 20px;
@@ -171,7 +209,7 @@ body {
 
 .modal-close:hover,
 .close-btn:hover {
-  color: #333;
+  color: var(--onyx);
 }
 
 .modal-buttons {

@@ -117,8 +117,8 @@
               <div class="training-status-area" style="margin: 20px;">
                 <div class="progress-wrapper">
                   <label id="progress-label">Overall Progress: 0%</label>
-                  <div class="progress-container" style="width: 100%; height: 20px; background: #eee; border-radius: 10px; overflow: hidden; margin-top: 5px;">
-                    <div id="epoch-progress-fill" style="width: 0%; height: 100%; background: #333; transition: width 0.3s ease;"></div>
+                  <div class="progress-container" style="width: 100%; height: 20px; background: var(--silver); border-radius: 10px; overflow: hidden; margin-top: 5px;">
+                    <div id="epoch-progress-fill" style="width: 0%; height: 100%; background: var(--onyx); transition: width 0.3s ease;"></div>
                   </div>
                 </div>
 
@@ -134,10 +134,10 @@
               </div>
 
               <div class="charts-container" style="display: flex; gap: 20px; margin-top: 20px;">
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 8px;">
+                <div style="flex: 1; background: var(--white-smoke); padding: 10px; border-radius: 8px;">
                   <canvas id="accuracyChart"></canvas>
                 </div>
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 8px;">
+                <div style="flex: 1; background: var(--white-smoke); padding: 10px; border-radius: 8px;">
                   <canvas id="lossChart"></canvas>
                 </div>
               </div>
@@ -145,14 +145,33 @@
           </div>
           <!-- Footer -->
           <footer class="project-footer">
-            <input type="radio" id="train-type-scratch" name="train-project-type" value="scratch">
-            <label for="train-type-scratch">Start From Scratch</label>
-            <br>
-            <input type="radio" id="train-type-pretrained" name="train-project-type" value="pretrained">
-            <label for="train-type-pretrained">Use Pretrained Model</label>
+            <div class="footer-choice-groups">
+              <div class="choice-stack">
+                <span class="choice-kicker">Training Mode</span>
+                <div class="segmented-control segmented-control-mode">
+                  <input type="radio" id="train-type-scratch" name="train-project-type" value="scratch">
+                  <label class="segment-option" for="train-type-scratch">Start From Scratch</label>
+                  <input type="radio" id="train-type-pretrained" name="train-project-type" value="pretrained">
+                  <label class="segment-option" for="train-type-pretrained">Use Pretrained Model</label>
+                </div>
+              </div>
 
-            <input type="radio" name="train" value="true" checked> Use Tensorflow<br>
-            <input type="radio" name="train" value="false"> Use PyTorch<br>
+              <div class="choice-stack">
+                <span class="choice-kicker">Framework</span>
+                <div class="segmented-control segmented-control-framework">
+                  <input type="radio" id="train-framework-tf" name="train" value="true" checked>
+                  <label class="segment-option" for="train-framework-tf">
+                    <span class="segment-option-label">TensorFlow</span>
+                    <img class="framework-icon framework-icon-tf" src="assets/tf.svg" alt="TensorFlow">
+                  </label>
+                  <input type="radio" id="train-framework-pt" name="train" value="false">
+                  <label class="segment-option" for="train-framework-pt">
+                    <span class="segment-option-label">PyTorch</span>
+                    <img class="framework-icon framework-icon-pt" src="assets/PyTorch.svg" alt="PyTorch">
+                  </label>
+                </div>
+              </div>
+            </div>
             <span class="last-trained">Last Trained: Never</span>
             <div class="footer-btns">
               <button id="model-train-btn" class="train-btn">Train Model</button>

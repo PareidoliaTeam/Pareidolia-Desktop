@@ -22,18 +22,18 @@
 /* RIGHT SIDEBAR STYLES */
 .right-sidebar {
   width: 250px;
-  background-color: #f5f5f5;
-  border-left: 1px solid #ddd;
+  background-color: var(--surface);
+  border-left: 1px solid var(--silver);
   padding: 1.5rem 1rem;
   overflow-y: auto;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 10px rgba(6, 10, 14, 0.24);
   border-top-left-radius: 24px;
   border-bottom-left-radius: 24px;
 }
 
 .projects-section h3 {
   font-size: 0.95rem;
-  color: #333;
+  color: var(--onyx);
   margin-bottom: 0.75rem;
 }
 
@@ -52,13 +52,13 @@
 /* QR CODE SECTION */
 .qr-section {
   margin-top: 2rem;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--silver);
   padding-top: 1rem;
 }
 
 .qr-section h3 {
   font-size: 0.95rem;
-  color: #333;
+  color: var(--onyx);
   margin-bottom: 0.75rem;
 }
 
@@ -68,8 +68,8 @@
   align-items: center;
   width: 100%;
   aspect-ratio: 1 / 1;
-  background-color: white;
-  border: 1px solid #ddd;
+  background-color: var(--white-smoke);
+  border: 1px solid var(--silver);
   border-radius: 8px;
   padding: 0;
 }
@@ -79,16 +79,19 @@
 .project-open-btn {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  background-color: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  background-color: var(--white-smoke);
+  border: 1px solid var(--silver);
+  border-radius: 12px;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.2s;
+  box-shadow: 0 2px 0 rgba(6, 10, 14, 0.1), 0 8px 14px rgba(6, 10, 14, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .project-open-btn:hover {
-  background-color: #f0f0f0;
+  background-color: var(--platinum);
+  border-color: var(--dim-grey);
+  transform: translateY(-1px);
 }
 
 /* ------------------------- */
@@ -106,7 +109,7 @@
 #project-view h1 {
   font-size: 2.5rem;
   margin-bottom: 2rem;
-  color: #333;
+  color: var(--onyx);
 }
 
 /* GRID LAYOUT BUTTON STYLES */
@@ -123,14 +126,14 @@
 /* GRID BUTTONS */
 .project-grid-btn {
   padding: 0.75rem 1.5rem;
-  background-color: #697782;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  background: linear-gradient(180deg, #20262b 0%, var(--onyx) 100%);
+  color: var(--white-smoke);
+  border: 1px solid rgba(242, 242, 242, 0.14);
+  border-radius: 14px 20px 12px 18px;
   cursor: pointer;
   font-weight: 600;
   font-size: 0.85rem;
-  transition: background-color 0.2s;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,10 +142,13 @@
   background-repeat: no-repeat;
   text-align: center;
   box-sizing: border-box;
+  box-shadow: var(--button-shadow-quirky);
 }
 
 .project-grid-btn:hover {
-  background-color: #4a555c;
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+  box-shadow: var(--button-shadow-quirky-hover);
 }
 
 /* BUTTON DISTORTION KEYFRAMES */
