@@ -84,6 +84,8 @@ const viewBlockBtn = document.getElementById('view-blocks-btn');
 
 // charts
 let accuracyChart, lossChart;
+let chartResizeObserver = null;
+let chartResizeFrame = null;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -902,6 +904,47 @@ function openTab(event, tabId) {
 
     document.getElementById(tabId).classList.add('active');
     event.currentTarget.classList.add('active');
+
+    if (tabId === 'tab-train') {
+        requestChartResize();
+    }
+}
+
+function requestChartResize() {
+    if (!accuracyChart || !lossChart) return;
+
+    if (chartResizeFrame) {
+        cancelAnimationFrame(chartResizeFrame);
+    }
+
+    chartResizeFrame = requestAnimationFrame(() => {
+        chartResizeFrame = null;
+        accuracyChart.resize();
+        lossChart.resize();
+    });
+}
+
+function setupChartResizeSync() {
+    if (chartResizeObserver) {
+        chartResizeObserver.disconnect();
+        chartResizeObserver = null;
+    }
+
+    const chartContainers = document.querySelectorAll('.charts-container, .chart-wrapper');
+    if (typeof ResizeObserver === 'undefined' || chartContainers.length === 0) {
+        return;
+    }
+
+    chartResizeObserver = new ResizeObserver(() => {
+        requestChartResize();
+    });
+
+    chartContainers.forEach((container) => {
+        chartResizeObserver.observe(container);
+    });
+
+    window.addEventListener('resize', requestChartResize);
+    document.addEventListener('fullscreenchange', requestChartResize);
 }
 
 // ============================================================
@@ -1199,6 +1242,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize and setup charts
     initCharts();
+    setupChartResizeSync();
+    requestChartResize();
     const epochRegex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
     let stdoutBuffer = '';
     let stderrBuffer = '';
@@ -1285,6 +1330,7 @@ require(['vs/editor/editor.main'], function() {
 function initCharts() {
     const commonOptions = {
         responsive: true,
+        maintainAspectRatio: false,
         scales: { y: { beginAtZero: true } },
         animation: true,
     };
