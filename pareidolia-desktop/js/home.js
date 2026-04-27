@@ -175,6 +175,26 @@ function renderChartState(chartState) {
     lossChart.update();
 }
 
+function renderSummaryCard(chartState) {
+    const normalized = normalizeChartState(chartState);
+    const lastIdx = normalized.accuracy.train.length - 1;
+
+    const finalAcc = lastIdx >= 0 ? normalized.accuracy.train[lastIdx] : null;
+    const finalValAcc = lastIdx >= 0 ? normalized.accuracy.val[lastIdx] : null;
+    const finalLoss = lastIdx >= 0 ? normalized.loss.train[lastIdx] : null;
+    const finalValLoss = lastIdx >= 0 ? normalized.loss.val[lastIdx] : null;
+
+    const accDisplay = document.getElementById('sum-acc');
+    const valAccDisplay = document.getElementById('sum-val-acc');
+    const lossDisplay = document.getElementById('sum-loss');
+    const valLossDisplay = document.getElementById('sum-val-loss');
+
+    if (accDisplay) accDisplay.textContent = finalAcc === null ? '-' : `${(finalAcc * 100).toFixed(2)}%`;
+    if (valAccDisplay) valAccDisplay.textContent = finalValAcc === null ? '-' : `${(finalValAcc * 100).toFixed(2)}%`;
+    if (lossDisplay) lossDisplay.textContent = finalLoss === null ? '-' : parseFloat(finalLoss).toFixed(4);
+    if (valLossDisplay) valLossDisplay.textContent = finalValLoss === null ? '-' : parseFloat(finalValLoss).toFixed(4);
+}
+
 function syncChartStateToCurrentModel() {
     if (!activeChartModelName) return;
 
@@ -184,6 +204,7 @@ function syncChartStateToCurrentModel() {
     }
 
     renderChartState(chartState);
+    renderSummaryCard(chartState);
 }
 
 async function persistModelSettings(modelName, settings) {
@@ -381,6 +402,7 @@ async function loadModelSettingsForView(modelName) {
         activeChartModelName = modelName;
         modelSettings.chartHistory = cloneChartState(getChartStateForModel(modelName));
         renderChartState(modelSettings.chartHistory);
+        renderSummaryCard(modelSettings.chartHistory);
 
         const selectedType = modelSettings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
         const selectedTypeInput = document.querySelector(`input[name="train-project-type"][value="${selectedType}"]`);
@@ -1296,17 +1318,7 @@ modelTrainBtn.addEventListener('click', async () => {
             summaryCard.style.display = 'block';
 
             const completedChartState = getChartStateForModel(currentModelName);
-            const lastIdx = completedChartState.accuracy.train.length - 1;
-
-            const finalAcc = completedChartState.accuracy.train[lastIdx];
-            const finalValAcc = completedChartState.accuracy.val[lastIdx];
-            const finalLoss = completedChartState.loss.train[lastIdx];
-            const finalValLoss = completedChartState.loss.val[lastIdx];
-
-            document.getElementById('sum-acc').textContent = (finalAcc * 100).toFixed(2) + "%";
-            document.getElementById('sum-val-acc').textContent = (finalValAcc * 100).toFixed(2) + "%";
-            document.getElementById('sum-loss').textContent = parseFloat(finalLoss).toFixed(4);
-            document.getElementById('sum-val-loss').textContent = parseFloat(finalValLoss).toFixed(4);
+            renderSummaryCard(completedChartState);
 
             // timestamp stuff
             const now = new Date();
