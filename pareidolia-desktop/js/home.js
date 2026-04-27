@@ -86,6 +86,9 @@ const viewBlockBtn = document.getElementById('view-blocks-btn');
 let accuracyChart, lossChart;
 let chartResizeObserver = null;
 let chartResizeFrame = null;
+const chartStateByModel = new Map();
+let activeChartModelName = null;
+let activeTrainingModelName = null;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -95,6 +98,104 @@ const resultsArea = document.getElementById('prediction-results');
 // ============================================================
 // Functions
 // ============================================================
+
+function createEmptyChartState() {
+    return {
+        labels: [],
+        accuracy: {
+            train: [],
+            val: []
+        },
+        loss: {
+            train: [],
+            val: []
+        }
+    };
+}
+
+function cloneChartState(chartState) {
+    const normalized = chartState || createEmptyChartState();
+
+    return {
+        labels: [...(normalized.labels || [])],
+        accuracy: {
+            train: [...(normalized.accuracy?.train || [])],
+            val: [...(normalized.accuracy?.val || [])]
+        },
+        loss: {
+            train: [...(normalized.loss?.train || [])],
+            val: [...(normalized.loss?.val || [])]
+        }
+    };
+}
+
+function isEmptyChartState(chartState) {
+    return !chartState
+        || (chartState.labels?.length || 0) === 0
+        && (chartState.accuracy?.train?.length || 0) === 0
+        && (chartState.accuracy?.val?.length || 0) === 0
+        && (chartState.loss?.train?.length || 0) === 0
+        && (chartState.loss?.val?.length || 0) === 0;
+}
+
+function normalizeChartState(chartState) {
+    if (!chartState || typeof chartState !== 'object') {
+        return createEmptyChartState();
+    }
+
+    return cloneChartState(chartState);
+}
+
+function getChartStateForModel(modelName) {
+    if (!chartStateByModel.has(modelName)) {
+        chartStateByModel.set(modelName, createEmptyChartState());
+    }
+
+    return chartStateByModel.get(modelName);
+}
+
+function setChartStateForModel(modelName, chartState) {
+    chartStateByModel.set(modelName, cloneChartState(chartState));
+}
+
+function renderChartState(chartState) {
+    if (!accuracyChart || !lossChart) return;
+
+    const normalized = normalizeChartState(chartState);
+
+    accuracyChart.data.labels = [...normalized.labels];
+    accuracyChart.data.datasets[0].data = [...normalized.accuracy.train];
+    accuracyChart.data.datasets[1].data = [...normalized.accuracy.val];
+
+    lossChart.data.labels = [...normalized.labels];
+    lossChart.data.datasets[0].data = [...normalized.loss.train];
+    lossChart.data.datasets[1].data = [...normalized.loss.val];
+
+    accuracyChart.update();
+    lossChart.update();
+}
+
+function syncChartStateToCurrentModel() {
+    if (!activeChartModelName) return;
+
+    const chartState = getChartStateForModel(activeChartModelName);
+    if (modelSettings) {
+        modelSettings.chartHistory = cloneChartState(chartState);
+    }
+
+    renderChartState(chartState);
+}
+
+async function persistModelSettings(modelName, settings) {
+    if (!modelName || !settings) return;
+
+    try {
+        await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
+        console.log('Model settings saved');
+    } catch (error) {
+        console.error('Error saving model settings:', error);
+    }
+}
 
 
 /**
@@ -270,6 +371,17 @@ async function loadModelSettingsForView(modelName) {
 
         if (!modelSettings.projectType) modelSettings.projectType = 'scratch';
 
+        const persistedChartState = normalizeChartState(modelSettings.chartHistory);
+        const cachedChartState = chartStateByModel.get(modelName);
+
+        if (isEmptyChartState(cachedChartState)) {
+            setChartStateForModel(modelName, persistedChartState);
+        }
+
+        activeChartModelName = modelName;
+        modelSettings.chartHistory = cloneChartState(getChartStateForModel(modelName));
+        renderChartState(modelSettings.chartHistory);
+
         const selectedType = modelSettings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
         const selectedTypeInput = document.querySelector(`input[name="train-project-type"][value="${selectedType}"]`);
         if (selectedTypeInput) {
@@ -287,7 +399,7 @@ async function loadModelSettingsForView(modelName) {
  */
 async function saveModelSettings() {
     if (!modelSettings) return;
-    const modelName = sessionStorage.getItem('projectName')
+    const modelName = sessionStorage.getItem('projectName');
     const blocks = document.querySelectorAll('.model-block');
     modelSettings.layers = Array.from(blocks).map(block => {
         const params = { ...block.dataset };
@@ -299,12 +411,9 @@ async function saveModelSettings() {
             parameters: params
         };
     });
-    try {
-        await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: modelSettings });
-        console.log('Model settings saved');
-    } catch (error) {
-        console.error('Error saving model settings:', error);
-    }
+
+    modelSettings.chartHistory = cloneChartState(getChartStateForModel(modelName));
+    await persistModelSettings(modelName, modelSettings);
 }
 
 /**
@@ -1133,18 +1242,18 @@ datasetModal.addEventListener('click', (e) => {
 
 // Train Model button click handler
 modelTrainBtn.addEventListener('click', async () => {
-
-    //Chart updating
-    if (accuracyChart && lossChart) {
-        accuracyChart.data.labels = [];
-        accuracyChart.data.datasets.forEach(d => d.data = []);
-        lossChart.data.datasets.forEach(d => d.data = []);
-        accuracyChart.update();
-        lossChart.update();
-    }
-
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
+    activeTrainingModelName = currentModelName;
+    activeChartModelName = currentModelName;
+
+    const activeRunState = createEmptyChartState();
+    setChartStateForModel(currentModelName, activeRunState);
+    if (modelSettings) {
+        modelSettings.chartHistory = cloneChartState(activeRunState);
+    }
+    renderChartState(activeRunState);
+
     const selectedRadio = document.querySelector('input[name="train"]:checked');
     const toggle = selectedRadio ? (selectedRadio.value === 'true' ? 'tensorflow' : 'pytorch') : 'tensorflow';
     console.log(`[UI] : ${toggle}`);
@@ -1186,12 +1295,13 @@ modelTrainBtn.addEventListener('click', async () => {
             const summaryCard = document.getElementById('final-summary-card');
             summaryCard.style.display = 'block';
 
-            const lastIdx = accuracyChart.data.datasets[0].data.length - 1;
+            const completedChartState = getChartStateForModel(currentModelName);
+            const lastIdx = completedChartState.accuracy.train.length - 1;
 
-            const finalAcc = accuracyChart.data.datasets[0].data[lastIdx];
-            const finalValAcc = accuracyChart.data.datasets[1].data[lastIdx];
-            const finalLoss = lossChart.data.datasets[0].data[lastIdx];
-            const finalValLoss = lossChart.data.datasets[1].data[lastIdx];
+            const finalAcc = completedChartState.accuracy.train[lastIdx];
+            const finalValAcc = completedChartState.accuracy.val[lastIdx];
+            const finalLoss = completedChartState.loss.train[lastIdx];
+            const finalValLoss = completedChartState.loss.val[lastIdx];
 
             document.getElementById('sum-acc').textContent = (finalAcc * 100).toFixed(2) + "%";
             document.getElementById('sum-val-acc').textContent = (finalValAcc * 100).toFixed(2) + "%";
@@ -1208,8 +1318,9 @@ modelTrainBtn.addEventListener('click', async () => {
             }
             // save to JSON
             if(modelSettings){
+                modelSettings.chartHistory = cloneChartState(completedChartState);
                 modelSettings.lastTrained = timestamp;
-                await saveModelSettings();
+                await persistModelSettings(currentModelName, modelSettings);
             }
 
         } else {
@@ -1224,6 +1335,7 @@ modelTrainBtn.addEventListener('click', async () => {
         modelTrainResults.textContent = `IPC Error: ${error.message}`;
         modelTrainResults.style.color = '#dc3545';
     } finally {
+        activeTrainingModelName = null;
         modelTrainBtn.disabled = false;
         modelTrainBtn.textContent = 'Train Model';
     }
@@ -1271,9 +1383,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const match = trimmedLine.match(epochRegex);
-            if (match && accuracyChart && lossChart) {
+            if (match && activeTrainingModelName) {
                 const [_, epoch, tLoss, tAcc, vLoss, vAcc] = match;
                 const eLabel = `E${epoch}`;
+
+                const chartState = getChartStateForModel(activeTrainingModelName);
+                chartState.labels.push(eLabel);
+                chartState.accuracy.train.push(parseFloat(tAcc));
+                chartState.accuracy.val.push(parseFloat(vAcc));
+                chartState.loss.train.push(parseFloat(tLoss));
+                chartState.loss.val.push(parseFloat(vLoss));
+
+                if (activeChartModelName === activeTrainingModelName) {
+                    renderChartState(chartState);
+                }
 
                 const currentEpoch = parseInt(epoch);
                 const totalEpochs = parseInt(epochSlider.value);
@@ -1281,18 +1404,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
                 document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
-
-                // Accuracy Chart Data
-                accuracyChart.data.labels.push(eLabel);
-                accuracyChart.data.datasets[0].data.push(parseFloat(tAcc));
-                accuracyChart.data.datasets[1].data.push(parseFloat(vAcc));
-                accuracyChart.update();
-
-                // loss Chart Data
-                lossChart.data.labels.push(eLabel);
-                lossChart.data.datasets[0].data.push(parseFloat(tLoss));
-                lossChart.data.datasets[1].data.push(parseFloat(vLoss));
-                lossChart.update();
             }
         });
     };
@@ -1357,6 +1468,10 @@ function initCharts() {
         },
         options: commonOptions
     });
+
+    if (activeChartModelName) {
+        renderChartState(getChartStateForModel(activeChartModelName));
+    }
 }
 
 // Prediction Tab Logic (definetly need to reorganize into different files after this PR) - Actually leaving it here because the breakup into different JS files will be done as part of the polish phase

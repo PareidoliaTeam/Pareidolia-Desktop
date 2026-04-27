@@ -259,6 +259,17 @@ export async function createModelFolder(input) {
       labels: {},
       epochs: 10,
       projectType: projectType, // 'scratch' or 'pretrained'
+      chartHistory: {
+        labels: [],
+        accuracy: {
+          train: [],
+          val: []
+        },
+        loss: {
+          train: [],
+          val: []
+        }
+      },
       layers: [
         {
           "type": "Conv2D",
