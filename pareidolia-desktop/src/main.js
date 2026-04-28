@@ -851,7 +851,7 @@ ipcMain.handle('predict-image', async (event, params) => {
   const { modelName, imagePath } = params;
   const pareidoliaPath = getPareidoliaFolderPath();
   const venvPath = getVenvPath();
-  const settings = await getModelSettings(modelName);
+  const { labelsJson, settings } = await modelDetailsForPython(modelName);
   let modelFile
 
   if (settings.modelType === 'tensorflow'){
@@ -866,7 +866,12 @@ ipcMain.handle('predict-image', async (event, params) => {
       : path.join(process.resourcesPath, 'py/predict.py');
 
   try {
-    const result = await executePythonScript(scriptPath, [modelPath, imagePath], venvPath);
+    const projectType = settings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
+    const result = await executePythonScript(
+      scriptPath,
+      [modelPath, imagePath, JSON.stringify(labelsJson), projectType],
+      venvPath
+    );
     const outputString = result.output || result.stdout || (typeof result === 'string' ? result : null);
 
     if (!outputString) {
@@ -902,14 +907,20 @@ ipcMain.handle('test-model', async (event, params) => {
         ? path.join(__dirname, '../../py/tf_test_model.py')
         : path.join(process.resourcesPath, 'py/tf_test_model.py');
     args = [
-        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile), JSON.stringify(labelsJson)];
+        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile),
+        JSON.stringify(labelsJson),
+        settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
+      ];
   } else{
     modelFile = 'model.ckpt';
     scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../../py/pt_test_model.py')
         : path.join(process.resourcesPath, 'py/pt_test_model.py');
-    args = [path.join(pareidoliaPath, 'models', modelName, 'models', modelFile), JSON.stringify(labelsJson)
-    ];
+    args = [
+        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile),
+        JSON.stringify(labelsJson),
+        settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
+      ];
   }
   // Excutes the selected script and returns a the JSON output
   try {
