@@ -95,6 +95,9 @@ const dropZone = document.getElementById('drop-zone');
 const predictionPreview = document.getElementById('prediction-preview');
 const resultsArea = document.getElementById('prediction-results');
 
+// test ids
+const runTestButton = document.getElementById('run-test-btn');
+
 // ============================================================
 // Functions
 // ============================================================
@@ -423,6 +426,7 @@ async function saveModelSettings() {
     if (!modelSettings) return;
     const modelName = sessionStorage.getItem('projectName');
     const blocks = document.querySelectorAll('.model-block');
+
     modelSettings.layers = Array.from(blocks).map(block => {
         const params = { ...block.dataset };
         const type = params.type;
@@ -1324,6 +1328,7 @@ modelTrainBtn.addEventListener('click', async () => {
             const now = new Date();
             const timestamp = now.toLocaleString();
 
+            const selectedRadio = document.querySelector('input[name="train"]:checked');
             const lastTrainedSpan = document.querySelector('.last-trained');
             if (lastTrainedSpan) {
                 lastTrainedSpan.textContent = `Last Trained: ${timestamp}`;
@@ -1352,6 +1357,21 @@ modelTrainBtn.addEventListener('click', async () => {
         modelTrainBtn.textContent = 'Train Model';
     }
 });
+
+// Test button in testing tab of a model
+runTestButton.addEventListener('click',async ()=> {
+    const modelName = sessionStorage.getItem('projectName');
+
+    const result = await window.electronAPI.invoke('test-model', {
+        modelName: modelName
+    });
+    if (result.success) {
+        console.log(result);
+        document.getElementById('test-accuracy-val').textContent = (result.accuracy * 100).toFixed(2) + "%";
+        document.getElementById('test-loss-val').textContent = (result.loss * 100).toFixed(2) + "%";
+        document.getElementById('test-count-val').textContent =  result.total_images;
+    }
+})
 
 // ============================================================
 // Initialization
