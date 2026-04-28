@@ -885,6 +885,8 @@ if __name__ == "__main__":
 
     trainer.fit(model, datamodule=data_module)
 
+    final_ckpt_path = os.path.join(model_folder, "model.ckpt")
+    trainer.save_checkpoint(final_ckpt_path)
     best_model_path = checkpoint_cb.best_model_path
     if best_model_path:
         print(f"Loading best checkpoint for export: {best_model_path}")

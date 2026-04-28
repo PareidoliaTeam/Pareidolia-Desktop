@@ -47,6 +47,28 @@ LEARNING_RATE = 1e-5
 MODEL_TYPE_SCRATCH = "scratch"
 MODEL_TYPE_PRETRAINED = "pretrained"
 
+
+class EpochHistoryPrinter(keras.callbacks.Callback):
+    """Prints epochs in a format readable by graph
+
+    """
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+
+        def metric(name):
+            value = logs.get(name)
+            return float(value) if value is not None else float("nan")
+
+        print(
+            f"epoch={epoch + 1:02d} "
+            f"train_loss={metric('loss'):.4f} "
+            f"train_acc={metric('accuracy'):.4f} "
+            f"val_loss={metric('val_loss'):.4f} "
+            f"val_acc={metric('val_accuracy'):.4f}",
+            flush=True,
+        )
+
 def create_cnn_model(num_classes):
     """Creates a CNN model for image classification.
     
@@ -229,7 +251,6 @@ def create_model_new(num_classes,layers_json):
     return model
 
 def create_imported_model(num_classes):
-    preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
     data_augmentation = get_data_augmentation()
 
     base_model = tf.keras.applications.MobileNetV2(
@@ -241,7 +262,8 @@ def create_imported_model(num_classes):
 
     inputs = tf.keras.Input(shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
     x = data_augmentation(inputs)
-    x = tf.keras.layers.Lambda(preprocess_input)(x)
+    # MobileNetV2 preprocess_input scales RGB pixels from [0, 255] to [-1, 1].
+    x = tf.keras.layers.Rescaling(scale=1.0 / 127.5, offset=-1.0, name="mobilenet_v2_preprocess")(x)
     x = base_model(x, training=False)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.Dropout(0.3)(x)
@@ -446,13 +468,12 @@ if __name__ == "__main__":
     
     # Load and prepare images from the JSON label map
     X, y, NUM_CLASSES, label_names = load_images_from_json(labels_json_str, model_type)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, random_state=42) # split training data into training and validation data
-
-
-    if X_train is None or len(X_train) == 0:
+    if X is None or len(X) == 0:
         print("Error: No images found or failed to load images")
         sys.exit(1)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, random_state=42)
     
     print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
     
@@ -476,7 +497,8 @@ if __name__ == "__main__":
         X_train, y_train,
         epochs=epochs,
         validation_data=(X_val, y_val),  
-        verbose=1  
+        callbacks=[EpochHistoryPrinter()],
+        verbose=0,
     )
     
     # Get final metrics
