@@ -1566,6 +1566,13 @@ body.dragging-outside-canvas .model-block {
   margin: 5px 0;
 }
 
+.test-results-message {
+  margin: 0;
+  color: #8a1f11;
+  font-weight: 600;
+  min-height: 1.25rem;
+}
+
 .confusion-matrix-container {
   background: var(--white-smoke);
   padding: 20px;

@@ -51,7 +51,12 @@ const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
 const trainProjectTypeInputs = document.querySelectorAll('input[name="train-project-type"]');
-//const modelToggle = document.getElementsByName('train');
+const trainFrameworkInputs = document.querySelectorAll('input[name="train"]');
+
+function getSelectedFramework() {
+    const selectedRadio = document.querySelector('input[name="train"]:checked');
+    return selectedRadio && selectedRadio.value === 'false' ? 'pytorch' : 'tensorflow';
+}
 
 // Gallery
 const galleryContainer = document.querySelector('.gallery-grid');
@@ -399,6 +404,7 @@ async function loadModelSettingsForView(modelName) {
         if (!modelSettings.labels) modelSettings.labels = {};
         epochSlider.value = modelSettings.epochs ?? 10;
         epochValueDisplay.textContent = epochSlider.value;
+        if (!modelSettings.modelType) modelSettings.modelType = 'tensorflow';
 
         // clears builder canvas
         builderCanvas.innerHTML = '';
@@ -436,6 +442,12 @@ async function loadModelSettingsForView(modelName) {
         const selectedTypeInput = document.querySelector(`input[name="train-project-type"][value="${selectedType}"]`);
         if (selectedTypeInput) {
             selectedTypeInput.checked = true;
+        }
+
+        const selectedFramework = modelSettings.modelType === 'pytorch' ? 'false' : 'true';
+        const selectedFrameworkInput = document.querySelector(`input[name="train"][value="${selectedFramework}"]`);
+        if (selectedFrameworkInput) {
+            selectedFrameworkInput.checked = true;
         }
     } catch (error) {
         console.error('Error loading model settings:', error);
@@ -1286,6 +1298,14 @@ trainProjectTypeInputs.forEach((input) => {
   });
 });
 
+trainFrameworkInputs.forEach((input) => {
+  input.addEventListener('change', async () => {
+    if (!input.checked || !modelSettings) return;
+    modelSettings.modelType = input.value === 'false' ? 'pytorch' : 'tensorflow';
+    await saveModelSettings();
+  });
+});
+
 
 // carousel animation
 carousel.addEventListener('animationiteration', () => {
@@ -1328,8 +1348,7 @@ modelTrainBtn.addEventListener('click', async () => {
     }
     renderChartState(activeRunState);
 
-    const selectedRadio = document.querySelector('input[name="train"]:checked');
-    const toggle = selectedRadio ? (selectedRadio.value === 'true' ? 'tensorflow' : 'pytorch') : 'tensorflow';
+    const toggle = getSelectedFramework();
     console.log(`[UI] : ${toggle}`);
     console.log(`[UI] Train button clicked for model "${currentModelName}" with ${epochs} epochs and toggle "${toggle}"`);
     console.log(`%c[UI] Training started with ${epochs} epochs!`, 'color: #007acc; font-weight: bold;');
@@ -1345,6 +1364,10 @@ modelTrainBtn.addEventListener('click', async () => {
         const { labelsJson, modelFolderPath } = await window.electronAPI.invoke('get-model-details-for-python', currentModelName);
 
         const projectType = modelSettings?.projectType || 'scratch';
+        if (modelSettings) {
+            modelSettings.modelType = toggle;
+            await saveModelSettings();
+        }
 
         const result = await window.electronAPI.executeTrain({
             labelsJson,
@@ -1409,15 +1432,36 @@ modelTrainBtn.addEventListener('click', async () => {
 // Test button in testing tab of a model
 runTestButton.addEventListener('click',async ()=> {
     const modelName = sessionStorage.getItem('projectName');
+    const testMessage = document.getElementById('test-results-message');
+    const testAccuracyVal = document.getElementById('test-accuracy-val');
+    const testLossVal = document.getElementById('test-loss-val');
+    const testCountVal = document.getElementById('test-count-val');
+
+    if (testMessage) {
+        testMessage.textContent = 'Running evaluation...';
+    }
 
     const result = await window.electronAPI.invoke('test-model', {
-        modelName: modelName
+        modelName: modelName,
+        modelType: getSelectedFramework()
     });
     if (result.success) {
         console.log(result);
-        document.getElementById('test-accuracy-val').textContent = (result.accuracy * 100).toFixed(2) + "%";
-        document.getElementById('test-loss-val').textContent = (result.loss * 100).toFixed(2) + "%";
-        document.getElementById('test-count-val').textContent =  result.total_images;
+        if (testAccuracyVal) testAccuracyVal.textContent = (result.accuracy * 100).toFixed(2) + "%";
+        if (testLossVal) testLossVal.textContent = result.loss.toFixed(4);
+        if (testCountVal) testCountVal.textContent = result.total_images;
+        if (testMessage) {
+            testMessage.textContent = result.model_classes && result.dataset_classes
+                ? `Evaluated ${result.dataset_classes} labels against a ${result.model_classes}-class model.`
+                : '';
+        }
+    } else {
+        const errorMessage = result.error || 'Evaluation failed.';
+        if (testAccuracyVal) testAccuracyVal.textContent = 'Error';
+        if (testLossVal) testLossVal.textContent = '—';
+        if (testCountVal) testCountVal.textContent = '—';
+        if (testMessage) testMessage.textContent = errorMessage;
+        console.error(errorMessage);
     }
 })
 
@@ -1626,7 +1670,8 @@ async function processPrediction(imagePath) {
     const currentModelName = sessionStorage.getItem('projectName');
     const result = await window.electronAPI.invoke('predict-image', {
         modelName: currentModelName,
-        imagePath: imagePath
+        imagePath: imagePath,
+        modelType: getSelectedFramework()
     });
 
 
