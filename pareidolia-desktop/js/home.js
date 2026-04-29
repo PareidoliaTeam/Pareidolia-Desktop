@@ -36,6 +36,10 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsModalClose = document.getElementById('settings-modal-close');
 
 //QR modal elements
+const sidebarQrPanel = document.querySelector('.sidebar-qr-panel');
+const sidebarQrToggle = document.getElementById('sidebar-qr-toggle');
+const sidebarQrArrow = document.getElementById('sidebar-qr-arrow');
+const sidebarQrCodeContainer = document.getElementById('sidebar-qr-code-container');
 const qrCodeContainer = document.getElementById('qr-code-container');
 const qrModal = document.getElementById('qr-modal');
 const uploadBtn = document.getElementById('upload-btn');
@@ -338,6 +342,27 @@ function openQRModal() {
 
 function closeQRModal() {
     qrModal.style.display= 'none';
+}
+
+function setSidebarQrExpanded(expanded) {
+    if (!sidebarQrPanel || !sidebarQrToggle || !sidebarQrArrow) {
+        return;
+    }
+
+    sidebarQrPanel.classList.toggle('is-expanded', expanded);
+    sidebarQrPanel.classList.toggle('is-collapsed', !expanded);
+    sidebarQrPanel.setAttribute('aria-expanded', String(expanded));
+    sidebarQrToggle.setAttribute('aria-expanded', String(expanded));
+    sidebarQrToggle.setAttribute('aria-label', expanded ? 'Collapse QR code' : 'Expand QR code');
+    sidebarQrArrow.setAttribute('aria-hidden', 'true');
+}
+
+function toggleSidebarQrPanel() {
+    if (!sidebarQrPanel) {
+        return;
+    }
+
+    setSidebarQrExpanded(sidebarQrPanel.classList.contains('is-collapsed'));
 }
 
 /**
@@ -709,23 +734,38 @@ async function generateQRCode() {
         const serverURL = `http://${localIP}:3001`;
         console.log('Generating QR code for:', serverURL);
 
-        // Clear the container
-        qrCodeContainer.innerHTML = '';
+        const renderQRCode = (container, size) => {
+            if (!container) {
+                return;
+            }
 
-        // Generate QR code using qrcode.js library
-        new QRCode(qrCodeContainer, {
-            text: serverURL,
-            width: 180,
-            height: 180,
-            colorDark: '#000000',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.H
-        });
+            container.innerHTML = '';
+
+            new QRCode(container, {
+                text: serverURL,
+                width: size,
+                height: size,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        };
+
+        renderQRCode(sidebarQrCodeContainer, 160);
+        renderQRCode(qrCodeContainer, 180);
 
         console.log('QR code generated successfully');
     } catch (error) {
         console.error('Error in generateQRCode:', error);
-        qrCodeContainer.textContent = 'Error: ' + error.message;
+        const errorMessage = 'Error: ' + error.message;
+
+        if (sidebarQrCodeContainer) {
+            sidebarQrCodeContainer.textContent = errorMessage;
+        }
+
+        if (qrCodeContainer) {
+            qrCodeContainer.textContent = errorMessage;
+        }
     }
 }
 
@@ -1092,6 +1132,14 @@ uploadBtn.addEventListener('click', (e) => {
     openQRModal();
 });
 
+// Sidebar QR toggle button
+if (sidebarQrToggle) {
+    sidebarQrToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSidebarQrPanel();
+    });
+}
+
 // QR Modal close button
 qrModalClose.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1380,6 +1428,7 @@ runTestButton.addEventListener('click',async ()=> {
 // Load projects from folder when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
     switchMode('view-home','.left-sidebar-models');
+    setSidebarQrExpanded(true);
 
     await loadModelsFromFolder();
     await generateQRCode();

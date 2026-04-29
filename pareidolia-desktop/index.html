@@ -19,6 +19,22 @@
     <!-- List of models -->
     <p class="model-section">Models</p>
     <nav id="modelsList" class="model-list"></nav>
+    <div class="sidebar-qr-spacer" aria-hidden="true"></div>
+    <section class="sidebar-qr-panel is-expanded" aria-label="Device connection QR code" aria-expanded="true">
+      <div class="sidebar-qr-card">
+        <div class="sidebar-qr-header">
+          <button type="button" id="sidebar-qr-toggle" class="sidebar-qr-toggle" aria-label="Collapse QR code" aria-expanded="true">
+            <img id="sidebar-qr-arrow" src="assets/arrow down.svg" alt="" aria-hidden="true">
+          </button>
+        </div>
+        <div class="sidebar-qr-body">
+          <div class="sidebar-qr-code-frame">
+            <div id="sidebar-qr-code-container"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-qr-connect-text">Connect</div>
+    </section>
     <button class="create-btn">+ Create</button>
   </aside>
 
