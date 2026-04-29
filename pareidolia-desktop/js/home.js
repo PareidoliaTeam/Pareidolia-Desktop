@@ -1289,8 +1289,8 @@ modelTrainBtn.addEventListener('click', async () => {
     try {
         modelTrainBtn.disabled = true;
         modelTrainBtn.textContent = 'Training in progress...';
-        modelTrainResults.textContent = 'Training in progress...';
-        modelTrainResults.style.color = '#FFA500';
+        // modelTrainResults.textContent = 'Training in progress...';
+        // modelTrainResults.style.color = '#FFA500';
 
         const callStartTime = Date.now();
 
@@ -1312,8 +1312,8 @@ modelTrainBtn.addEventListener('click', async () => {
 
         if (result.success) {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
-            modelTrainResults.textContent = `Training completed successfully!${execTime}`;
-            modelTrainResults.style.color = '#28a745';
+            // modelTrainResults.textContent = `Training completed successfully!${execTime}`;
+            // modelTrainResults.style.color = '#28a745';
             console.log('%c[UI] Training successful!', 'color: #28a745; font-weight: bold;');
             document.getElementById('epoch-progress-fill').style.width = `100%`;
             document.getElementById('progress-label').textContent = `Overall Progress: 100%`;
@@ -1342,15 +1342,15 @@ modelTrainBtn.addEventListener('click', async () => {
 
         } else {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
-            modelTrainResults.textContent = `Training failed.${execTime} Check console for details.`;
-            modelTrainResults.style.color = '#dc3545';
+            // modelTrainResults.textContent = `Training failed.${execTime} Check console for details.`;
+            // modelTrainResults.style.color = '#dc3545';
             console.error('%c[UI] Training failed!', 'color: #dc3545; font-weight: bold;');
             console.error('[UI] Error:', result.error);
         }
     } catch (error) {
         console.error('%c[UI] IPC error:', 'color: #dc3545; font-weight: bold;', error);
-        modelTrainResults.textContent = `IPC Error: ${error.message}`;
-        modelTrainResults.style.color = '#dc3545';
+        // modelTrainResults.textContent = `IPC Error: ${error.message}`;
+        // modelTrainResults.style.color = '#dc3545';
     } finally {
         activeTrainingModelName = null;
         modelTrainBtn.disabled = false;
