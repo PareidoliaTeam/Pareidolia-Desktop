@@ -1,3 +1,4 @@
+
 // ============================================================
 // Query Selectors
 // ============================================================
@@ -340,6 +341,33 @@ async function showModel(modelName,modelNamePath) {
     sessionStorage.setItem('projectPath', modelNamePath);
     showView('view-model-info');
     await loadModelSettingsForView(modelName);
+}
+
+async function checkExistingDatasets(modelName, modelNamePath) {
+    console.log('Checking datasets for model:', modelName, modelNamePath);
+
+    try {
+        const { labelsJson, modelFolderPath } = await window.electronAPI.invoke('get-model-details-for-python', modelName);
+
+        console.log('Model folder path:', modelFolderPath);
+        console.log('Labels associated with model:', labelsJson);
+
+        for (const labelName in labelsJson) {
+            for (const datasetPath of labelsJson[labelName]) {
+                console.log(`Dataset for label '${labelName}':`, datasetPath);
+
+                const exists = await window.electronAPI.invoke('path-exists', datasetPath);
+
+                if (exists) {
+                    console.log(`Dataset path for label '${labelName}' exists.`);
+                } else {
+                    console.log(`Dataset path for label '${labelName}' does not exist.`);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error checking existing datasets:', error);
+    }
 }
 
 /**
@@ -1026,6 +1054,7 @@ async function loadModelsFromFolder() {
             const li = document.createElement('li');
             li.classList.add('model-item');
             li.setAttribute('data-path', modelInfo.path);
+            li.setAttribute('data-model-name', modelName);
 
             const div = document.createElement('div');
             div.classList.add('model-open-btn');
@@ -1033,8 +1062,11 @@ async function loadModelsFromFolder() {
             li.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const modelPath = li.getAttribute('data-path');
-                const modelDisplayName = div.textContent;
+                const modelDisplayName = li.getAttribute('data-model-name') || div.textContent;
+
+                console.log('Model item clicked:', modelDisplayName, modelPath);
                 showModel(modelDisplayName,modelPath);
+                checkExistingDatasets(modelName, modelInfo.path);
             });
             li.appendChild(div);
             modelsList.appendChild(li);

@@ -938,6 +938,13 @@ ipcMain.handle('get-model-settings', async (event, modelName) => {
 });
 
 /**
+ * Handle checking whether a filesystem path exists.
+ */
+ipcMain.handle('path-exists', async (event, targetPath) => {
+  return fs.existsSync(targetPath);
+});
+
+/**
  * Handle updating model settings via IPC from renderer process
  */
 ipcMain.handle('update-model-settings', async (event, params) => {
