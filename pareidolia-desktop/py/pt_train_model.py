@@ -862,7 +862,7 @@ if __name__ == "__main__":
     early_stop_cb = EarlyStopping(
         monitor="val_acc",
         mode="max",
-        patience=5,
+        patience=10,
     )
 
     lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")

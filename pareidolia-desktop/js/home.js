@@ -10,12 +10,14 @@ const projectPath = sessionStorage.getItem('projectPath') || 'No path';
 const datasetNameDisplay = document.getElementById('current-dataset-title');
 const datasetPathDisplay = document.getElementById('current-dataset-filepath');
 const datasetsList = document.getElementById('datasetsList');
+const deleteDatasetBtn = document.getElementById('delete-dataset-btn');
 
 // Model elements
 const modelNameDisplay = document.getElementById('current-model-title');
 const modelPathDisplay = document.getElementById('current-model-path');
 const modelsList = document.getElementById('modelsList');
 const addModelBtn = document.querySelector('.create-btn');
+const deleteModelBtn = document.getElementById('delete-model-btn');
 
 // Model modal elements
 const addProjectModal = document.getElementById('add-model-modal');
@@ -24,6 +26,11 @@ const projectTypeInputs = document.getElementsByName('project-type');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalClose = document.querySelector('.modal-close');
+const deleteModelModal = document.getElementById('delete-model-modal');
+const deleteModelModalClose = document.getElementById('delete-model-modal-close');
+const deleteModelName = document.getElementById('delete-model-name');
+const deleteModelConfirmInput = document.getElementById('delete-model-confirm-input');
+const deleteModelCancelBtn = document.getElementById('delete-model-cancel-btn');
 
 // Help modal elements
 const helpModal = document.getElementById('help-modal');
@@ -36,6 +43,10 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsModalClose = document.getElementById('settings-modal-close');
 
 //QR modal elements
+const sidebarQrPanel = document.querySelector('.sidebar-qr-panel');
+const sidebarQrToggle = document.getElementById('sidebar-qr-toggle');
+const sidebarQrArrow = document.getElementById('sidebar-qr-arrow');
+const sidebarQrCodeContainer = document.getElementById('sidebar-qr-code-container');
 const qrCodeContainer = document.getElementById('qr-code-container');
 const qrModal = document.getElementById('qr-modal');
 const uploadBtn = document.getElementById('upload-btn');
@@ -47,7 +58,12 @@ const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
 const trainProjectTypeInputs = document.querySelectorAll('input[name="train-project-type"]');
-//const modelToggle = document.getElementsByName('train');
+const trainFrameworkInputs = document.querySelectorAll('input[name="train"]');
+
+function getSelectedFramework() {
+    const selectedRadio = document.querySelector('input[name="train"]:checked');
+    return selectedRadio && selectedRadio.value === 'false' ? 'pytorch' : 'tensorflow';
+}
 
 // Gallery
 const galleryContainer = document.querySelector('.gallery-grid');
@@ -67,6 +83,11 @@ const datasetModalTitle = document.getElementById('dataset-modal-title');
 const datasetModalClose = document.getElementById('dataset-modal-close');
 const assignedDatasetsList = document.getElementById('assigned-datasets-list');
 const availableDatasetsList = document.getElementById('available-datasets-list');
+const deleteDatasetModal = document.getElementById('delete-dataset-modal');
+const deleteDatasetModalClose = document.getElementById('delete-dataset-modal-close');
+const deleteDatasetName = document.getElementById('delete-dataset-name');
+const deleteDatasetConfirmInput = document.getElementById('delete-dataset-confirm-input');
+const deleteDatasetCancelBtn = document.getElementById('delete-dataset-cancel-btn');
 
 // Current model settings state
 let modelSettings = null;
@@ -84,6 +105,11 @@ const viewBlockBtn = document.getElementById('view-blocks-btn');
 
 // charts
 let accuracyChart, lossChart;
+let chartResizeObserver = null;
+let chartResizeFrame = null;
+const chartStateByModel = new Map();
+let activeChartModelName = null;
+let activeTrainingModelName = null;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -96,6 +122,125 @@ const runTestButton = document.getElementById('run-test-btn');
 // ============================================================
 // Functions
 // ============================================================
+
+function createEmptyChartState() {
+    return {
+        labels: [],
+        accuracy: {
+            train: [],
+            val: []
+        },
+        loss: {
+            train: [],
+            val: []
+        }
+    };
+}
+
+function cloneChartState(chartState) {
+    const normalized = chartState || createEmptyChartState();
+
+    return {
+        labels: [...(normalized.labels || [])],
+        accuracy: {
+            train: [...(normalized.accuracy?.train || [])],
+            val: [...(normalized.accuracy?.val || [])]
+        },
+        loss: {
+            train: [...(normalized.loss?.train || [])],
+            val: [...(normalized.loss?.val || [])]
+        }
+    };
+}
+
+function isEmptyChartState(chartState) {
+    return !chartState
+        || (chartState.labels?.length || 0) === 0
+        && (chartState.accuracy?.train?.length || 0) === 0
+        && (chartState.accuracy?.val?.length || 0) === 0
+        && (chartState.loss?.train?.length || 0) === 0
+        && (chartState.loss?.val?.length || 0) === 0;
+}
+
+function normalizeChartState(chartState) {
+    if (!chartState || typeof chartState !== 'object') {
+        return createEmptyChartState();
+    }
+
+    return cloneChartState(chartState);
+}
+
+function getChartStateForModel(modelName) {
+    if (!chartStateByModel.has(modelName)) {
+        chartStateByModel.set(modelName, createEmptyChartState());
+    }
+
+    return chartStateByModel.get(modelName);
+}
+
+function setChartStateForModel(modelName, chartState) {
+    chartStateByModel.set(modelName, cloneChartState(chartState));
+}
+
+function renderChartState(chartState) {
+    if (!accuracyChart || !lossChart) return;
+
+    const normalized = normalizeChartState(chartState);
+
+    accuracyChart.data.labels = [...normalized.labels];
+    accuracyChart.data.datasets[0].data = [...normalized.accuracy.train];
+    accuracyChart.data.datasets[1].data = [...normalized.accuracy.val];
+
+    lossChart.data.labels = [...normalized.labels];
+    lossChart.data.datasets[0].data = [...normalized.loss.train];
+    lossChart.data.datasets[1].data = [...normalized.loss.val];
+
+    accuracyChart.update();
+    lossChart.update();
+}
+
+function renderSummaryCard(chartState) {
+    const normalized = normalizeChartState(chartState);
+    const lastIdx = normalized.accuracy.train.length - 1;
+
+    const finalAcc = lastIdx >= 0 ? normalized.accuracy.train[lastIdx] : null;
+    const finalValAcc = lastIdx >= 0 ? normalized.accuracy.val[lastIdx] : null;
+    const finalLoss = lastIdx >= 0 ? normalized.loss.train[lastIdx] : null;
+    const finalValLoss = lastIdx >= 0 ? normalized.loss.val[lastIdx] : null;
+
+    const accDisplay = document.getElementById('sum-acc');
+    const valAccDisplay = document.getElementById('sum-val-acc');
+    const lossDisplay = document.getElementById('sum-loss');
+    const valLossDisplay = document.getElementById('sum-val-loss');
+
+    if (accDisplay) accDisplay.textContent = finalAcc === null ? '-' : `${(finalAcc * 100).toFixed(2)}%`;
+    if (valAccDisplay) valAccDisplay.textContent = finalValAcc === null ? '-' : `${(finalValAcc * 100).toFixed(2)}%`;
+    if (lossDisplay) lossDisplay.textContent = finalLoss === null ? '-' : parseFloat(finalLoss).toFixed(4);
+    if (valLossDisplay) valLossDisplay.textContent = finalValLoss === null ? '-' : parseFloat(finalValLoss).toFixed(4);
+}
+
+function syncChartStateToCurrentModel() {
+    if (!activeChartModelName) return;
+
+    const chartState = getChartStateForModel(activeChartModelName);
+    if (modelSettings) {
+        modelSettings.chartHistory = cloneChartState(chartState);
+    }
+
+    renderChartState(chartState);
+    renderSummaryCard(chartState);
+}
+
+async function persistModelSettings(modelName, settings) {
+    if (!modelName || !settings) return;
+
+    try {
+        await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
+        console.log('Model settings saved');
+    } catch (error) {
+        console.error('Error saving model settings:', error);
+    }
+}
 
 
 /**
@@ -216,6 +361,27 @@ function closeQRModal() {
     qrModal.style.display= 'none';
 }
 
+function setSidebarQrExpanded(expanded) {
+    if (!sidebarQrPanel || !sidebarQrToggle || !sidebarQrArrow) {
+        return;
+    }
+
+    sidebarQrPanel.classList.toggle('is-expanded', expanded);
+    sidebarQrPanel.classList.toggle('is-collapsed', !expanded);
+    sidebarQrPanel.setAttribute('aria-expanded', String(expanded));
+    sidebarQrToggle.setAttribute('aria-expanded', String(expanded));
+    sidebarQrToggle.setAttribute('aria-label', expanded ? 'Collapse QR code' : 'Expand QR code');
+    sidebarQrArrow.setAttribute('aria-hidden', 'true');
+}
+
+function toggleSidebarQrPanel() {
+    if (!sidebarQrPanel) {
+        return;
+    }
+
+    setSidebarQrExpanded(sidebarQrPanel.classList.contains('is-collapsed'));
+}
+
 /**
  * Opens the image options model
  */
@@ -234,6 +400,52 @@ function closeOptionsModal() {
     optionsModal.style.display = 'none';
 }
 
+/**
+ * Opens the delete dataset confirmation modal for display only.
+ */
+function openDeleteDatasetModal() {
+    const currentDatasetName = sessionStorage.getItem('projectName') || datasetNameDisplay?.textContent || 'this dataset';
+
+    deleteDatasetName.textContent = currentDatasetName;
+    deleteDatasetConfirmInput.value = '';
+    deleteDatasetModal.style.display = 'flex';
+    deleteDatasetConfirmInput.focus();
+}
+
+/**
+ * Closes the delete dataset confirmation modal.
+ */
+function closeDeleteDatasetModal() {
+    deleteDatasetModal.style.display = 'none';
+}
+
+/**
+ * Opens the delete model confirmation modal for display only.
+ */
+function openDeleteModelModal() {
+    const currentModelName = sessionStorage.getItem('projectName') || modelNameDisplay?.textContent || 'this model';
+
+    deleteModelName.textContent = currentModelName;
+    deleteModelConfirmInput.value = '';
+    deleteModelModal.style.display = 'flex';
+    deleteModelConfirmInput.focus();
+}
+
+/**
+ * Closes the delete model confirmation modal.
+ */
+function closeDeleteModelModal() {
+    deleteModelModal.style.display = 'none';
+}
+
+function updateBuilderButtonState() {
+    const selectedType = document.querySelector('input[name="train-project-type"]:checked')?.value || modelSettings?.projectType || 'scratch';
+    const canOpenBuilder = selectedType === 'scratch';
+
+    builderModalBtn.disabled = !canOpenBuilder;
+    builderModalBtn.title = canOpenBuilder ? 'Open Editor' : 'Only available when Start From Scratch is selected';
+}
+
 // ============================================================
 // LABEL & DATASET MANAGEMENT
 // ============================================================
@@ -250,6 +462,7 @@ async function loadModelSettingsForView(modelName) {
         if (!modelSettings.labels) modelSettings.labels = {};
         epochSlider.value = modelSettings.epochs ?? 10;
         epochValueDisplay.textContent = epochSlider.value;
+        if (!modelSettings.modelType) modelSettings.modelType = 'tensorflow';
 
         // clears builder canvas
         builderCanvas.innerHTML = '';
@@ -271,10 +484,29 @@ async function loadModelSettingsForView(modelName) {
 
         if (!modelSettings.projectType) modelSettings.projectType = 'scratch';
 
+        const persistedChartState = normalizeChartState(modelSettings.chartHistory);
+        const cachedChartState = chartStateByModel.get(modelName);
+
+        if (isEmptyChartState(cachedChartState)) {
+            setChartStateForModel(modelName, persistedChartState);
+        }
+
+        activeChartModelName = modelName;
+        modelSettings.chartHistory = cloneChartState(getChartStateForModel(modelName));
+        renderChartState(modelSettings.chartHistory);
+        renderSummaryCard(modelSettings.chartHistory);
+
         const selectedType = modelSettings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
         const selectedTypeInput = document.querySelector(`input[name="train-project-type"][value="${selectedType}"]`);
         if (selectedTypeInput) {
             selectedTypeInput.checked = true;
+        }
+        updateBuilderButtonState();
+
+        const selectedFramework = modelSettings.modelType === 'pytorch' ? 'false' : 'true';
+        const selectedFrameworkInput = document.querySelector(`input[name="train"][value="${selectedFramework}"]`);
+        if (selectedFrameworkInput) {
+            selectedFrameworkInput.checked = true;
         }
     } catch (error) {
         console.error('Error loading model settings:', error);
@@ -288,7 +520,7 @@ async function loadModelSettingsForView(modelName) {
  */
 async function saveModelSettings() {
     if (!modelSettings) return;
-    const modelName = sessionStorage.getItem('projectName')
+    const modelName = sessionStorage.getItem('projectName');
     const blocks = document.querySelectorAll('.model-block');
 
     modelSettings.layers = Array.from(blocks).map(block => {
@@ -301,12 +533,9 @@ async function saveModelSettings() {
             parameters: params
         };
     });
-    try {
-        await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: modelSettings });
-        console.log('Model settings saved');
-    } catch (error) {
-        console.error('Error saving model settings:', error);
-    }
+
+    modelSettings.chartHistory = cloneChartState(getChartStateForModel(modelName));
+    await persistModelSettings(modelName, modelSettings);
 }
 
 /**
@@ -576,23 +805,38 @@ async function generateQRCode() {
         const serverURL = `http://${localIP}:3001`;
         console.log('Generating QR code for:', serverURL);
 
-        // Clear the container
-        qrCodeContainer.innerHTML = '';
+        const renderQRCode = (container, size) => {
+            if (!container) {
+                return;
+            }
 
-        // Generate QR code using qrcode.js library
-        new QRCode(qrCodeContainer, {
-            text: serverURL,
-            width: 180,
-            height: 180,
-            colorDark: '#000000',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.H
-        });
+            container.innerHTML = '';
+
+            new QRCode(container, {
+                text: serverURL,
+                width: size,
+                height: size,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        };
+
+        renderQRCode(sidebarQrCodeContainer, 160);
+        renderQRCode(qrCodeContainer, 180);
 
         console.log('QR code generated successfully');
     } catch (error) {
         console.error('Error in generateQRCode:', error);
-        qrCodeContainer.textContent = 'Error: ' + error.message;
+        const errorMessage = 'Error: ' + error.message;
+
+        if (sidebarQrCodeContainer) {
+            sidebarQrCodeContainer.textContent = errorMessage;
+        }
+
+        if (qrCodeContainer) {
+            qrCodeContainer.textContent = errorMessage;
+        }
     }
 }
 
@@ -906,6 +1150,47 @@ function openTab(event, tabId) {
 
     document.getElementById(tabId).classList.add('active');
     event.currentTarget.classList.add('active');
+
+    if (tabId === 'tab-train') {
+        requestChartResize();
+    }
+}
+
+function requestChartResize() {
+    if (!accuracyChart || !lossChart) return;
+
+    if (chartResizeFrame) {
+        cancelAnimationFrame(chartResizeFrame);
+    }
+
+    chartResizeFrame = requestAnimationFrame(() => {
+        chartResizeFrame = null;
+        accuracyChart.resize();
+        lossChart.resize();
+    });
+}
+
+function setupChartResizeSync() {
+    if (chartResizeObserver) {
+        chartResizeObserver.disconnect();
+        chartResizeObserver = null;
+    }
+
+    const chartContainers = document.querySelectorAll('.charts-container, .chart-wrapper');
+    if (typeof ResizeObserver === 'undefined' || chartContainers.length === 0) {
+        return;
+    }
+
+    chartResizeObserver = new ResizeObserver(() => {
+        requestChartResize();
+    });
+
+    chartContainers.forEach((container) => {
+        chartResizeObserver.observe(container);
+    });
+
+    window.addEventListener('resize', requestChartResize);
+    document.addEventListener('fullscreenchange', requestChartResize);
 }
 
 // ============================================================
@@ -913,10 +1198,20 @@ function openTab(event, tabId) {
 // ============================================================
 
 // Upload Button - opens QR modal
-uploadBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openQRModal();
-});
+if (uploadBtn) {
+    uploadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openQRModal();
+    });
+}
+
+// Sidebar QR toggle button
+if (sidebarQrToggle) {
+    sidebarQrToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSidebarQrPanel();
+    });
+}
 
 // QR Modal close button
 qrModalClose.addEventListener('click', (e) => {
@@ -995,6 +1290,7 @@ optionsModalClose.addEventListener('click', (e) => {
 // Open Block Builder Modal
 builderModalBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (builderModalBtn.disabled) return;
     openBuilderModal();
 })
 // Close Block Builder Modal
@@ -1058,8 +1354,18 @@ epochSlider.addEventListener('change', async (event) => {
 // Project type radio buttons change in training menu
 trainProjectTypeInputs.forEach((input) => {
   input.addEventListener('change', async () => {
-    if (!input.checked || !modelSettings) return;
+    if (!input.checked) return;
+    updateBuilderButtonState();
+    if (!modelSettings) return;
     modelSettings.projectType = input.value;
+    await saveModelSettings();
+  });
+});
+
+trainFrameworkInputs.forEach((input) => {
+  input.addEventListener('change', async () => {
+    if (!input.checked || !modelSettings) return;
+    modelSettings.modelType = input.value === 'false' ? 'pytorch' : 'tensorflow';
     await saveModelSettings();
   });
 });
@@ -1092,22 +1398,51 @@ datasetModal.addEventListener('click', (e) => {
     if (e.target === datasetModal) closeDatasetModal();
 });
 
+// Delete dataset modal open button
+deleteDatasetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDeleteDatasetModal();
+});
+
+// Delete dataset modal close buttons
+deleteDatasetModalClose.addEventListener('click', closeDeleteDatasetModal);
+deleteDatasetCancelBtn.addEventListener('click', closeDeleteDatasetModal);
+
+// Delete dataset modal backdrop click
+deleteDatasetModal.addEventListener('click', (e) => {
+    if (e.target === deleteDatasetModal) closeDeleteDatasetModal();
+});
+
+// Delete model modal open button
+deleteModelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDeleteModelModal();
+});
+
+// Delete model modal close buttons
+deleteModelModalClose.addEventListener('click', closeDeleteModelModal);
+deleteModelCancelBtn.addEventListener('click', closeDeleteModelModal);
+
+// Delete model modal backdrop click
+deleteModelModal.addEventListener('click', (e) => {
+    if (e.target === deleteModelModal) closeDeleteModelModal();
+});
+
 // Train Model button click handler
 modelTrainBtn.addEventListener('click', async () => {
-
-    //Chart updating
-    if (accuracyChart && lossChart) {
-        accuracyChart.data.labels = [];
-        accuracyChart.data.datasets.forEach(d => d.data = []);
-        lossChart.data.datasets.forEach(d => d.data = []);
-        accuracyChart.update();
-        lossChart.update();
-    }
-
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
-    const selectedRadio = document.querySelector('input[name="train"]:checked');
-    const toggle = selectedRadio ? (selectedRadio.value === 'true' ? 'tensorflow' : 'pytorch') : 'tensorflow';
+    activeTrainingModelName = currentModelName;
+    activeChartModelName = currentModelName;
+
+    const activeRunState = createEmptyChartState();
+    setChartStateForModel(currentModelName, activeRunState);
+    if (modelSettings) {
+        modelSettings.chartHistory = cloneChartState(activeRunState);
+    }
+    renderChartState(activeRunState);
+
+    const toggle = getSelectedFramework();
     console.log(`[UI] : ${toggle}`);
     console.log(`[UI] Train button clicked for model "${currentModelName}" with ${epochs} epochs and toggle "${toggle}"`);
     console.log(`%c[UI] Training started with ${epochs} epochs!`, 'color: #007acc; font-weight: bold;');
@@ -1115,14 +1450,18 @@ modelTrainBtn.addEventListener('click', async () => {
     try {
         modelTrainBtn.disabled = true;
         modelTrainBtn.textContent = 'Training in progress...';
-        modelTrainResults.textContent = 'Training in progress...';
-        modelTrainResults.style.color = '#FFA500';
+        // modelTrainResults.textContent = 'Training in progress...';
+        // modelTrainResults.style.color = '#FFA500';
 
         const callStartTime = Date.now();
 
         const { labelsJson, modelFolderPath } = await window.electronAPI.invoke('get-model-details-for-python', currentModelName);
 
         const projectType = modelSettings?.projectType || 'scratch';
+        if (modelSettings) {
+            modelSettings.modelType = toggle;
+            await saveModelSettings();
+        }
 
         const result = await window.electronAPI.executeTrain({
             labelsJson,
@@ -1138,8 +1477,8 @@ modelTrainBtn.addEventListener('click', async () => {
 
         if (result.success) {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
-            modelTrainResults.textContent = `Training completed successfully!${execTime}`;
-            modelTrainResults.style.color = '#28a745';
+            // modelTrainResults.textContent = `Training completed successfully!${execTime}`;
+            // modelTrainResults.style.color = '#28a745';
             console.log('%c[UI] Training successful!', 'color: #28a745; font-weight: bold;');
             document.getElementById('epoch-progress-fill').style.width = `100%`;
             document.getElementById('progress-label').textContent = `Overall Progress: 100%`;
@@ -1147,17 +1486,8 @@ modelTrainBtn.addEventListener('click', async () => {
             const summaryCard = document.getElementById('final-summary-card');
             summaryCard.style.display = 'block';
 
-            const lastIdx = accuracyChart.data.datasets[0].data.length - 1;
-
-            const finalAcc = accuracyChart.data.datasets[0].data[lastIdx];
-            const finalValAcc = accuracyChart.data.datasets[1].data[lastIdx];
-            const finalLoss = lossChart.data.datasets[0].data[lastIdx];
-            const finalValLoss = lossChart.data.datasets[1].data[lastIdx];
-
-            document.getElementById('sum-acc').textContent = (finalAcc * 100).toFixed(2) + "%";
-            document.getElementById('sum-val-acc').textContent = (finalValAcc * 100).toFixed(2) + "%";
-            document.getElementById('sum-loss').textContent = parseFloat(finalLoss).toFixed(4);
-            document.getElementById('sum-val-loss').textContent = parseFloat(finalValLoss).toFixed(4);
+            const completedChartState = getChartStateForModel(currentModelName);
+            renderSummaryCard(completedChartState);
 
             // timestamp stuff
             const now = new Date();
@@ -1170,23 +1500,24 @@ modelTrainBtn.addEventListener('click', async () => {
             }
             // save to JSON
             if(modelSettings){
+                modelSettings.chartHistory = cloneChartState(completedChartState);
                 modelSettings.lastTrained = timestamp;
-                modelSettings.modelType = selectedRadio ? (selectedRadio.value === 'true' ? 'tensorflow' : 'pytorch') : 'tensorflow';
-                await saveModelSettings();
+                await persistModelSettings(currentModelName, modelSettings);
             }
 
         } else {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
-            modelTrainResults.textContent = `Training failed.${execTime} Check console for details.`;
-            modelTrainResults.style.color = '#dc3545';
+            // modelTrainResults.textContent = `Training failed.${execTime} Check console for details.`;
+            // modelTrainResults.style.color = '#dc3545';
             console.error('%c[UI] Training failed!', 'color: #dc3545; font-weight: bold;');
             console.error('[UI] Error:', result.error);
         }
     } catch (error) {
         console.error('%c[UI] IPC error:', 'color: #dc3545; font-weight: bold;', error);
-        modelTrainResults.textContent = `IPC Error: ${error.message}`;
-        modelTrainResults.style.color = '#dc3545';
+        // modelTrainResults.textContent = `IPC Error: ${error.message}`;
+        // modelTrainResults.style.color = '#dc3545';
     } finally {
+        activeTrainingModelName = null;
         modelTrainBtn.disabled = false;
         modelTrainBtn.textContent = 'Train Model';
     }
@@ -1195,15 +1526,36 @@ modelTrainBtn.addEventListener('click', async () => {
 // Test button in testing tab of a model
 runTestButton.addEventListener('click',async ()=> {
     const modelName = sessionStorage.getItem('projectName');
+    const testMessage = document.getElementById('test-results-message');
+    const testAccuracyVal = document.getElementById('test-accuracy-val');
+    const testLossVal = document.getElementById('test-loss-val');
+    const testCountVal = document.getElementById('test-count-val');
+
+    if (testMessage) {
+        testMessage.textContent = 'Running evaluation...';
+    }
 
     const result = await window.electronAPI.invoke('test-model', {
-        modelName: modelName
+        modelName: modelName,
+        modelType: getSelectedFramework()
     });
     if (result.success) {
         console.log(result);
-        document.getElementById('test-accuracy-val').textContent = (result.accuracy * 100).toFixed(2) + "%";
-        document.getElementById('test-loss-val').textContent = (result.loss * 100).toFixed(2) + "%";
-        document.getElementById('test-count-val').textContent =  result.total_images;
+        if (testAccuracyVal) testAccuracyVal.textContent = (result.accuracy * 100).toFixed(2) + "%";
+        if (testLossVal) testLossVal.textContent = result.loss.toFixed(4);
+        if (testCountVal) testCountVal.textContent = result.total_images;
+        if (testMessage) {
+            testMessage.textContent = result.model_classes && result.dataset_classes
+                ? `Evaluated ${result.dataset_classes} labels against a ${result.model_classes}-class model.`
+                : '';
+        }
+    } else {
+        const errorMessage = result.error || 'Evaluation failed.';
+        if (testAccuracyVal) testAccuracyVal.textContent = 'Error';
+        if (testLossVal) testLossVal.textContent = '—';
+        if (testCountVal) testCountVal.textContent = '—';
+        if (testMessage) testMessage.textContent = errorMessage;
+        console.error(errorMessage);
     }
 })
 
@@ -1214,12 +1566,15 @@ runTestButton.addEventListener('click',async ()=> {
 // Load projects from folder when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
     switchMode('view-home','.left-sidebar-models');
+    setSidebarQrExpanded(true);
 
     await loadModelsFromFolder();
     await generateQRCode();
 
     // Initialize and setup charts
     initCharts();
+    setupChartResizeSync();
+    requestChartResize();
     const epochRegex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
     let stdoutBuffer = '';
     let stderrBuffer = '';
@@ -1247,9 +1602,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const match = trimmedLine.match(epochRegex);
-            if (match && accuracyChart && lossChart) {
+            if (match && activeTrainingModelName) {
                 const [_, epoch, tLoss, tAcc, vLoss, vAcc] = match;
                 const eLabel = `E${epoch}`;
+
+                const chartState = getChartStateForModel(activeTrainingModelName);
+                chartState.labels.push(eLabel);
+                chartState.accuracy.train.push(parseFloat(tAcc));
+                chartState.accuracy.val.push(parseFloat(vAcc));
+                chartState.loss.train.push(parseFloat(tLoss));
+                chartState.loss.val.push(parseFloat(vLoss));
+
+                if (activeChartModelName === activeTrainingModelName) {
+                    renderChartState(chartState);
+                }
 
                 const currentEpoch = parseInt(epoch);
                 const totalEpochs = parseInt(epochSlider.value);
@@ -1257,18 +1623,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
                 document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
-
-                // Accuracy Chart Data
-                accuracyChart.data.labels.push(eLabel);
-                accuracyChart.data.datasets[0].data.push(parseFloat(tAcc));
-                accuracyChart.data.datasets[1].data.push(parseFloat(vAcc));
-                accuracyChart.update();
-
-                // loss Chart Data
-                lossChart.data.labels.push(eLabel);
-                lossChart.data.datasets[0].data.push(parseFloat(tLoss));
-                lossChart.data.datasets[1].data.push(parseFloat(vLoss));
-                lossChart.update();
             }
         });
     };
@@ -1306,6 +1660,7 @@ require(['vs/editor/editor.main'], function() {
 function initCharts() {
     const commonOptions = {
         responsive: true,
+        maintainAspectRatio: false,
         scales: { y: { beginAtZero: true } },
         animation: true,
     };
@@ -1332,6 +1687,10 @@ function initCharts() {
         },
         options: commonOptions
     });
+
+    if (activeChartModelName) {
+        renderChartState(getChartStateForModel(activeChartModelName));
+    }
 }
 
 // Prediction Tab Logic (definetly need to reorganize into different files after this PR) - Actually leaving it here because the breakup into different JS files will be done as part of the polish phase
@@ -1405,7 +1764,8 @@ async function processPrediction(imagePath) {
     const currentModelName = sessionStorage.getItem('projectName');
     const result = await window.electronAPI.invoke('predict-image', {
         modelName: currentModelName,
-        imagePath: imagePath
+        imagePath: imagePath,
+        modelType: getSelectedFramework()
     });
 
 

@@ -258,7 +258,19 @@ export async function createModelFolder(input) {
     const defaultSettings = {
       labels: {},
       epochs: 10,
+      modelType: 'tensorflow',
       projectType: projectType, // 'scratch' or 'pretrained'
+      chartHistory: {
+        labels: [],
+        accuracy: {
+          train: [],
+          val: []
+        },
+        loss: {
+          train: [],
+          val: []
+        }
+      },
       layers: [
         {
           "type": "Conv2D",
@@ -420,6 +432,41 @@ export async function getModelSettings(modelName) {
     console.error(`Error getting model settings: ${error.message}`);
     throw error;
   }
+}
+
+/**
+ * Resolves the model file and framework type for a saved model.
+ * Prefers the framework persisted in model-settings.json, but falls back to
+ * the files that are actually present on disk for older projects.
+ */
+function resolveModelArtifact(modelName, settings = {}, requestedModelType = null) {
+  const pareidoliaPath = getPareidoliaFolderPath();
+  const modelFolder = path.join(pareidoliaPath, 'models', modelName, 'models');
+  const kerasPath = path.join(modelFolder, 'model.keras');
+  const ckptPath = path.join(modelFolder, 'model.ckpt');
+  const savedModelType = requestedModelType || settings.modelType;
+
+  if (savedModelType === 'tensorflow' && fs.existsSync(kerasPath)) {
+    return { modelFile: 'model.keras', modelPath: kerasPath, modelType: 'tensorflow' };
+  }
+
+  if (savedModelType === 'pytorch' && fs.existsSync(ckptPath)) {
+    return { modelFile: 'model.ckpt', modelPath: ckptPath, modelType: 'pytorch' };
+  }
+
+  if (fs.existsSync(kerasPath)) {
+    return { modelFile: 'model.keras', modelPath: kerasPath, modelType: 'tensorflow' };
+  }
+
+  if (fs.existsSync(ckptPath)) {
+    return { modelFile: 'model.ckpt', modelPath: ckptPath, modelType: 'pytorch' };
+  }
+
+  if (savedModelType === 'tensorflow') {
+    return { modelFile: 'model.keras', modelPath: kerasPath, modelType: 'tensorflow' };
+  }
+
+  return { modelFile: 'model.ckpt', modelPath: ckptPath, modelType: 'pytorch' };
 }
 
 /**
@@ -848,18 +895,10 @@ ipcMain.handle('update-model-settings', async (event, params) => {
  * Handle model prediction via IPC from renderer process
  */
 ipcMain.handle('predict-image', async (event, params) => {
-  const { modelName, imagePath } = params;
-  const pareidoliaPath = getPareidoliaFolderPath();
+  const { modelName, imagePath, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
-  let modelFile
-
-  if (settings.modelType === 'tensorflow'){
-    modelFile = 'model.keras';
-  } else {
-    modelFile = 'model.ckpt';
-  }
-  const modelPath = path.join(pareidoliaPath, 'models', modelName, 'models', modelFile);
+  const { modelPath } = resolveModelArtifact(modelName, settings, modelType);
 
   let scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
       ? path.join(__dirname, '../../py/predict.py')
@@ -894,30 +933,28 @@ ipcMain.handle('predict-image', async (event, params) => {
  */
 
 ipcMain.handle('test-model', async (event, params) => {
-  const {modelName} = params;
-  const pareidoliaPath = getPareidoliaFolderPath();
+  const { modelName, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
-  let modelFile, scriptPath, args;
+  let scriptPath, args;
+  const { modelPath, modelType: resolvedModelType } = resolveModelArtifact(modelName, settings, modelType);
 
   // Checks type of model and selects the correct script and filepath.
-  if (settings.modelType === 'tensorflow') {
-    modelFile = 'model.keras';
+  if (resolvedModelType === 'tensorflow') {
     scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../../py/tf_test_model.py')
         : path.join(process.resourcesPath, 'py/tf_test_model.py');
     args = [
-        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile),
+        modelPath,
         JSON.stringify(labelsJson),
         settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
       ];
   } else{
-    modelFile = 'model.ckpt';
     scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../../py/pt_test_model.py')
         : path.join(process.resourcesPath, 'py/pt_test_model.py');
     args = [
-        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile),
+        modelPath,
         JSON.stringify(labelsJson),
         settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
       ];

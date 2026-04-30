@@ -23,6 +23,25 @@
     </div>
     <input id="model-search" type="text" placeholder="Search">
     <nav id="modelsList" class="model-list"></nav>
+    <div class="sidebar-qr-spacer" aria-hidden="true"></div>
+    <section class="sidebar-qr-panel is-expanded" aria-label="Device connection QR code" aria-expanded="true">
+      <div class="sidebar-qr-shell">
+        <div class="sidebar-qr-card">
+          <div class="sidebar-qr-header">
+            <button type="button" id="sidebar-qr-toggle" class="sidebar-qr-toggle" aria-label="Collapse QR code" aria-expanded="true">
+              <img id="sidebar-qr-arrow" src="assets/arrow down.svg" alt="" aria-hidden="true">
+            </button>
+          </div>
+          <div class="sidebar-qr-body">
+            <div class="sidebar-qr-code-frame">
+              <div id="sidebar-qr-code-container"></div>
+            </div>
+            <p id="test-results-message" class="test-results-message" aria-live="polite"></p>
+          </div>
+        </div>
+        <div class="sidebar-qr-connect-text">Connect</div>
+      </div>
+    </section>
     <button class="create-btn">+ Create</button>
   </aside>
 
@@ -49,10 +68,12 @@
 
     <!-- Home Page View -->
     <div id="view-home" class="app-view">
-      <h2>Datasets</h2>
-      <div class="dataset-button-group">
-        <button class="dataset-btn" onclick="switchMode('view-home', '.left-sidebar-datasets')">✦ View</button>
-        <button id="upload-btn" class="dataset-btn">↑ Upload</button>
+      <div class="home-logo-hero" aria-label="Pareidolia logo">
+        <img src="assets/logoRevised.png" alt="Pareidolia logo">
+        <p class="home-logo-caption">Start Training on the Sidebar Panel!</p>
+        <button class="dataset-btn home-temp-datasets-btn" onclick="switchMode('view-dataset-home', '.left-sidebar-datasets')">Open Datasets View</button>
+      </div>
+      <div class="home-footer-shell">
         <!-- Bottom set of buttons for additional things -->
         <footer class="bottom">
           <button id="help-btn" class="btm-btn">? Help</button>
@@ -73,7 +94,10 @@
           <button class="tab-btn" onclick="openTab(event, 'tab-test')">Testing</button>
           <button class="tab-btn" onclick="openTab(event, 'tab-predict')">Prediction</button>
         </div>
-        <button class="back-btn" onclick="switchMode('view-home', 'left-sidebar-models')">← Back</button>
+        <div class="navbar-actions">
+          <button class="negative-btn" id="delete-model-btn">Delete Model</button>
+          <button class="back-btn" onclick="switchMode('view-home', 'left-sidebar-models')">← Back</button>
+        </div>
       </header>
       <hr class="divider">
 
@@ -83,9 +107,9 @@
         <!-- Training Tab -->
         <div id ="tab-train" onclick="openTab(event, 'tab-train')" class="tab-content active">
           <h3>Model Training</h3>
-          <div class="settings-panel">
+	          <section class="settings-panel">
             <!-- Labels section -->
-            <section class="settings-col">
+            <section class="settings-col-labels">
               <h3>Labels</h3>
               <div class="labels-list" id="labels-list">
                 <!-- Labels will be dynamically added here -->
@@ -96,76 +120,92 @@
               </div>
             </section>
 
-            <!-- Training Settings -->
-            <section class="settings-col">
-              <h3>Training Settings</h3>
-              <div class="setting-item">
-                <label>Epoch</label>
-                <input id="epoch-slider" type="range" min="1" max="100" value="1">
-                <span id="epoch-value">1</span>
-                <p class="setting-desc">How many passes through the dataset?</p>
-              </div>
-              <!-- Training Results -->
-              <h3>Results</h3>
-              <div id="model-train-results" class="model-train-results">
-                <span class="train-results-placeholder">No results yet. Train the model to see results here.</span>
-              </div>
-            </section>
+	          <!-- Training Results -->
+	          <section class="metrics">
+	            <div class="training-status-area" style="margin: 20px;">
+	              <div class="progress-wrapper">
+	                <label id="progress-label">Overall Progress: 0%</label>
+	                <div class="progress-container">
+	                  <div id="epoch-progress-fill"></div>
+	                </div>
+	              </div>
 
-            <section class="settings-col">
-              <h3>Sequential Model Settings</h3>
-              <div class="setting-item">
-                <button class="train-btn" id="builder-modal-btn">▟ Open Editor</button>
-              </div>
-            </section>
+	              <div id="final-summary-card">
+	                <h3 style="margin-top: 0;">Training Summary</h3>
+	                <div class="summary-grid">
+	                  <div><strong>Final Accuracy:</strong> <span id="sum-acc">-</span></div>
+	                  <div><strong>Final Loss:</strong> <span id="sum-loss">-</span></div>
+	                  <div><strong>Val Accuracy:</strong> <span id="sum-val-acc">-</span></div>
+	                  <div><strong>Val Loss:</strong> <span id="sum-val-loss">-</span></div>
+	                </div>
+	              </div>
+	            </div>
 
-            <!-- Training Results -->
-            <section class="metrics">
+		            <div class="charts-container">
+		              <div class="chart-wrapper">
+		                <canvas id="accuracyChart"></canvas>
+	              </div>
+	              <div class="chart-wrapper">
+	                <canvas id="lossChart"></canvas>
+		              </div>
+		            </div>
+		          </section>
+	          </section>
 
-              <div class="training-status-area" style="margin: 20px;">
-                <div class="progress-wrapper">
-                  <label id="progress-label">Overall Progress: 0%</label>
-                  <div class="progress-container" style="width: 100%; height: 20px; background: #eee; border-radius: 10px; overflow: hidden; margin-top: 5px;">
-                    <div id="epoch-progress-fill" style="width: 0%; height: 100%; background: #333; transition: width 0.3s ease;"></div>
-                  </div>
-                </div>
-
-                <div id="final-summary-card">
-                  <h3 style="margin-top: 0;">Training Summary</h3>
-                  <div class="summary-grid">
-                    <div><strong>Final Accuracy:</strong> <span id="sum-acc">-</span></div>
-                    <div><strong>Final Loss:</strong> <span id="sum-loss">-</span></div>
-                    <div><strong>Val Accuracy:</strong> <span id="sum-val-acc">-</span></div>
-                    <div><strong>Val Loss:</strong> <span id="sum-val-loss">-</span></div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="charts-container" style="display: flex; gap: 20px; margin-top: 20px;">
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 8px;">
-                  <canvas id="accuracyChart"></canvas>
-                </div>
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 8px;">
-                  <canvas id="lossChart"></canvas>
+		          <!-- Footer -->
+	          <footer class="project-footer">
+            <div class="footer-choice-groups">
+              <div class="choice-stack">
+                <span class="choice-kicker">Training Mode</span>
+                <div class="segmented-control segmented-control-mode">
+                  <input type="radio" id="train-type-scratch" name="train-project-type" value="scratch">
+                  <label class="segment-option" for="train-type-scratch">Start From Scratch</label>
+                  <input type="radio" id="train-type-pretrained" name="train-project-type" value="pretrained">
+                  <label class="segment-option" for="train-type-pretrained">Use Pretrained Model</label>
                 </div>
               </div>
-            </section>
-          </div>
-          <!-- Footer -->
-          <footer class="project-footer">
-            <input type="radio" id="train-type-scratch" name="train-project-type" value="scratch">
-            <label for="train-type-scratch">Start From Scratch</label>
-            <br>
-            <input type="radio" id="train-type-pretrained" name="train-project-type" value="pretrained">
-            <label for="train-type-pretrained">Use Pretrained Model</label>
 
-            <input type="radio" name="train" value="true" checked> Use Tensorflow<br>
-            <input type="radio" name="train" value="false"> Use PyTorch<br>
-            <span class="last-trained">Last Trained: Never</span>
-            <div class="footer-btns">
-              <button id="model-train-btn" class="train-btn">Train Model</button>
-            </div>
-          </footer>
+              <section class="settings-col-sequential footer-setting">
+	                <!-- <h3>Sequential Model Settings</h3> -->
+	                <div class="setting-item">
+	                  <button class="train-btn" id="builder-modal-btn">Open Editor</button>
+	                </div>
+              </section>
+
+              <div class="choice-stack">
+                <span class="choice-kicker">Framework</span>
+                <div class="segmented-control segmented-control-framework">
+                  <input type="radio" id="train-framework-tf" name="train" value="true" checked>
+                  <label class="segment-option" for="train-framework-tf">
+                    <span class="segment-option-label">TensorFlow</span>
+                    <img class="framework-icon framework-icon-tf" src="assets/tf.svg" alt="TensorFlow">
+                  </label>
+                  <input type="radio" id="train-framework-pt" name="train" value="false">
+                  <label class="segment-option" for="train-framework-pt">
+                    <span class="segment-option-label">PyTorch</span>
+                    <img class="framework-icon framework-icon-pt" src="assets/PyTorch.svg" alt="PyTorch">
+                  </label>
+                </div>
+              </div>
+	            </div>
+	            <span class="last-trained">Last Trained: Never</span>
+	            <div class="footer-btns">
+	              <section class="settings-col-training footer-setting">
+	                <h3>Training Settings</h3>
+	                <div class="setting-item">
+	                  <label>Epoch</label>
+	                  <input id="epoch-slider" type="range" min="1" max="100" value="1">
+	                  <span id="epoch-value">1</span>
+	                  <p class="setting-desc">How many passes through the dataset?</p>
+	                </div>
+	                <!-- <h3>Results</h3>
+	                <div id="model-train-results" class="model-train-results">
+	                  <span class="train-results-placeholder">No results yet. Train the model to see results here.</span>
+	                </div> -->
+	              </section>
+	              <button id="model-train-btn" class="train-btn">Train Model</button>
+	            </div>
+	          </footer>
         </div>
 
         <!-- Testing Tab -->
@@ -254,7 +294,7 @@
       <footer class="project-footer">
         <div class="footer-btns">
           <button class="view-gallery-btn" onclick="showDatasetGallery()" >View Gallery</button>
-          <button class="negative-btn">Delete Dataset</button>
+          <button class="negative-btn" id="delete-dataset-btn">Delete Dataset</button>
         </div>
       </footer>
     </div>
@@ -316,6 +356,58 @@
       <div class="dataset-available-list" id="available-datasets-list">
         <!-- Available datasets rendered here -->
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Dataset Confirmation Modal -->
+<div id="delete-dataset-modal" class="modal">
+  <div class="modal-content delete-dataset-modal-content delete-confirm-modal-content">
+    <span class="modal-close" id="delete-dataset-modal-close">&times;</span>
+    <h2 class="modal-title">Delete Dataset?</h2>
+    <p class="delete-dataset-warning delete-confirm-warning">
+      This will permanently delete the dataset
+      <strong id="delete-dataset-name">this dataset</strong>.
+    </p>
+    <label class="modal-section-label" for="delete-dataset-confirm-input">
+      Enter the dataset name to confirm.
+    </label>
+    <input
+      type="text"
+      id="delete-dataset-confirm-input"
+      class="modal-input"
+      placeholder="Dataset name"
+      autocomplete="off"
+    />
+    <div class="modal-actions delete-dataset-actions delete-confirm-actions">
+      <button class="action-btn" id="delete-dataset-cancel-btn">Cancel</button>
+      <button class="negative-btn" id="delete-dataset-confirm-btn">Delete Dataset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Model Confirmation Modal -->
+<div id="delete-model-modal" class="modal">
+  <div class="modal-content delete-confirm-modal-content">
+    <span class="modal-close" id="delete-model-modal-close">&times;</span>
+    <h2 class="modal-title">Delete Model?</h2>
+    <p class="delete-confirm-warning">
+      This will permanently delete the model
+      <strong id="delete-model-name">this model</strong>.
+    </p>
+    <label class="modal-section-label" for="delete-model-confirm-input">
+      Enter the model name to confirm.
+    </label>
+    <input
+      type="text"
+      id="delete-model-confirm-input"
+      class="modal-input"
+      placeholder="Model name"
+      autocomplete="off"
+    />
+    <div class="modal-actions delete-confirm-actions">
+      <button class="action-btn" id="delete-model-cancel-btn">Cancel</button>
+      <button class="negative-btn" id="delete-model-confirm-btn">Delete Model</button>
     </div>
   </div>
 </div>
