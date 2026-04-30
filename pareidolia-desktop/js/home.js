@@ -352,9 +352,14 @@ async function checkExistingDatasets(modelName, modelNamePath) {
         console.log('Model folder path:', modelFolderPath);
         console.log('Labels associated with model:', labelsJson);
 
-        for (const labelName in labelsJson) {
-            for (const datasetPath of labelsJson[labelName]) {
-                console.log(`Dataset for label '${labelName}':`, datasetPath);
+        const settings = await window.electronAPI.invoke('get-model-settings', modelName);
+        console.log('Current model settings:', settings);
+        const labels = settings.labels || {};
+        let didUpdateSettings = false;
+
+        for (const [labelName, datasetEntries] of Object.entries(labels)) {
+            for (const [datasetName, datasetPath] of Object.entries(datasetEntries || {})) {
+                console.log(`Dataset for label '${labelName}' (${datasetName}):`, datasetPath);
 
                 const exists = await window.electronAPI.invoke('path-exists', datasetPath);
 
@@ -363,19 +368,31 @@ async function checkExistingDatasets(modelName, modelNamePath) {
                     const fileNum = await window.electronAPI.invoke('get-file-count', datasetPath);
                     console.log(`Number of files in dataset for label '${labelName}':`, fileNum.count);
 
-                    if (fileNum.count <= 3) {
-                        console.log(`Dataset for label '${labelName}' has ${fileNum.count} files, which is less than or equal to 3.`);
-                        const settings = await window.electronAPI.invoke('get-model-settings', modelName);
-                        console.log('Current model settings:', settings);
-                        const labels = settings.labels || {};
+                    if (fileNum.count < 3) {
+                        console.log(`Dataset '${datasetPath}' for label '${labelName}' has ${fileNum.count} files, which is less than 3.`);
                         if (labels[labelName]) {
-                            delete labels[labelName][datasetPath];
-                            await updateModelSettings(modelName, settings);
+                            delete labels[labelName][datasetName];
+                            await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
+                            didUpdateSettings = true;
                         }
                     }
                 } else {
-                    console.log(`Dataset path for label '${labelName}' does not exist.`);
+                    console.log(`Dataset path '${datasetPath}' for label '${labelName}' does not exist.`);
+                    if (labels[labelName]) {
+                        delete labels[labelName][datasetName];
+                        await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
+                        didUpdateSettings = true;
+                    }
                 }
+            }
+        }
+
+        if (didUpdateSettings) {
+            modelSettings = settings;
+            renderLabels();
+
+            if (currentLabelName) {
+                await renderDatasetModal();
             }
         }
     } catch (error) {
@@ -572,7 +589,6 @@ async function loadModelSettingsForView(modelName) {
 
         // clears builder canvas
         builderCanvas.innerHTML = '';
-
         // adds saved layers
         if(modelSettings.layers && modelSettings.layers.length > 0){
             modelSettings.layers.forEach(layer => {

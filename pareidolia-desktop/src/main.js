@@ -459,11 +459,15 @@ export async function updateModelSettings(modelName, newSettings) {
  * { name: "Fruits",
  *  labels: 
  *  { "Apple": 
- *    { "Fuji Apples": "/path/folder1" , 
- *     "Gala Apples": "/path/folder2" }, 
+ *    { 
+ *        "Fuji Apples": "/path/folder1" , 
+ *        "Gala Apples": "/path/folder2" 
+ *    }, 
  *    "Orange": 
- *      { "Navel Oranges": "/path/a", 
- *      "Blood Oranges": "/path/b" } 
+ *      { 
+ *        "Navel Oranges": "/path/a", 
+ *        "Blood Oranges": "/path/b" 
+ *    } 
  *  }, 
  *  epochs: 10 
  * }
