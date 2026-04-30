@@ -945,6 +945,19 @@ ipcMain.handle('path-exists', async (event, targetPath) => {
 });
 
 /**
+ * Handle getting the count of files in a directory at a given path.
+ */
+ipcMain.handle('get-file-count', async (event, targetPath) => {
+  try {
+    const files = fs.readdirSync(targetPath);
+    return { success: true, count: files.length };
+  } catch (error) {
+    console.error(`Error reading directory for file count: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
  * Handle updating model settings via IPC from renderer process
  */
 ipcMain.handle('update-model-settings', async (event, params) => {

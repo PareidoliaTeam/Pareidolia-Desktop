@@ -360,6 +360,19 @@ async function checkExistingDatasets(modelName, modelNamePath) {
 
                 if (exists) {
                     console.log(`Dataset path for label '${labelName}' exists.`);
+                    const fileNum = await window.electronAPI.invoke('get-file-count', datasetPath);
+                    console.log(`Number of files in dataset for label '${labelName}':`, fileNum.count);
+
+                    if (fileNum.count <= 3) {
+                        console.log(`Dataset for label '${labelName}' has ${fileNum.count} files, which is less than or equal to 3.`);
+                        const settings = await window.electronAPI.invoke('get-model-settings', modelName);
+                        console.log('Current model settings:', settings);
+                        const labels = settings.labels || {};
+                        if (labels[labelName]) {
+                            delete labels[labelName][datasetPath];
+                            await updateModelSettings(modelName, settings);
+                        }
+                    }
                 } else {
                     console.log(`Dataset path for label '${labelName}' does not exist.`);
                 }
