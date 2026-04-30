@@ -10,12 +10,14 @@ const projectPath = sessionStorage.getItem('projectPath') || 'No path';
 const datasetNameDisplay = document.getElementById('current-dataset-title');
 const datasetPathDisplay = document.getElementById('current-dataset-filepath');
 const datasetsList = document.getElementById('datasetsList');
+const deleteDatasetBtn = document.getElementById('delete-dataset-btn');
 
 // Model elements
 const modelNameDisplay = document.getElementById('current-model-title');
 const modelPathDisplay = document.getElementById('current-model-path');
 const modelsList = document.getElementById('modelsList');
 const addModelBtn = document.querySelector('.create-btn');
+const deleteModelBtn = document.getElementById('delete-model-btn');
 
 // Model modal elements
 const addProjectModal = document.getElementById('add-model-modal');
@@ -24,6 +26,11 @@ const projectTypeInputs = document.getElementsByName('project-type');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalClose = document.querySelector('.modal-close');
+const deleteModelModal = document.getElementById('delete-model-modal');
+const deleteModelModalClose = document.getElementById('delete-model-modal-close');
+const deleteModelName = document.getElementById('delete-model-name');
+const deleteModelConfirmInput = document.getElementById('delete-model-confirm-input');
+const deleteModelCancelBtn = document.getElementById('delete-model-cancel-btn');
 
 // Help modal elements
 const helpModal = document.getElementById('help-modal');
@@ -76,6 +83,11 @@ const datasetModalTitle = document.getElementById('dataset-modal-title');
 const datasetModalClose = document.getElementById('dataset-modal-close');
 const assignedDatasetsList = document.getElementById('assigned-datasets-list');
 const availableDatasetsList = document.getElementById('available-datasets-list');
+const deleteDatasetModal = document.getElementById('delete-dataset-modal');
+const deleteDatasetModalClose = document.getElementById('delete-dataset-modal-close');
+const deleteDatasetName = document.getElementById('delete-dataset-name');
+const deleteDatasetConfirmInput = document.getElementById('delete-dataset-confirm-input');
+const deleteDatasetCancelBtn = document.getElementById('delete-dataset-cancel-btn');
 
 // Current model settings state
 let modelSettings = null;
@@ -388,6 +400,52 @@ function closeOptionsModal() {
     optionsModal.style.display = 'none';
 }
 
+/**
+ * Opens the delete dataset confirmation modal for display only.
+ */
+function openDeleteDatasetModal() {
+    const currentDatasetName = sessionStorage.getItem('projectName') || datasetNameDisplay?.textContent || 'this dataset';
+
+    deleteDatasetName.textContent = currentDatasetName;
+    deleteDatasetConfirmInput.value = '';
+    deleteDatasetModal.style.display = 'flex';
+    deleteDatasetConfirmInput.focus();
+}
+
+/**
+ * Closes the delete dataset confirmation modal.
+ */
+function closeDeleteDatasetModal() {
+    deleteDatasetModal.style.display = 'none';
+}
+
+/**
+ * Opens the delete model confirmation modal for display only.
+ */
+function openDeleteModelModal() {
+    const currentModelName = sessionStorage.getItem('projectName') || modelNameDisplay?.textContent || 'this model';
+
+    deleteModelName.textContent = currentModelName;
+    deleteModelConfirmInput.value = '';
+    deleteModelModal.style.display = 'flex';
+    deleteModelConfirmInput.focus();
+}
+
+/**
+ * Closes the delete model confirmation modal.
+ */
+function closeDeleteModelModal() {
+    deleteModelModal.style.display = 'none';
+}
+
+function updateBuilderButtonState() {
+    const selectedType = document.querySelector('input[name="train-project-type"]:checked')?.value || modelSettings?.projectType || 'scratch';
+    const canOpenBuilder = selectedType === 'scratch';
+
+    builderModalBtn.disabled = !canOpenBuilder;
+    builderModalBtn.title = canOpenBuilder ? 'Open Editor' : 'Only available when Start From Scratch is selected';
+}
+
 // ============================================================
 // LABEL & DATASET MANAGEMENT
 // ============================================================
@@ -443,6 +501,7 @@ async function loadModelSettingsForView(modelName) {
         if (selectedTypeInput) {
             selectedTypeInput.checked = true;
         }
+        updateBuilderButtonState();
 
         const selectedFramework = modelSettings.modelType === 'pytorch' ? 'false' : 'true';
         const selectedFrameworkInput = document.querySelector(`input[name="train"][value="${selectedFramework}"]`);
@@ -1139,10 +1198,12 @@ function setupChartResizeSync() {
 // ============================================================
 
 // Upload Button - opens QR modal
-uploadBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openQRModal();
-});
+if (uploadBtn) {
+    uploadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openQRModal();
+    });
+}
 
 // Sidebar QR toggle button
 if (sidebarQrToggle) {
@@ -1229,6 +1290,7 @@ optionsModalClose.addEventListener('click', (e) => {
 // Open Block Builder Modal
 builderModalBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (builderModalBtn.disabled) return;
     openBuilderModal();
 })
 // Close Block Builder Modal
@@ -1292,7 +1354,9 @@ epochSlider.addEventListener('change', async (event) => {
 // Project type radio buttons change in training menu
 trainProjectTypeInputs.forEach((input) => {
   input.addEventListener('change', async () => {
-    if (!input.checked || !modelSettings) return;
+    if (!input.checked) return;
+    updateBuilderButtonState();
+    if (!modelSettings) return;
     modelSettings.projectType = input.value;
     await saveModelSettings();
   });
@@ -1332,6 +1396,36 @@ datasetModalClose.addEventListener('click', closeDatasetModal);
 // Dataset modal backdrop click
 datasetModal.addEventListener('click', (e) => {
     if (e.target === datasetModal) closeDatasetModal();
+});
+
+// Delete dataset modal open button
+deleteDatasetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDeleteDatasetModal();
+});
+
+// Delete dataset modal close buttons
+deleteDatasetModalClose.addEventListener('click', closeDeleteDatasetModal);
+deleteDatasetCancelBtn.addEventListener('click', closeDeleteDatasetModal);
+
+// Delete dataset modal backdrop click
+deleteDatasetModal.addEventListener('click', (e) => {
+    if (e.target === deleteDatasetModal) closeDeleteDatasetModal();
+});
+
+// Delete model modal open button
+deleteModelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDeleteModelModal();
+});
+
+// Delete model modal close buttons
+deleteModelModalClose.addEventListener('click', closeDeleteModelModal);
+deleteModelCancelBtn.addEventListener('click', closeDeleteModelModal);
+
+// Delete model modal backdrop click
+deleteModelModal.addEventListener('click', (e) => {
+    if (e.target === deleteModelModal) closeDeleteModelModal();
 });
 
 // Train Model button click handler

@@ -60,10 +60,12 @@
 
     <!-- Home Page View -->
     <div id="view-home" class="app-view">
-      <h2>Datasets</h2>
-      <div class="dataset-button-group">
-        <button class="dataset-btn" onclick="switchMode('view-dataset-home', '.left-sidebar-datasets')">✦ View</button>
-        <button id="upload-btn" class="dataset-btn">↑ Upload</button>
+      <div class="home-logo-hero" aria-label="Pareidolia logo">
+        <img src="assets/logoRevised.png" alt="Pareidolia logo">
+        <p class="home-logo-caption">Start Training on the Sidebar Panel!</p>
+        <button class="dataset-btn home-temp-datasets-btn" onclick="switchMode('view-dataset-home', '.left-sidebar-datasets')">Open Datasets View</button>
+      </div>
+      <div class="home-footer-shell">
         <!-- Bottom set of buttons for additional things -->
         <footer class="bottom">
           <button id="help-btn" class="btm-btn">? Help</button>
@@ -84,7 +86,10 @@
           <button class="tab-btn" onclick="openTab(event, 'tab-test')">Testing</button>
           <button class="tab-btn" onclick="openTab(event, 'tab-predict')">Prediction</button>
         </div>
-        <button class="back-btn" onclick="switchMode('view-home', 'left-sidebar-models')">← Back</button>
+        <div class="navbar-actions">
+          <button class="negative-btn" id="delete-model-btn">Delete Model</button>
+          <button class="back-btn" onclick="switchMode('view-home', 'left-sidebar-models')">← Back</button>
+        </div>
       </header>
       <hr class="divider">
 
@@ -112,8 +117,8 @@
 	            <div class="training-status-area" style="margin: 20px;">
 	              <div class="progress-wrapper">
 	                <label id="progress-label">Overall Progress: 0%</label>
-	                <div class="progress-container" style="width: calc(100% - 32vh); height: 20px; background: var(--silver); border-radius: 10px; overflow: hidden; margin-top: 5px;">
-	                  <div id="epoch-progress-fill" style="width: 0%; height: 100%; background: var(--onyx); transition: width 0.3s ease;"></div>
+	                <div class="progress-container">
+	                  <div id="epoch-progress-fill"></div>
 	                </div>
 	              </div>
 
@@ -281,7 +286,7 @@
       <footer class="project-footer">
         <div class="footer-btns">
           <button class="view-gallery-btn" onclick="showDatasetGallery()" >View Gallery</button>
-          <button class="negative-btn">Delete Dataset</button>
+          <button class="negative-btn" id="delete-dataset-btn">Delete Dataset</button>
         </div>
       </footer>
     </div>
@@ -343,6 +348,58 @@
       <div class="dataset-available-list" id="available-datasets-list">
         <!-- Available datasets rendered here -->
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Dataset Confirmation Modal -->
+<div id="delete-dataset-modal" class="modal">
+  <div class="modal-content delete-dataset-modal-content delete-confirm-modal-content">
+    <span class="modal-close" id="delete-dataset-modal-close">&times;</span>
+    <h2 class="modal-title">Delete Dataset?</h2>
+    <p class="delete-dataset-warning delete-confirm-warning">
+      This will permanently delete the dataset
+      <strong id="delete-dataset-name">this dataset</strong>.
+    </p>
+    <label class="modal-section-label" for="delete-dataset-confirm-input">
+      Enter the dataset name to confirm.
+    </label>
+    <input
+      type="text"
+      id="delete-dataset-confirm-input"
+      class="modal-input"
+      placeholder="Dataset name"
+      autocomplete="off"
+    />
+    <div class="modal-actions delete-dataset-actions delete-confirm-actions">
+      <button class="action-btn" id="delete-dataset-cancel-btn">Cancel</button>
+      <button class="negative-btn" id="delete-dataset-confirm-btn">Delete Dataset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Model Confirmation Modal -->
+<div id="delete-model-modal" class="modal">
+  <div class="modal-content delete-confirm-modal-content">
+    <span class="modal-close" id="delete-model-modal-close">&times;</span>
+    <h2 class="modal-title">Delete Model?</h2>
+    <p class="delete-confirm-warning">
+      This will permanently delete the model
+      <strong id="delete-model-name">this model</strong>.
+    </p>
+    <label class="modal-section-label" for="delete-model-confirm-input">
+      Enter the model name to confirm.
+    </label>
+    <input
+      type="text"
+      id="delete-model-confirm-input"
+      class="modal-input"
+      placeholder="Model name"
+      autocomplete="off"
+    />
+    <div class="modal-actions delete-confirm-actions">
+      <button class="action-btn" id="delete-model-cancel-btn">Cancel</button>
+      <button class="negative-btn" id="delete-model-confirm-btn">Delete Model</button>
     </div>
   </div>
 </div>
