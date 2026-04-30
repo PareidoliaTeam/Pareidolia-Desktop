@@ -10,14 +10,19 @@ const projectPath = sessionStorage.getItem('projectPath') || 'No path';
 const datasetNameDisplay = document.getElementById('current-dataset-title');
 const datasetPathDisplay = document.getElementById('current-dataset-filepath');
 const datasetsList = document.getElementById('datasetsList');
+const datasetSearchInput = document.getElementById('dataset-search');
 const deleteDatasetBtn = document.getElementById('delete-dataset-btn');
 
 // Model elements
 const modelNameDisplay = document.getElementById('current-model-title');
 const modelPathDisplay = document.getElementById('current-model-path');
 const modelsList = document.getElementById('modelsList');
+const modelSearchInput = document.getElementById('model-search');
+const sidebarModelsRadio = document.getElementById('sidebar-models-active');
+const sidebarDatasetsRadio = document.getElementById('sidebar-models-datasets');
 const addModelBtn = document.querySelector('.create-btn');
 const deleteModelBtn = document.getElementById('delete-model-btn');
+const primarySidebar = document.querySelector('.left-sidebar-models');
 
 // Model modal elements
 const addProjectModal = document.getElementById('add-model-modal');
@@ -93,6 +98,7 @@ const deleteDatasetCancelBtn = document.getElementById('delete-dataset-cancel-bt
 let modelSettings = null;
 let currentLabelName = null;
 let activeBlock = null;
+let sidebarToggleAnimationFrame = null;
 
 // builder ids
 const builderModal = document.getElementById('builder-modal');
@@ -743,13 +749,78 @@ async function switchMode(viewId, sidebarClass) {
     const view = document.getElementById(viewId);
     if (view) {view.style.display = 'flex';}
     const selector = sidebarClass.startsWith('.') ? sidebarClass : `.${sidebarClass}`;
-    const targetSidebar = document.querySelector(selector);
+    const sidebarMode = selector === '.left-sidebar-datasets' ? 'datasets' : 'models';
 
-    if (targetSidebar) {
-        targetSidebar.classList.add('sidebar-active');
-    }
+    setSidebarCollectionMode(sidebarMode);
     await loadDatasetsFromFolder();
     await loadModelsFromFolder();
+}
+
+function setSidebarCollectionMode(mode, options = {}) {
+    const { clearSearches = true } = options;
+    const showDatasets = mode === 'datasets';
+
+    if (primarySidebar) {
+        primarySidebar.classList.add('sidebar-active');
+    }
+
+    if (clearSearches) {
+        clearSidebarSearches();
+    }
+
+    if (modelsList) {
+        modelsList.style.display = showDatasets ? 'none' : '';
+    }
+    if (datasetsList) {
+        datasetsList.style.display = showDatasets ? '' : 'none';
+    }
+    if (modelSearchInput) {
+        modelSearchInput.style.display = showDatasets ? 'none' : '';
+    }
+    if (datasetSearchInput) {
+        datasetSearchInput.style.display = showDatasets ? '' : 'none';
+    }
+
+    syncSidebarSegmentedControls(showDatasets);
+}
+
+function syncSidebarSegmentedControls(showDatasets) {
+    const modelsActive = document.getElementById('sidebar-models-active');
+    const modelsDatasets = document.getElementById('sidebar-models-datasets');
+
+    if (!modelsActive || !modelsDatasets) return;
+
+    const applyState = () => {
+        modelsActive.checked = !showDatasets;
+        modelsDatasets.checked = showDatasets;
+    };
+
+    if (sidebarToggleAnimationFrame !== null) {
+        cancelAnimationFrame(sidebarToggleAnimationFrame);
+    }
+
+    sidebarToggleAnimationFrame = requestAnimationFrame(() => {
+        applyState();
+        sidebarToggleAnimationFrame = null;
+    });
+}
+
+function initializeSidebarModeToggle() {
+    if (sidebarModelsRadio) {
+        sidebarModelsRadio.addEventListener('change', () => {
+            if (sidebarModelsRadio.checked) {
+                setSidebarCollectionMode('models', { clearSearches: true });
+            }
+        });
+    }
+
+    if (sidebarDatasetsRadio) {
+        sidebarDatasetsRadio.addEventListener('change', () => {
+            if (sidebarDatasetsRadio.checked) {
+                setSidebarCollectionMode('datasets', { clearSearches: true });
+            }
+        });
+    }
 }
 
 /**
@@ -878,6 +949,8 @@ async function loadDatasetsFromFolder() {
             datasetsList.appendChild(li);
         });
 
+        applySearchFilter(datasetSearchInput, datasetsList, '.dataset-item', '.dataset-open-btn');
+
         console.log(`Loaded ${datasets.length} projects`);
     } catch (error) {
         console.error('Error loading datasets:', error);
@@ -918,6 +991,8 @@ async function loadModelsFromFolder() {
             li.appendChild(div);
             modelsList.appendChild(li);
         });
+
+        applySearchFilter(modelSearchInput, modelsList, '.model-item', '.model-open-btn');
 
         console.log(`Loaded ${models.length} projects`);
     } catch (error) {
@@ -972,6 +1047,52 @@ async function loadGallery(){
         });
     }
 }
+
+
+/**
+ * Search bar functionality
+ */
+function applySearchFilter(inputEl, listEl, itemSelector, labelSelector) {
+    if (!inputEl || !listEl) {
+        return;
+    }
+
+    const query = inputEl.value.toLowerCase().trim();
+
+    listEl.querySelectorAll(itemSelector).forEach(item => {
+        const labelEl = item.querySelector(labelSelector);
+        const label = labelEl ? labelEl.textContent.toLowerCase() : '';
+        item.style.display = label.includes(query) ? '' : 'none';
+    });
+}
+
+/**
+ * Initializes  search bar
+ */
+function initSearch(inputEl, listEl, itemSelector, labelSelector) {
+    if (!inputEl || !listEl) {
+        return;
+    }
+
+    inputEl.addEventListener('input', () => {
+        applySearchFilter(inputEl, listEl, itemSelector, labelSelector);
+    });
+}
+
+/**
+ * Clears search bar
+ */
+function clearSidebarSearches() {
+    if (modelSearchInput) {
+        modelSearchInput.value = '';
+    }
+    if (datasetSearchInput) {
+        datasetSearchInput.value = '';
+    }
+    applySearchFilter(modelSearchInput, modelsList, '.model-item', '.model-open-btn');
+    applySearchFilter(datasetSearchInput, datasetsList, '.dataset-item', '.dataset-open-btn');
+}
+
 
 // ============================================================
 // BUILDER RELATED FUNCTIONS
@@ -1565,6 +1686,9 @@ runTestButton.addEventListener('click',async ()=> {
 
 // Load projects from folder when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
+    initSearch(modelSearchInput, modelsList, '.model-item', '.model-open-btn');
+    initSearch(datasetSearchInput, datasetsList, '.dataset-item', '.dataset-open-btn');
+    initializeSidebarModeToggle();
     switchMode('view-home','.left-sidebar-models');
     setSidebarQrExpanded(true);
 
@@ -1634,6 +1758,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.electronAPI?.onTrainingStderr) {
         window.electronAPI.onTrainingStderr((data) => processTrainingChunk(data, 'stderr'));
     }
+
 });
 
 
