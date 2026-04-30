@@ -38,7 +38,7 @@ def predict(model_path, img_path, labels_json_str=None, project_type=MODEL_TYPE_
             model_class = RepVGGClassifier if project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
             model = model_class.load_from_checkpoint(model_path)
             model.eval()
-            model.freeze();
+            model.freeze()
 
             normalization_mean = [0.485, 0.456, 0.406]
             normalization_std = [0.229, 0.224, 0.225]

@@ -797,7 +797,6 @@ async function generateQRCode() {
 
         if (!localIP) {
             console.error('Could not determine local IP address');
-            qrCodeContainer.textContent = 'Unable to generate QR code';
             return;
         }
 
@@ -828,15 +827,6 @@ async function generateQRCode() {
         console.log('QR code generated successfully');
     } catch (error) {
         console.error('Error in generateQRCode:', error);
-        const errorMessage = 'Error: ' + error.message;
-
-        if (sidebarQrCodeContainer) {
-            sidebarQrCodeContainer.textContent = errorMessage;
-        }
-
-        if (qrCodeContainer) {
-            qrCodeContainer.textContent = errorMessage;
-        }
     }
 }
 
