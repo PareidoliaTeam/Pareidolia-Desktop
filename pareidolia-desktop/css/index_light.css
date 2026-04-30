@@ -1803,7 +1803,22 @@ body.dragging-outside-canvas .model-block {
   display: flex;
   gap: 15px;
   align-items: center;
-  margin-bottom: 20px;
+  margin-top: 20px;
+}
+
+.runtime-framework-choice {
+  margin-bottom: 16px;
+}
+
+.test-controls .runtime-framework-choice {
+  margin-bottom: 0;
+}
+
+.test-controls #run-test-btn {
+  align-self: flex-end;
+  height: calc(36px + 1rem + 6px);
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .test-metrics-cards {
@@ -1823,6 +1838,13 @@ body.dragging-outside-canvas .model-block {
 
 .metric-card h2 {
   margin: 5px 0;
+}
+
+.last-trained-framework-status {
+  margin: 0 0 8px;
+  color: var(--dim-grey);
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .test-results-message {

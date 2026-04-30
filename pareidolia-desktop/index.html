@@ -44,7 +44,6 @@
             <div class="sidebar-qr-code-frame">
               <div id="sidebar-qr-code-container"></div>
             </div>
-            <p id="test-results-message" class="test-results-message" aria-live="polite"></p>
           </div>
         </div>
         <div class="sidebar-qr-connect-text">Connect</div>
@@ -163,12 +162,12 @@
               <div class="choice-stack">
                 <span class="choice-kicker">Framework</span>
                 <div class="segmented-control segmented-control-framework">
-                  <input type="radio" id="train-framework-tf" name="train" value="true" checked>
+                  <input type="radio" id="train-framework-tf" name="train" value="true" data-framework-toggle checked>
                   <label class="segment-option" for="train-framework-tf">
                     <span class="segment-option-label">TensorFlow</span>
                     <img class="framework-icon framework-icon-tf" src="assets/tf.svg" alt="TensorFlow">
                   </label>
-                  <input type="radio" id="train-framework-pt" name="train" value="false">
+                  <input type="radio" id="train-framework-pt" name="train" value="false" data-framework-toggle>
                   <label class="segment-option" for="train-framework-pt">
                     <span class="segment-option-label">PyTorch</span>
                     <img class="framework-icon framework-icon-pt" src="assets/PyTorch.svg" alt="PyTorch">
@@ -202,12 +201,10 @@
             <h3>Model Testing</h3>
           </div>
 
-          <div class="test-controls">
-            <button id="run-test-btn" class="train-btn">Run Evaluation</button>
-          </div>
-
           <div id="test-results-area" >
             <h3 style="margin: 0 0 15px 0; color: #333;">Test Results</h3>
+            <p id="test-last-trained-framework" class="last-trained-framework-status">Latest trained: Never</p>
+            <p id="test-results-message" class="test-results-message" aria-live="polite"></p>
             <div class="test-metrics-cards">
               <div class="metric-card">
                 <span class="metric-label">Accuracy</span>
@@ -223,11 +220,46 @@
               </div>
             </div>
           </div>
+
+          <div class="test-controls">
+            <div class="choice-stack runtime-framework-choice">
+              <span class="choice-kicker">Framework</span>
+              <div class="segmented-control segmented-control-framework">
+                <input type="radio" id="test-framework-tf" name="test-framework" value="true" checked>
+                <label class="segment-option" for="test-framework-tf">
+                  <span class="segment-option-label">TensorFlow</span>
+                  <img class="framework-icon framework-icon-tf" src="assets/tf.svg" alt="TensorFlow">
+                </label>
+                <input type="radio" id="test-framework-pt" name="test-framework" value="false">
+                <label class="segment-option" for="test-framework-pt">
+                  <span class="segment-option-label">PyTorch</span>
+                  <img class="framework-icon framework-icon-pt" src="assets/PyTorch.svg" alt="PyTorch">
+                </label>
+              </div>
+            </div>
+            <button id="run-test-btn" class="train-btn">Run Evaluation</button>
+          </div>
         </div>
 
         <!-- Prediction Tab -->
         <div id="tab-predict" class="tab-content" onclick="openTab(event, 'tab-predict')">
-          <h3>Model Prediction</h3>
+          <h3>Model Prediction - Drag and Drop System (We can make pretty ltr)</h3>
+          <p id="prediction-last-trained-framework" class="last-trained-framework-status">Latest trained: Never</p>
+          <div class="choice-stack runtime-framework-choice">
+            <span class="choice-kicker">Framework</span>
+            <div class="segmented-control segmented-control-framework">
+              <input type="radio" id="prediction-framework-tf" name="prediction-framework" value="true" checked>
+              <label class="segment-option" for="prediction-framework-tf">
+                <span class="segment-option-label">TensorFlow</span>
+                <img class="framework-icon framework-icon-tf" src="assets/tf.svg" alt="TensorFlow">
+              </label>
+              <input type="radio" id="prediction-framework-pt" name="prediction-framework" value="false">
+              <label class="segment-option" for="prediction-framework-pt">
+                <span class="segment-option-label">PyTorch</span>
+                <img class="framework-icon framework-icon-pt" src="assets/PyTorch.svg" alt="PyTorch">
+              </label>
+            </div>
+          </div>
           <div id="drop-zone" class="prediction-drop-zone">
             <div class="drop-zone-content">
               <p>Drag & Drop an image here</p>

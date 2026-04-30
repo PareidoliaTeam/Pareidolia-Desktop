@@ -62,12 +62,71 @@ const epochSlider = document.getElementById('epoch-slider');
 const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
+const testLastTrainedFramework = document.getElementById('test-last-trained-framework');
+const predictionLastTrainedFramework = document.getElementById('prediction-last-trained-framework');
 const trainProjectTypeInputs = document.querySelectorAll('input[name="train-project-type"]');
-const trainFrameworkInputs = document.querySelectorAll('input[name="train"]');
+const trainFrameworkInputs = document.querySelectorAll('[data-framework-toggle]');
+const testFrameworkInputs = document.querySelectorAll('input[name="test-framework"]');
+const predictionFrameworkInputs = document.querySelectorAll('input[name="prediction-framework"]');
 
 function getSelectedFramework() {
-    const selectedRadio = document.querySelector('input[name="train"]:checked');
+    const selectedRadio = document.querySelector('[data-framework-toggle]:checked');
     return selectedRadio && selectedRadio.value === 'false' ? 'pytorch' : 'tensorflow';
+}
+
+function syncFrameworkToggles(value) {
+    trainFrameworkInputs.forEach((input) => {
+        input.checked = input.value === value;
+    });
+}
+
+function frameworkToInputValue(framework) {
+    return framework === 'pytorch' ? 'false' : 'true';
+}
+
+function inputValueToFramework(value) {
+    return value === 'false' ? 'pytorch' : 'tensorflow';
+}
+
+function setFrameworkInputs(inputs, framework) {
+    const value = frameworkToInputValue(framework);
+    inputs.forEach((input) => {
+        input.checked = input.value === value;
+    });
+}
+
+function syncRuntimeFrameworkToggles(framework) {
+    const defaultFramework = framework || modelSettings?.lastTrainedFramework || modelSettings?.modelType || 'tensorflow';
+
+    setFrameworkInputs(testFrameworkInputs, defaultFramework);
+    setFrameworkInputs(predictionFrameworkInputs, defaultFramework);
+}
+
+function getSelectedRuntimeFramework(context) {
+    const selector = context === 'prediction'
+        ? 'input[name="prediction-framework"]:checked'
+        : 'input[name="test-framework"]:checked';
+    const selectedRadio = document.querySelector(selector);
+
+    return inputValueToFramework(selectedRadio?.value);
+}
+
+function getFrameworkDisplayName(framework) {
+    return framework === 'pytorch' ? 'PyTorch' : 'TensorFlow';
+}
+
+function updateLastTrainedFrameworkDisplays(settings = modelSettings) {
+    const statusElements = [testLastTrainedFramework, predictionLastTrainedFramework].filter(Boolean);
+    if (statusElements.length === 0) return;
+
+    let statusText = 'Latest trained: Never';
+    if (settings?.lastTrained && settings?.lastTrainedFramework) {
+        statusText = `Latest trained: ${settings.lastTrained} with ${getFrameworkDisplayName(settings.lastTrainedFramework)}`;
+    }
+
+    statusElements.forEach((element) => {
+        element.textContent = statusText;
+    });
 }
 
 // Gallery
@@ -487,6 +546,8 @@ async function loadModelSettingsForView(modelName) {
         if (lastTrainedSpan) {
             lastTrainedSpan.textContent = `Last Trained: ${modelSettings.lastTrained || 'Never'}`;
         }
+        updateLastTrainedFrameworkDisplays();
+        syncRuntimeFrameworkToggles();
 
         if (!modelSettings.projectType) modelSettings.projectType = 'scratch';
 
@@ -510,10 +571,7 @@ async function loadModelSettingsForView(modelName) {
         updateBuilderButtonState();
 
         const selectedFramework = modelSettings.modelType === 'pytorch' ? 'false' : 'true';
-        const selectedFrameworkInput = document.querySelector(`input[name="train"][value="${selectedFramework}"]`);
-        if (selectedFrameworkInput) {
-            selectedFrameworkInput.checked = true;
-        }
+        syncFrameworkToggles(selectedFramework);
     } catch (error) {
         console.error('Error loading model settings:', error);
         modelSettings = { labels: {}, epochs: 10 };
@@ -868,7 +926,6 @@ async function generateQRCode() {
 
         if (!localIP) {
             console.error('Could not determine local IP address');
-            qrCodeContainer.textContent = 'Unable to generate QR code';
             return;
         }
 
@@ -899,15 +956,6 @@ async function generateQRCode() {
         console.log('QR code generated successfully');
     } catch (error) {
         console.error('Error in generateQRCode:', error);
-        const errorMessage = 'Error: ' + error.message;
-
-        if (sidebarQrCodeContainer) {
-            sidebarQrCodeContainer.textContent = errorMessage;
-        }
-
-        if (qrCodeContainer) {
-            qrCodeContainer.textContent = errorMessage;
-        }
     }
 }
 
@@ -1485,7 +1533,9 @@ trainProjectTypeInputs.forEach((input) => {
 
 trainFrameworkInputs.forEach((input) => {
   input.addEventListener('change', async () => {
-    if (!input.checked || !modelSettings) return;
+    if (!input.checked) return;
+    syncFrameworkToggles(input.value);
+    if (!modelSettings) return;
     modelSettings.modelType = input.value === 'false' ? 'pytorch' : 'tensorflow';
     await saveModelSettings();
   });
@@ -1614,7 +1664,6 @@ modelTrainBtn.addEventListener('click', async () => {
             const now = new Date();
             const timestamp = now.toLocaleString();
 
-            const selectedRadio = document.querySelector('input[name="train"]:checked');
             const lastTrainedSpan = document.querySelector('.last-trained');
             if (lastTrainedSpan) {
                 lastTrainedSpan.textContent = `Last Trained: ${timestamp}`;
@@ -1623,6 +1672,9 @@ modelTrainBtn.addEventListener('click', async () => {
             if(modelSettings){
                 modelSettings.chartHistory = cloneChartState(completedChartState);
                 modelSettings.lastTrained = timestamp;
+                modelSettings.lastTrainedFramework = toggle;
+                updateLastTrainedFrameworkDisplays();
+                syncRuntimeFrameworkToggles(toggle);
                 await persistModelSettings(currentModelName, modelSettings);
             }
 
@@ -1658,7 +1710,7 @@ runTestButton.addEventListener('click',async ()=> {
 
     const result = await window.electronAPI.invoke('test-model', {
         modelName: modelName,
-        modelType: getSelectedFramework()
+        modelType: getSelectedRuntimeFramework('test')
     });
     if (result.success) {
         console.log(result);
@@ -1890,7 +1942,7 @@ async function processPrediction(imagePath) {
     const result = await window.electronAPI.invoke('predict-image', {
         modelName: currentModelName,
         imagePath: imagePath,
-        modelType: getSelectedFramework()
+        modelType: getSelectedRuntimeFramework('prediction')
     });
 
 
