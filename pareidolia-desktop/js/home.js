@@ -1055,7 +1055,7 @@ async function loadCarousel() {
     if(projectPath) {
         // Request images
         console.log(currentPath);
-        const images = await window.electronAPI.invoke('get-project-images', currentPath + "/positives");
+        const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         // Loop through images and create elements
         carousel.innerHTML = '';
@@ -1078,7 +1078,7 @@ async function loadGallery(){
     //const currentName = sessionStorage.getItem('projectName');
     if(projectPath){
         galleryContainer.innerHTML = '';
-        const images = await window.electronAPI.invoke('get-project-images', currentPath + "/positives");
+        const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         images.forEach(imgData => {
             const imgElement = document.createElement('img');

@@ -200,8 +200,7 @@ const createServer = () => {
             
             // Decode base64 and write to file
             const buffer = Buffer.from(fileData, 'base64');
-            const positivesPath = path.join(datasetPath, 'positives');
-            const videoPath = path.join(positivesPath, fileName);
+            const videoPath = path.join(datasetPath, fileName);
             fs.writeFileSync(videoPath, buffer);
             console.log('Video file saved:', videoPath);
             console.log('File size:', (buffer.length / 1024 / 1024).toFixed(2), 'MB');
@@ -211,7 +210,7 @@ const createServer = () => {
             console.log('Starting video conversion...');
             const conversionResult = await executePythonScript('py/extract_images.py', [
                 videoPath,
-                positivesPath
+                datasetPath
             ], venvPath);
             
             if (conversionResult.success) {
