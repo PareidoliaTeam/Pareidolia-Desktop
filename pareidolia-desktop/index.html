@@ -17,7 +17,11 @@
       <img src="assets/logoRevised.png" alt="App Logo" width="50" />
     </div>
     <!-- List of models -->
-    <p class="model-section">Models</p>
+    <div class="sidebar-section-switcher">
+      <p class="model-section sidebar-tab sidebar-tab-models">Models</p>
+      <p class="model-section sidebar-tab sidebar-tab-datasets" onclick="switchMode('view-home', '.left-sidebar-datasets')">Datasets</p>
+    </div>
+    <input id="model-search" type="text" placeholder="Search">
     <nav id="modelsList" class="model-list"></nav>
     <button class="create-btn">+ Create</button>
   </aside>
@@ -30,7 +34,11 @@
     <img src="assets/logoRevised.png" alt="App Logo" width="50" />
   </div>
   <!-- List of datasets -->
-  <p class="dataset-section">Datasets</p>
+    <div class="sidebar-section-switcher">
+      <p class="model-section sidebar-tab sidebar-tab-models" onclick="switchMode('view-home', '.left-sidebar-models')">Models</p>
+      <p class="model-section sidebar-tab sidebar-tab-datasets">Datasets</p>
+    </div>
+    <input id="dataset-search" type="text" placeholder="Search">
   <nav id="datasetsList" class="datasets-list"></nav>
   <button class="upload-btn-sidebar">↑ Upload</button>
 </aside>
@@ -43,7 +51,7 @@
     <div id="view-home" class="app-view">
       <h2>Datasets</h2>
       <div class="dataset-button-group">
-        <button class="dataset-btn" onclick="switchMode('view-dataset-home', '.left-sidebar-datasets')">✦ View</button>
+        <button class="dataset-btn" onclick="switchMode('view-home', '.left-sidebar-datasets')">✦ View</button>
         <button id="upload-btn" class="dataset-btn">↑ Upload</button>
         <!-- Bottom set of buttons for additional things -->
         <footer class="bottom">

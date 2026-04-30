@@ -67,11 +67,27 @@ body, html {
 
 .dataset-section,
 .model-section {
-  position: sticky;
-  justify-content: center;
-  gap: 20px;
   font-size: 0.9rem;
   color: darkgray;
+  margin: 0;
+}
+
+.sidebar-section-switcher {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 18px 0 14px;
+}
+
+.sidebar-tab {
+  cursor: pointer;
+  transition: color 0.2s ease, font-weight 0.2s ease;
+}
+
+.left-sidebar-models.sidebar-active .sidebar-tab-models,
+.left-sidebar-datasets.sidebar-active .sidebar-tab-datasets {
+  color: #222;
+  font-weight: 700;
 }
 
 .dataset-item,
