@@ -807,6 +807,13 @@ async function renderDatasetModal() {
         availableDatasetsList.innerHTML = '<div class="dataset-empty-msg">No more datasets available</div>';
     } else {
         available.forEach(([datasetName, datasetInfo]) => {
+            console.log('Available dataset:', datasetName, datasetInfo);
+
+            const exists = await window.electronAPI.invoke('path-exists', datasetInfo.path);
+            console.log(`Dataset path exists for "${datasetName}":`, exists);
+            const fileNum = exists ? await window.electronAPI.invoke('get-file-count', datasetInfo.path) : { count: 0 };
+            console.log(`Number of files in dataset "${datasetName}":`, fileNum.count);
+
             const item = document.createElement('div');
             item.classList.add('dataset-item', 'available');
 
