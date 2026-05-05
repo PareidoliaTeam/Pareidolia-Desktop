@@ -1,3 +1,4 @@
+
 // ============================================================
 // Query Selectors
 // ============================================================
@@ -346,6 +347,63 @@ async function showModel(modelName,modelNamePath) {
     await loadModelSettingsForView(modelName);
 }
 
+async function checkExistingDatasets(modelName, modelNamePath) {
+    console.log('Checking datasets for model:', modelName, modelNamePath);
+
+    try {
+        const { labelsJson, modelFolderPath } = await window.electronAPI.invoke('get-model-details-for-python', modelName);
+
+        console.log('Model folder path:', modelFolderPath);
+        console.log('Labels associated with model:', labelsJson);
+
+        const settings = await window.electronAPI.invoke('get-model-settings', modelName);
+        console.log('Current model settings:', settings);
+        const labels = settings.labels || {};
+        let didUpdateSettings = false;
+
+        for (const [labelName, datasetEntries] of Object.entries(labels)) {
+            for (const [datasetName, datasetPath] of Object.entries(datasetEntries || {})) {
+                console.log(`Dataset for label '${labelName}' (${datasetName}):`, datasetPath);
+
+                const exists = await window.electronAPI.invoke('path-exists', datasetPath);
+
+                if (exists) {
+                    console.log(`Dataset path for label '${labelName}' exists.`);
+                    const fileNum = await window.electronAPI.invoke('get-file-count', datasetPath);
+                    console.log(`Number of files in dataset for label '${labelName}':`, fileNum.count);
+
+                    if (fileNum.count < 3) {
+                        console.log(`Dataset '${datasetPath}' for label '${labelName}' has ${fileNum.count} files, which is less than 3.`);
+                        if (labels[labelName]) {
+                            delete labels[labelName][datasetName];
+                            await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
+                            didUpdateSettings = true;
+                        }
+                    }
+                } else {
+                    console.log(`Dataset path '${datasetPath}' for label '${labelName}' does not exist.`);
+                    if (labels[labelName]) {
+                        delete labels[labelName][datasetName];
+                        await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
+                        didUpdateSettings = true;
+                    }
+                }
+            }
+        }
+
+        if (didUpdateSettings) {
+            modelSettings = settings;
+            renderLabels();
+
+            if (currentLabelName) {
+                await renderDatasetModal();
+            }
+        }
+    } catch (error) {
+        console.error('Error checking existing datasets:', error);
+    }
+}
+
 /**
  * Shows the dataset info view and displays the dataset name.
  * @param {string} datasetName - The name of the dataset to display
@@ -539,7 +597,6 @@ async function loadModelSettingsForView(modelName) {
 
         // clears builder canvas
         builderCanvas.innerHTML = '';
-
         // adds saved layers
         if(modelSettings.layers && modelSettings.layers.length > 0){
             modelSettings.layers.forEach(layer => {
@@ -758,6 +815,13 @@ async function renderDatasetModal() {
         availableDatasetsList.innerHTML = '<div class="dataset-empty-msg">No more datasets available</div>';
     } else {
         available.forEach(([datasetName, datasetInfo]) => {
+            console.log('Available dataset:', datasetName, datasetInfo);
+
+            const exists = await window.electronAPI.invoke('path-exists', datasetInfo.path);
+            console.log(`Dataset path exists for "${datasetName}":`, exists);
+            const fileNum = exists ? await window.electronAPI.invoke('get-file-count', datasetInfo.path) : { count: 0 };
+            console.log(`Number of files in dataset "${datasetName}":`, fileNum.count);
+
             const item = document.createElement('div');
             item.classList.add('dataset-item', 'available');
 
@@ -1040,6 +1104,7 @@ async function loadModelsFromFolder() {
             const li = document.createElement('li');
             li.classList.add('model-item');
             li.setAttribute('data-path', modelInfo.path);
+            li.setAttribute('data-model-name', modelName);
 
             const div = document.createElement('div');
             div.classList.add('model-open-btn');
@@ -1047,8 +1112,11 @@ async function loadModelsFromFolder() {
             li.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const modelPath = li.getAttribute('data-path');
-                const modelDisplayName = div.textContent;
+                const modelDisplayName = li.getAttribute('data-model-name') || div.textContent;
+
+                console.log('Model item clicked:', modelDisplayName, modelPath);
                 showModel(modelDisplayName,modelPath);
+                checkExistingDatasets(modelName, modelInfo.path);
             });
             li.appendChild(div);
             modelsList.appendChild(li);
@@ -1069,7 +1137,7 @@ async function loadCarousel() {
     if(projectPath) {
         // Request images
         console.log(currentPath);
-        const images = await window.electronAPI.invoke('get-project-images', currentPath + "/positives");
+        const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         // Loop through images and create elements
         carousel.innerHTML = '';
@@ -1092,7 +1160,7 @@ async function loadGallery(){
     //const currentName = sessionStorage.getItem('projectName');
     if(projectPath){
         galleryContainer.innerHTML = '';
-        const images = await window.electronAPI.invoke('get-project-images', currentPath + "/positives");
+        const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         images.forEach(imgData => {
             const imgElement = document.createElement('img');

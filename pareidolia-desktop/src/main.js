@@ -44,7 +44,8 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await migrateDatasetFolders();
   createServer();
   createWindow();
 
@@ -74,6 +75,73 @@ app.on('window-all-closed', () => {
 // ============================================
 // FOLDER MANAGEMENT FUNCTIONS
 // ============================================
+
+/**
+ * Migrates any existing datasets that use the old positives/negatives subfolder
+ * structure to the new flat structure where images live directly in the dataset folder.
+ * - Images in positives/ are moved up to the dataset root.
+ * - The negatives/ folder is deleted entirely.
+ * - The (now-empty) positives/ folder is removed.
+ * Safe to call on every startup; datasets already on the new structure are skipped.
+ */
+export async function migrateDatasetFolders() {
+  const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
+
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const datasetsPath = path.join(pareidoliaPath, 'datasets');
+
+    if (!fs.existsSync(datasetsPath)) {
+      return;
+    }
+
+    const entries = fs.readdirSync(datasetsPath, { withFileTypes: true });
+    const datasetDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+
+    for (const datasetName of datasetDirs) {
+      const datasetPath = path.join(datasetsPath, datasetName);
+      const positivesPath = path.join(datasetPath, 'positives');
+      const negativesPath = path.join(datasetPath, 'negatives');
+
+      // Migrate images from positives/ to dataset root
+      if (fs.existsSync(positivesPath)) {
+        console.log(`[migrate] Migrating positives/ for dataset: ${datasetName}`);
+        const imageFiles = fs.readdirSync(positivesPath).filter(f =>
+          IMAGE_EXTENSIONS.has(path.extname(f).toLowerCase())
+        );
+
+        for (const imgFile of imageFiles) {
+          const src = path.join(positivesPath, imgFile);
+          const dest = path.join(datasetPath, imgFile);
+          if (fs.existsSync(dest)) {
+            console.warn(`[migrate] Skipping ${imgFile} — file already exists at dataset root`);
+            continue;
+          }
+          fs.renameSync(src, dest);
+          console.log(`[migrate] Moved: ${imgFile}`);
+        }
+
+        // Remove the now-empty positives/ folder
+        try {
+          fs.rmdirSync(positivesPath);
+          console.log(`[migrate] Removed positives/ folder for: ${datasetName}`);
+        } catch (e) {
+          console.warn(`[migrate] Could not remove positives/ for ${datasetName}: ${e.message}`);
+        }
+      }
+
+      // Delete negatives/ folder entirely
+      if (fs.existsSync(negativesPath)) {
+        fs.rmSync(negativesPath, { recursive: true, force: true });
+        console.log(`[migrate] Removed negatives/ folder for: ${datasetName}`);
+      }
+    }
+
+    console.log('[migrate] Dataset migration check complete.');
+  } catch (error) {
+    console.error(`[migrate] Error during dataset migration: ${error.message}`);
+  }
+}
 
 
 
@@ -200,19 +268,6 @@ export async function createDatasetFolder(projectName) {
       console.log(`Project folder already exists at: ${projectPath}`);
     }
 
-    // Create positives and negatives folders
-    const positivesPath = path.join(projectPath, 'positives');
-    const negativesPath = path.join(projectPath, 'negatives');
-
-    if (!fs.existsSync(positivesPath)) {
-      fs.mkdirSync(positivesPath, { recursive: true });
-      console.log(`Created positives folder at: ${positivesPath}`);
-    }
-
-    if (!fs.existsSync(negativesPath)) {
-      fs.mkdirSync(negativesPath, { recursive: true });
-      console.log(`Created negatives folder at: ${negativesPath}`);
-    }
     return projectPath;
   } catch (error) {
     console.error(`Error creating project folder: ${error.message}`);
@@ -404,11 +459,15 @@ export async function updateModelSettings(modelName, newSettings) {
  * { name: "Fruits",
  *  labels: 
  *  { "Apple": 
- *    { "Fuji Apples": "/path/folder1" , 
- *     "Gala Apples": "/path/folder2" }, 
+ *    { 
+ *        "Fuji Apples": "/path/folder1" , 
+ *        "Gala Apples": "/path/folder2" 
+ *    }, 
  *    "Orange": 
- *      { "Navel Oranges": "/path/a", 
- *      "Blood Oranges": "/path/b" } 
+ *      { 
+ *        "Navel Oranges": "/path/a", 
+ *        "Blood Oranges": "/path/b" 
+ *    } 
  *  }, 
  *  epochs: 10 
  * }
@@ -487,8 +546,7 @@ export async function modelDetailsForPython(modelName) {
 
     const labelsJson = {};
     for (const [labelName, datasets] of Object.entries(settings.labels || {})) {
-      // Each dataset folder contains a positives/ subfolder with the training images
-      labelsJson[labelName] = Object.values(datasets).map(p => path.join(p, 'positives'));
+      labelsJson[labelName] = Object.values(datasets);
     }
 
     return {
@@ -898,6 +956,26 @@ ipcMain.handle('get-model-details-for-python', async (event, modelName) => {
  */
 ipcMain.handle('get-model-settings', async (event, modelName) => {
   return await getModelSettings(modelName);
+});
+
+/**
+ * Handle checking whether a filesystem path exists.
+ */
+ipcMain.handle('path-exists', async (event, targetPath) => {
+  return fs.existsSync(targetPath);
+});
+
+/**
+ * Handle getting the count of files in a directory at a given path.
+ */
+ipcMain.handle('get-file-count', async (event, targetPath) => {
+  try {
+    const files = fs.readdirSync(targetPath);
+    return { success: true, count: files.length };
+  } catch (error) {
+    console.error(`Error reading directory for file count: ${error.message}`);
+    return { success: false, error: error.message };
+  }
 });
 
 /**
