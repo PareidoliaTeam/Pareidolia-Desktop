@@ -635,6 +635,19 @@ async function convertVideo(projectPath){
     ], venvPath);
   }
 }
+
+async function selectFolder() {
+  const result = await dialog.showOpenDialog({
+    title: 'Select a folder to import',
+    properties: ['openDirectory']
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return result.filePaths[0];
+}
 /**
  * Calls extract_images.py and exports images.
  * @param {string} videoPath - the filepath to the video
@@ -700,6 +713,10 @@ ipcMain.handle('get-pareidolia-path', async () => {
  */
 ipcMain.handle('create-model-folder', async (event, modelName) => {
   return await createModelFolder(modelName);
+});
+
+ipcMain.handle('select-folder', async () => {
+  return await selectFolder();
 });
 
 
@@ -889,6 +906,24 @@ ipcMain.handle('get-model-settings', async (event, modelName) => {
 ipcMain.handle('update-model-settings', async (event, params) => {
   const { modelName, newSettings } = params;
   return await updateModelSettings(modelName, newSettings);
+});
+
+ipcMain.handle('move-folder', (event, params) => {
+  const { src, dest } = params || {};
+
+  if (!src || !dest) {
+    throw new Error('Source and destination folders are required.');
+  }
+
+  if (!fs.existsSync(src)) {
+    throw new Error(`Source folder not found: ${src}`);
+  }
+
+  fs.mkdirSync(dest, { recursive: true });
+  fs.cpSync(src, dest, { recursive: true });
+  fs.rmSync(src, { recursive: true, force: true });
+
+  return dest;
 });
 
 /**

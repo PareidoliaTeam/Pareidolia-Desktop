@@ -21,6 +21,7 @@ const modelSearchInput = document.getElementById('model-search');
 const sidebarModelsRadio = document.getElementById('sidebar-models-active');
 const sidebarDatasetsRadio = document.getElementById('sidebar-models-datasets');
 const addModelBtn = document.querySelector('.create-btn');
+const datasetImportBtn = document.getElementById('dataset-import-btn');
 const deleteModelBtn = document.getElementById('delete-model-btn');
 const primarySidebar = document.querySelector('.left-sidebar-models');
 
@@ -68,6 +69,9 @@ const trainProjectTypeInputs = document.querySelectorAll('input[name="train-proj
 const trainFrameworkInputs = document.querySelectorAll('[data-framework-toggle]');
 const testFrameworkInputs = document.querySelectorAll('input[name="test-framework"]');
 const predictionFrameworkInputs = document.querySelectorAll('input[name="prediction-framework"]');
+
+// Dataset Modal
+const datasetImportModal = document.getElementById('import-dataset-modal');
 
 function getSelectedFramework() {
     const selectedRadio = document.querySelector('[data-framework-toggle]:checked');
@@ -365,6 +369,10 @@ function showDataset(datasetName,datasetPath) {
 function showDatasetGallery() {
     showView('view-dataset-gallery');
     loadGallery();
+}
+
+function openImportModal() {
+    datasetImportModal.style.display = 'flex';
 }
 
 /**
@@ -837,6 +845,12 @@ function setSidebarCollectionMode(mode, options = {}) {
     }
     if (datasetSearchInput) {
         datasetSearchInput.style.display = showDatasets ? '' : 'none';
+    }
+    if (addModelBtn) {
+        addModelBtn.style.display = showDatasets ? 'none' : '';
+    }
+    if (datasetImportBtn) {
+        datasetImportBtn.style.display = showDatasets ? '' : 'none';
     }
 
     syncSidebarSegmentedControls(showDatasets);
@@ -1393,6 +1407,14 @@ addModelBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openAddProjectModal();
 });
+
+// Import Button - open modal to import new data
+if (datasetImportBtn) {
+    datasetImportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openImportModal();
+    });
+}
 
 // Open Help modal
 helpBtn.addEventListener('click', (e) => {
@@ -1960,3 +1982,59 @@ async function processPrediction(imagePath) {
         console.error(result.error);
     }
 }
+
+const importVideoBtn = document.getElementById('import-video-btn');
+const importFolderBtn = document.getElementById('import-folder-btn');
+const datasetNameInput = document.getElementById('dataset-name-input');
+
+
+importVideoBtn.addEventListener('click', async () => {
+    const datasetName = datasetNameInput?.value.trim();
+
+    if (!datasetName) {
+        return;
+    }
+
+    try {
+        const datasetPath = await window.electronAPI.invoke('create-dataset-folder', datasetName);
+        const conversionResult = await window.electronAPI.invoke('convert-video', `${datasetPath}/positives`);
+
+        if (conversionResult !== null) {
+            datasetNameInput.value = '';
+            datasetImportModal.style.display = 'none';
+            await loadDatasetsFromFolder();
+        }
+    } catch (error) {
+        console.error('Error importing video dataset:', error);
+    }
+});
+
+
+importFolderBtn.addEventListener('click', async () => {
+    const datasetName = datasetNameInput?.value.trim();
+    if (!datasetName) {
+        return;
+    }
+    try {
+        const selectedFolder = await window.electronAPI.invoke('select-folder');
+        if (!selectedFolder) {
+            return;
+        }
+
+        const datasetPath = await window.electronAPI.invoke('create-dataset-folder', datasetName);
+        const movedFolderPath = await window.electronAPI.invoke('move-folder', {
+            src: selectedFolder,
+            dest: `${datasetPath}/positives`
+        });
+
+        if (movedFolderPath) {
+            datasetNameInput.value = '';
+            datasetImportModal.style.display = 'none';
+            await loadDatasetsFromFolder();
+        }
+    } catch (error) {
+        console.error('Error importing folder dataset:', error);
+    }
+});
+
+
