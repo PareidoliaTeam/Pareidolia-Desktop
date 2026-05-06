@@ -806,30 +806,54 @@ async function renderDatasetModal() {
     if (available.length === 0) {
         availableDatasetsList.innerHTML = '<div class="dataset-empty-msg">No more datasets available</div>';
     } else {
-        available.forEach(([datasetName, datasetInfo]) => {
+        for (const [datasetName, datasetInfo] of available) {
             console.log('Available dataset:', datasetName, datasetInfo);
 
             const exists = await window.electronAPI.invoke('path-exists', datasetInfo.path);
             console.log(`Dataset path exists for "${datasetName}":`, exists);
-            const fileNum = exists ? await window.electronAPI.invoke('get-file-count', datasetInfo.path) : { count: 0 };
-            console.log(`Number of files in dataset "${datasetName}":`, fileNum.count);
+            const images = exists ? await window.electronAPI.invoke('get-project-images', datasetInfo.path) : [];
+            const imageCount = images.length;
+            const disabledReason = !exists
+                ? 'Dataset path not found'
+                : imageCount < 3
+                    ? `Needs at least 3 images (${imageCount} found)`
+                    : '';
+            console.log(`Number of images in dataset "${datasetName}":`, imageCount);
 
             const item = document.createElement('div');
             item.classList.add('dataset-item', 'available');
+            if (disabledReason) {
+                item.classList.add('unavailable');
+            }
+
+            const textWrap = document.createElement('div');
+            textWrap.classList.add('dataset-item-text');
 
             const nameSpan = document.createElement('span');
             nameSpan.classList.add('dataset-item-name');
             nameSpan.textContent = datasetName;
+            textWrap.appendChild(nameSpan);
+
+            if (disabledReason) {
+                const statusSpan = document.createElement('span');
+                statusSpan.classList.add('dataset-item-status');
+                statusSpan.textContent = disabledReason;
+                textWrap.appendChild(statusSpan);
+            }
 
             const addBtn = document.createElement('button');
             addBtn.classList.add('dataset-add-btn');
             addBtn.textContent = '+';
-            addBtn.addEventListener('click', () => addDatasetToLabel(datasetName, datasetInfo.path));
+            addBtn.disabled = Boolean(disabledReason);
+            addBtn.title = disabledReason || 'Add dataset';
+            if (!disabledReason) {
+                addBtn.addEventListener('click', () => addDatasetToLabel(datasetName, datasetInfo.path));
+            }
 
-            item.appendChild(nameSpan);
+            item.appendChild(textWrap);
             item.appendChild(addBtn);
             availableDatasetsList.appendChild(item);
-        });
+        }
     }
 }
 

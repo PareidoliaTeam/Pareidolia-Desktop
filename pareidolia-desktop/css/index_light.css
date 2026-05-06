@@ -1358,12 +1358,31 @@ body, html {
   color: var(--onyx);
 }
 
+.dataset-modal-content .dataset-item.unavailable {
+  background-color: rgba(255, 95, 95, 0.08);
+  border-color: rgba(255, 95, 95, 0.24);
+}
+
+.dataset-item-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
 .dataset-item-name {
   flex: 1;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.dataset-item-status {
+  color: var(--vibrant-coral);
+  font-size: 0.76rem;
+  line-height: 1.2;
 }
 
 .dataset-remove-btn {
@@ -1408,6 +1427,16 @@ body, html {
 .dataset-add-btn:hover {
   background: linear-gradient(180deg, #b3ffbb 0%, #91ef9d 100%);
   transform: translateY(-1px);
+}
+
+.dataset-add-btn:disabled,
+.dataset-add-btn:disabled:hover {
+  background: var(--silver);
+  color: var(--dim-grey);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  opacity: 0.72;
 }
 
 .dataset-empty-msg {
