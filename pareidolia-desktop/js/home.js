@@ -152,6 +152,10 @@ const datasetCleanupModal = document.getElementById('dataset-cleanup-modal');
 const datasetCleanupModalClose = document.getElementById('dataset-cleanup-modal-close');
 const datasetCleanupList = document.getElementById('dataset-cleanup-list');
 const datasetCleanupOkBtn = document.getElementById('dataset-cleanup-ok-btn');
+const trainingValidationModal = document.getElementById('training-validation-modal');
+const trainingValidationModalClose = document.getElementById('training-validation-modal-close');
+const trainingValidationList = document.getElementById('training-validation-list');
+const trainingValidationOkBtn = document.getElementById('training-validation-ok-btn');
 const deleteDatasetModal = document.getElementById('delete-dataset-modal');
 const deleteDatasetModalClose = document.getElementById('delete-dataset-modal-close');
 const deleteDatasetName = document.getElementById('delete-dataset-name');
@@ -405,6 +409,96 @@ async function removeInvalidAssignedDatasets(modelName, settings = modelSettings
     }
 
     return removedAssignments;
+}
+
+function openTrainingValidationModal(validationResult) {
+    if (!trainingValidationModal || !trainingValidationList) {
+        return;
+    }
+
+    const { messages = [], removedAssignments = [] } = validationResult || {};
+    trainingValidationList.innerHTML = '';
+
+    removedAssignments.forEach(({ datasetName, labelName, reason }) => {
+        const item = document.createElement('div');
+        item.classList.add('training-validation-item');
+
+        const message = document.createElement('span');
+        message.innerHTML = `Dataset <strong></strong> was removed from label <strong></strong>.`;
+        const strongTags = message.querySelectorAll('strong');
+        strongTags[0].textContent = datasetName;
+        strongTags[1].textContent = labelName;
+
+        const detail = document.createElement('span');
+        detail.classList.add('training-validation-detail');
+        detail.textContent = reason;
+
+        item.appendChild(message);
+        item.appendChild(detail);
+        trainingValidationList.appendChild(item);
+    });
+
+    messages.forEach((text) => {
+        const item = document.createElement('div');
+        item.classList.add('training-validation-item');
+        item.textContent = text;
+        trainingValidationList.appendChild(item);
+    });
+
+    trainingValidationModal.style.display = 'flex';
+}
+
+function closeTrainingValidationModal() {
+    if (!trainingValidationModal) return;
+    trainingValidationModal.style.display = 'none';
+}
+
+async function validateTrainingReadiness(modelName) {
+    const messages = [];
+    if (!modelName || !modelSettings) {
+        return {
+            canTrain: false,
+            messages: ['Open a model before training.'],
+            removedAssignments: []
+        };
+    }
+
+    const removedAssignments = await removeInvalidAssignedDatasets(modelName, modelSettings, { showNotice: false });
+    if (removedAssignments.length > 0) {
+        messages.push('One or more assigned datasets were invalid and have been removed. Review the assignments before training again.');
+    }
+
+    const labels = modelSettings?.labels || {};
+    const labelEntries = Object.entries(labels);
+    const labelsWithValidDatasets = labelEntries.filter(([, datasetEntries]) => (
+        datasetEntries
+        && typeof datasetEntries === 'object'
+        && Object.keys(datasetEntries).length > 0
+    ));
+
+    if (labelEntries.length < 2) {
+        messages.push('Create at least two labels before training.');
+    }
+
+    if (labelsWithValidDatasets.length < 2) {
+        messages.push('Assign at least one valid dataset to at least two labels.');
+    }
+
+    labelEntries.forEach(([labelName, datasetEntries]) => {
+        const datasetCount = datasetEntries && typeof datasetEntries === 'object'
+            ? Object.keys(datasetEntries).length
+            : 0;
+
+        if (datasetCount === 0) {
+            messages.push(`Label "${labelName}" needs at least one valid assigned dataset.`);
+        }
+    });
+
+    return {
+        canTrain: messages.length === 0,
+        messages,
+        removedAssignments
+    };
 }
 
 
@@ -1741,6 +1835,21 @@ if (datasetCleanupModal) {
     });
 }
 
+// Training validation modal close buttons
+if (trainingValidationModalClose) {
+    trainingValidationModalClose.addEventListener('click', closeTrainingValidationModal);
+}
+if (trainingValidationOkBtn) {
+    trainingValidationOkBtn.addEventListener('click', closeTrainingValidationModal);
+}
+
+// Training validation modal backdrop click
+if (trainingValidationModal) {
+    trainingValidationModal.addEventListener('click', (e) => {
+        if (e.target === trainingValidationModal) closeTrainingValidationModal();
+    });
+}
+
 // Delete dataset modal open button
 deleteDatasetBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1775,6 +1884,28 @@ deleteModelModal.addEventListener('click', (e) => {
 modelTrainBtn.addEventListener('click', async () => {
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
+
+    modelTrainBtn.disabled = true;
+    modelTrainBtn.textContent = 'Checking datasets...';
+
+    try {
+        const validationResult = await validateTrainingReadiness(currentModelName);
+        if (!validationResult.canTrain) {
+            openTrainingValidationModal(validationResult);
+            return;
+        }
+    } catch (error) {
+        console.error('Error validating training datasets:', error);
+        openTrainingValidationModal({
+            messages: ['Could not validate dataset assignments. Check the console for details.'],
+            removedAssignments: []
+        });
+        return;
+    } finally {
+        modelTrainBtn.disabled = false;
+        modelTrainBtn.textContent = 'Train Model';
+    }
+
     activeTrainingModelName = currentModelName;
     activeChartModelName = currentModelName;
 

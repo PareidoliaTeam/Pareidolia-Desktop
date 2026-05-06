@@ -1183,17 +1183,20 @@ body, html {
   margin-top: 1.25rem;
 }
 
-.dataset-cleanup-modal-content {
+.dataset-cleanup-modal-content,
+.training-validation-modal-content {
   max-width: 520px;
 }
 
-.dataset-cleanup-message {
+.dataset-cleanup-message,
+.training-validation-message {
   color: var(--onyx);
   line-height: 1.45;
   margin: 0 0 1rem;
 }
 
-.dataset-cleanup-list {
+.dataset-cleanup-list,
+.training-validation-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -1205,7 +1208,8 @@ body, html {
   border-radius: 6px;
 }
 
-.dataset-cleanup-item {
+.dataset-cleanup-item,
+.training-validation-item {
   padding: 0.65rem 0.75rem;
   background-color: rgba(255, 95, 95, 0.08);
   border: 1px solid rgba(255, 95, 95, 0.24);
@@ -1215,18 +1219,21 @@ body, html {
   line-height: 1.35;
 }
 
-.dataset-cleanup-item strong {
+.dataset-cleanup-item strong,
+.training-validation-item strong {
   color: var(--vibrant-coral);
 }
 
-.dataset-cleanup-reason {
+.dataset-cleanup-reason,
+.training-validation-detail {
   display: block;
   margin-top: 0.15rem;
   color: var(--dim-grey);
   font-size: 0.78rem;
 }
 
-.dataset-cleanup-actions {
+.dataset-cleanup-actions,
+.training-validation-actions {
   margin-top: 1.25rem;
 }
 
