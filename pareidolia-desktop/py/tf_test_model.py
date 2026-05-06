@@ -34,8 +34,22 @@ def evaluate(model_path, labels_json_str, project_type=MODEL_TYPE_SCRATCH):
         model_type = MODEL_TYPE_PRETRAINED if project_type == MODEL_TYPE_PRETRAINED else MODEL_TYPE_SCRATCH
         X_all, y_all, NUM_CLASSES, label_names = load_images_from_json(labels_json_str, model_type)
         if X_all is None or len(X_all) == 0:
-            print("Error: No images found or failed to load images")
-            sys.exit(1)
+            raise ValueError("No images found or failed to load images")
+
+        output_shape = model.output_shape
+        model_classes = None
+        if isinstance(output_shape, (tuple, list)) and output_shape:
+            model_classes = output_shape[-1]
+
+        if model_classes is not None and int(model_classes) != int(NUM_CLASSES):
+            raise ValueError(
+                "Model class count mismatch: "
+                f"the loaded model outputs {int(model_classes)} classes, "
+                f"but the current dataset defines {int(NUM_CLASSES)} labels. "
+                "Retrain the model with the current label set, or restore the label set "
+                "that was used when this model was created."
+            )
+
         X_train, x_test, y_train, y_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
 
         # Evaluate model and return results
@@ -45,7 +59,9 @@ def evaluate(model_path, labels_json_str, project_type=MODEL_TYPE_SCRATCH):
             "success": True,
             "accuracy": float(results[1]),
             "loss": float(results[0]),
-            "total_images": len(x_test)
+            "total_images": len(x_test),
+            "model_classes": int(model_classes) if model_classes is not None else None,
+            "dataset_classes": int(NUM_CLASSES)
         }))
 
     except Exception as e:

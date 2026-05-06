@@ -44,7 +44,8 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await migrateDatasetFolders();
   createServer();
   createWindow();
 
@@ -74,6 +75,73 @@ app.on('window-all-closed', () => {
 // ============================================
 // FOLDER MANAGEMENT FUNCTIONS
 // ============================================
+
+/**
+ * Migrates any existing datasets that use the old positives/negatives subfolder
+ * structure to the new flat structure where images live directly in the dataset folder.
+ * - Images in positives/ are moved up to the dataset root.
+ * - The negatives/ folder is deleted entirely.
+ * - The (now-empty) positives/ folder is removed.
+ * Safe to call on every startup; datasets already on the new structure are skipped.
+ */
+export async function migrateDatasetFolders() {
+  const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
+
+  try {
+    const pareidoliaPath = getPareidoliaFolderPath();
+    const datasetsPath = path.join(pareidoliaPath, 'datasets');
+
+    if (!fs.existsSync(datasetsPath)) {
+      return;
+    }
+
+    const entries = fs.readdirSync(datasetsPath, { withFileTypes: true });
+    const datasetDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+
+    for (const datasetName of datasetDirs) {
+      const datasetPath = path.join(datasetsPath, datasetName);
+      const positivesPath = path.join(datasetPath, 'positives');
+      const negativesPath = path.join(datasetPath, 'negatives');
+
+      // Migrate images from positives/ to dataset root
+      if (fs.existsSync(positivesPath)) {
+        console.log(`[migrate] Migrating positives/ for dataset: ${datasetName}`);
+        const imageFiles = fs.readdirSync(positivesPath).filter(f =>
+          IMAGE_EXTENSIONS.has(path.extname(f).toLowerCase())
+        );
+
+        for (const imgFile of imageFiles) {
+          const src = path.join(positivesPath, imgFile);
+          const dest = path.join(datasetPath, imgFile);
+          if (fs.existsSync(dest)) {
+            console.warn(`[migrate] Skipping ${imgFile} — file already exists at dataset root`);
+            continue;
+          }
+          fs.renameSync(src, dest);
+          console.log(`[migrate] Moved: ${imgFile}`);
+        }
+
+        // Remove the now-empty positives/ folder
+        try {
+          fs.rmdirSync(positivesPath);
+          console.log(`[migrate] Removed positives/ folder for: ${datasetName}`);
+        } catch (e) {
+          console.warn(`[migrate] Could not remove positives/ for ${datasetName}: ${e.message}`);
+        }
+      }
+
+      // Delete negatives/ folder entirely
+      if (fs.existsSync(negativesPath)) {
+        fs.rmSync(negativesPath, { recursive: true, force: true });
+        console.log(`[migrate] Removed negatives/ folder for: ${datasetName}`);
+      }
+    }
+
+    console.log('[migrate] Dataset migration check complete.');
+  } catch (error) {
+    console.error(`[migrate] Error during dataset migration: ${error.message}`);
+  }
+}
 
 
 
@@ -200,19 +268,6 @@ export async function createDatasetFolder(projectName) {
       console.log(`Project folder already exists at: ${projectPath}`);
     }
 
-    // Create positives and negatives folders
-    const positivesPath = path.join(projectPath, 'positives');
-    const negativesPath = path.join(projectPath, 'negatives');
-
-    if (!fs.existsSync(positivesPath)) {
-      fs.mkdirSync(positivesPath, { recursive: true });
-      console.log(`Created positives folder at: ${positivesPath}`);
-    }
-
-    if (!fs.existsSync(negativesPath)) {
-      fs.mkdirSync(negativesPath, { recursive: true });
-      console.log(`Created negatives folder at: ${negativesPath}`);
-    }
     return projectPath;
   } catch (error) {
     console.error(`Error creating project folder: ${error.message}`);
@@ -258,7 +313,19 @@ export async function createModelFolder(input) {
     const defaultSettings = {
       labels: {},
       epochs: 10,
+      modelType: 'tensorflow',
       projectType: projectType, // 'scratch' or 'pretrained'
+      chartHistory: {
+        labels: [],
+        accuracy: {
+          train: [],
+          val: []
+        },
+        loss: {
+          train: [],
+          val: []
+        }
+      },
       layers: [
         {
           "type": "Conv2D",
@@ -392,11 +459,15 @@ export async function updateModelSettings(modelName, newSettings) {
  * { name: "Fruits",
  *  labels: 
  *  { "Apple": 
- *    { "Fuji Apples": "/path/folder1" , 
- *     "Gala Apples": "/path/folder2" }, 
+ *    { 
+ *        "Fuji Apples": "/path/folder1" , 
+ *        "Gala Apples": "/path/folder2" 
+ *    }, 
  *    "Orange": 
- *      { "Navel Oranges": "/path/a", 
- *      "Blood Oranges": "/path/b" } 
+ *      { 
+ *        "Navel Oranges": "/path/a", 
+ *        "Blood Oranges": "/path/b" 
+ *    } 
  *  }, 
  *  epochs: 10 
  * }
@@ -423,6 +494,41 @@ export async function getModelSettings(modelName) {
 }
 
 /**
+ * Resolves the model file and framework type for a saved model.
+ * Prefers the framework persisted in model-settings.json, but falls back to
+ * the files that are actually present on disk for older projects.
+ */
+function resolveModelArtifact(modelName, settings = {}, requestedModelType = null) {
+  const pareidoliaPath = getPareidoliaFolderPath();
+  const modelFolder = path.join(pareidoliaPath, 'models', modelName, 'models');
+  const kerasPath = path.join(modelFolder, 'model.keras');
+  const ckptPath = path.join(modelFolder, 'model.ckpt');
+  const savedModelType = requestedModelType || settings.modelType;
+
+  if (savedModelType === 'tensorflow' && fs.existsSync(kerasPath)) {
+    return { modelFile: 'model.keras', modelPath: kerasPath, modelType: 'tensorflow' };
+  }
+
+  if (savedModelType === 'pytorch' && fs.existsSync(ckptPath)) {
+    return { modelFile: 'model.ckpt', modelPath: ckptPath, modelType: 'pytorch' };
+  }
+
+  if (fs.existsSync(kerasPath)) {
+    return { modelFile: 'model.keras', modelPath: kerasPath, modelType: 'tensorflow' };
+  }
+
+  if (fs.existsSync(ckptPath)) {
+    return { modelFile: 'model.ckpt', modelPath: ckptPath, modelType: 'pytorch' };
+  }
+
+  if (savedModelType === 'tensorflow') {
+    return { modelFile: 'model.keras', modelPath: kerasPath, modelType: 'tensorflow' };
+  }
+
+  return { modelFile: 'model.ckpt', modelPath: ckptPath, modelType: 'pytorch' };
+}
+
+/**
  * Builds the training details to pass to the Python training script.
  * Constructs labelsJson ({ LabelName: [path1, path2, ...] }) from model settings
  * and resolves the model output folder path.
@@ -440,8 +546,7 @@ export async function modelDetailsForPython(modelName) {
 
     const labelsJson = {};
     for (const [labelName, datasets] of Object.entries(settings.labels || {})) {
-      // Each dataset folder contains a positives/ subfolder with the training images
-      labelsJson[labelName] = Object.values(datasets).map(p => path.join(p, 'positives'));
+      labelsJson[labelName] = Object.values(datasets);
     }
 
     return {
@@ -545,7 +650,7 @@ export async function getProjectImages(projectPath) {
     const files = fs.readdirSync(projectPath);
 
     // Filter for only images
-    const imageExtensions = ['.jpg', '.jpeg', '.png'];
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
     const images = files.filter(file => imageExtensions.includes(path.extname(file).toLowerCase())).map(file=> {
       // Return an object
       return {
@@ -837,6 +942,26 @@ ipcMain.handle('get-model-settings', async (event, modelName) => {
 });
 
 /**
+ * Handle checking whether a filesystem path exists.
+ */
+ipcMain.handle('path-exists', async (event, targetPath) => {
+  return fs.existsSync(targetPath);
+});
+
+/**
+ * Handle getting the count of files in a directory at a given path.
+ */
+ipcMain.handle('get-file-count', async (event, targetPath) => {
+  try {
+    const files = fs.readdirSync(targetPath);
+    return { success: true, count: files.length };
+  } catch (error) {
+    console.error(`Error reading directory for file count: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
  * Handle updating model settings via IPC from renderer process
  */
 ipcMain.handle('update-model-settings', async (event, params) => {
@@ -848,18 +973,10 @@ ipcMain.handle('update-model-settings', async (event, params) => {
  * Handle model prediction via IPC from renderer process
  */
 ipcMain.handle('predict-image', async (event, params) => {
-  const { modelName, imagePath } = params;
-  const pareidoliaPath = getPareidoliaFolderPath();
+  const { modelName, imagePath, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
-  let modelFile
-
-  if (settings.modelType === 'tensorflow'){
-    modelFile = 'model.keras';
-  } else {
-    modelFile = 'model.ckpt';
-  }
-  const modelPath = path.join(pareidoliaPath, 'models', modelName, 'models', modelFile);
+  const { modelPath } = resolveModelArtifact(modelName, settings, modelType);
 
   let scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
       ? path.join(__dirname, '../../py/predict.py')
@@ -894,30 +1011,28 @@ ipcMain.handle('predict-image', async (event, params) => {
  */
 
 ipcMain.handle('test-model', async (event, params) => {
-  const {modelName} = params;
-  const pareidoliaPath = getPareidoliaFolderPath();
+  const { modelName, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
-  let modelFile, scriptPath, args;
+  let scriptPath, args;
+  const { modelPath, modelType: resolvedModelType } = resolveModelArtifact(modelName, settings, modelType);
 
   // Checks type of model and selects the correct script and filepath.
-  if (settings.modelType === 'tensorflow') {
-    modelFile = 'model.keras';
+  if (resolvedModelType === 'tensorflow') {
     scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../../py/tf_test_model.py')
         : path.join(process.resourcesPath, 'py/tf_test_model.py');
     args = [
-        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile),
+        modelPath,
         JSON.stringify(labelsJson),
         settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
       ];
   } else{
-    modelFile = 'model.ckpt';
     scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../../py/pt_test_model.py')
         : path.join(process.resourcesPath, 'py/pt_test_model.py');
     args = [
-        path.join(pareidoliaPath, 'models', modelName, 'models', modelFile),
+        modelPath,
         JSON.stringify(labelsJson),
         settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
       ];
