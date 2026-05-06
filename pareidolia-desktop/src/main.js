@@ -650,7 +650,7 @@ export async function getProjectImages(projectPath) {
     const files = fs.readdirSync(projectPath);
 
     // Filter for only images
-    const imageExtensions = ['.jpg', '.jpeg', '.png'];
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
     const images = files.filter(file => imageExtensions.includes(path.extname(file).toLowerCase())).map(file=> {
       // Return an object
       return {
