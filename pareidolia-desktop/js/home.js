@@ -148,6 +148,10 @@ const datasetModalTitle = document.getElementById('dataset-modal-title');
 const datasetModalClose = document.getElementById('dataset-modal-close');
 const assignedDatasetsList = document.getElementById('assigned-datasets-list');
 const availableDatasetsList = document.getElementById('available-datasets-list');
+const datasetCleanupModal = document.getElementById('dataset-cleanup-modal');
+const datasetCleanupModalClose = document.getElementById('dataset-cleanup-modal-close');
+const datasetCleanupList = document.getElementById('dataset-cleanup-list');
+const datasetCleanupOkBtn = document.getElementById('dataset-cleanup-ok-btn');
 const deleteDatasetModal = document.getElementById('delete-dataset-modal');
 const deleteDatasetModalClose = document.getElementById('delete-dataset-modal-close');
 const deleteDatasetName = document.getElementById('delete-dataset-name');
@@ -308,6 +312,101 @@ async function persistModelSettings(modelName, settings) {
     }
 }
 
+async function getInvalidDatasetReason(datasetPath) {
+    if (!datasetPath) {
+        return 'Dataset path not found';
+    }
+
+    const exists = await window.electronAPI.invoke('path-exists', datasetPath);
+    if (!exists) {
+        return 'Dataset path not found';
+    }
+
+    const images = await window.electronAPI.invoke('get-project-images', datasetPath);
+    const imageCount = Array.isArray(images) ? images.length : 0;
+
+    return imageCount < 3 ? `Needs at least 3 images (${imageCount} found)` : '';
+}
+
+function openDatasetCleanupModal(removedAssignments) {
+    if (!datasetCleanupModal || !datasetCleanupList || removedAssignments.length === 0) {
+        return;
+    }
+
+    datasetCleanupList.innerHTML = '';
+    removedAssignments.forEach(({ datasetName, labelName, reason }) => {
+        const item = document.createElement('div');
+        item.classList.add('dataset-cleanup-item');
+
+        const message = document.createElement('span');
+        message.innerHTML = `Dataset <strong></strong> has been removed from label <strong></strong>.`;
+        const strongTags = message.querySelectorAll('strong');
+        strongTags[0].textContent = datasetName;
+        strongTags[1].textContent = labelName;
+
+        const reasonSpan = document.createElement('span');
+        reasonSpan.classList.add('dataset-cleanup-reason');
+        reasonSpan.textContent = reason;
+
+        item.appendChild(message);
+        item.appendChild(reasonSpan);
+        datasetCleanupList.appendChild(item);
+    });
+
+    datasetCleanupModal.style.display = 'flex';
+}
+
+function closeDatasetCleanupModal() {
+    if (!datasetCleanupModal) return;
+    datasetCleanupModal.style.display = 'none';
+}
+
+async function removeInvalidAssignedDatasets(modelName, settings = modelSettings, options = {}) {
+    const { showNotice = true } = options;
+    if (!modelName || !settings) {
+        return [];
+    }
+
+    const labels = settings?.labels || {};
+    const removedAssignments = [];
+
+    for (const [labelName, datasetEntries] of Object.entries(labels)) {
+        if (!datasetEntries || typeof datasetEntries !== 'object') {
+            continue;
+        }
+
+        for (const [datasetName, datasetPath] of Object.entries(datasetEntries)) {
+            const reason = await getInvalidDatasetReason(datasetPath);
+            if (!reason) {
+                continue;
+            }
+
+            delete datasetEntries[datasetName];
+            removedAssignments.push({ datasetName, labelName, reason });
+        }
+    }
+
+    if (removedAssignments.length === 0) {
+        return removedAssignments;
+    }
+
+    await persistModelSettings(modelName, settings);
+
+    if (settings === modelSettings) {
+        renderLabels();
+
+        if (currentLabelName && datasetModal?.style.display === 'flex') {
+            await renderDatasetModal();
+        }
+    }
+
+    if (showNotice) {
+        openDatasetCleanupModal(removedAssignments);
+    }
+
+    return removedAssignments;
+}
+
 
 /**
  * Shows the view requested and hides all other views
@@ -347,51 +446,16 @@ async function checkExistingDatasets(modelName, modelNamePath) {
     console.log('Checking datasets for model:', modelName, modelNamePath);
 
     try {
-        const { labelsJson, modelFolderPath } = await window.electronAPI.invoke('get-model-details-for-python', modelName);
-
-        console.log('Model folder path:', modelFolderPath);
-        console.log('Labels associated with model:', labelsJson);
-
         const settings = await window.electronAPI.invoke('get-model-settings', modelName);
         console.log('Current model settings:', settings);
-        const labels = settings.labels || {};
-        let didUpdateSettings = false;
+        if (!settings.labels) settings.labels = {};
+        const removedAssignments = await removeInvalidAssignedDatasets(modelName, settings);
 
-        for (const [labelName, datasetEntries] of Object.entries(labels)) {
-            for (const [datasetName, datasetPath] of Object.entries(datasetEntries || {})) {
-                console.log(`Dataset for label '${labelName}' (${datasetName}):`, datasetPath);
-
-                const exists = await window.electronAPI.invoke('path-exists', datasetPath);
-
-                if (exists) {
-                    console.log(`Dataset path for label '${labelName}' exists.`);
-                    const fileNum = await window.electronAPI.invoke('get-file-count', datasetPath);
-                    console.log(`Number of files in dataset for label '${labelName}':`, fileNum.count);
-
-                    if (fileNum.count < 3) {
-                        console.log(`Dataset '${datasetPath}' for label '${labelName}' has ${fileNum.count} files, which is less than 3.`);
-                        if (labels[labelName]) {
-                            delete labels[labelName][datasetName];
-                            await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
-                            didUpdateSettings = true;
-                        }
-                    }
-                } else {
-                    console.log(`Dataset path '${datasetPath}' for label '${labelName}' does not exist.`);
-                    if (labels[labelName]) {
-                        delete labels[labelName][datasetName];
-                        await window.electronAPI.invoke('update-model-settings', { modelName, newSettings: settings });
-                        didUpdateSettings = true;
-                    }
-                }
-            }
-        }
-
-        if (didUpdateSettings) {
+        if (removedAssignments.length > 0) {
             modelSettings = settings;
             renderLabels();
 
-            if (currentLabelName) {
+            if (currentLabelName && datasetModal?.style.display === 'flex') {
                 await renderDatasetModal();
             }
         }
@@ -629,6 +693,7 @@ async function loadModelSettingsForView(modelName) {
 
         const selectedFramework = modelSettings.modelType === 'pytorch' ? 'false' : 'true';
         syncFrameworkToggles(selectedFramework);
+        await removeInvalidAssignedDatasets(modelName, modelSettings);
     } catch (error) {
         console.error('Error loading model settings:', error);
         modelSettings = { labels: {}, epochs: 10 };
@@ -735,6 +800,7 @@ async function openDatasetModal(labelName) {
     currentLabelName = labelName;
     datasetModalTitle.textContent = `Datasets for "${labelName}"`;
     datasetModal.style.display = 'flex';
+    await removeInvalidAssignedDatasets(sessionStorage.getItem('projectName'), modelSettings);
     await renderDatasetModal();
 }
 
@@ -1119,14 +1185,13 @@ async function loadModelsFromFolder() {
             const div = document.createElement('div');
             div.classList.add('model-open-btn');
             div.textContent = modelName;
-            li.addEventListener('click', (e) => {
+            li.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const modelPath = li.getAttribute('data-path');
                 const modelDisplayName = li.getAttribute('data-model-name') || div.textContent;
 
                 console.log('Model item clicked:', modelDisplayName, modelPath);
-                showModel(modelDisplayName,modelPath);
-                checkExistingDatasets(modelName, modelInfo.path);
+                await showModel(modelDisplayName,modelPath);
             });
             li.appendChild(div);
             modelsList.appendChild(li);
@@ -1660,6 +1725,21 @@ datasetModalClose.addEventListener('click', closeDatasetModal);
 datasetModal.addEventListener('click', (e) => {
     if (e.target === datasetModal) closeDatasetModal();
 });
+
+// Dataset cleanup modal close buttons
+if (datasetCleanupModalClose) {
+    datasetCleanupModalClose.addEventListener('click', closeDatasetCleanupModal);
+}
+if (datasetCleanupOkBtn) {
+    datasetCleanupOkBtn.addEventListener('click', closeDatasetCleanupModal);
+}
+
+// Dataset cleanup modal backdrop click
+if (datasetCleanupModal) {
+    datasetCleanupModal.addEventListener('click', (e) => {
+        if (e.target === datasetCleanupModal) closeDatasetCleanupModal();
+    });
+}
 
 // Delete dataset modal open button
 deleteDatasetBtn.addEventListener('click', (e) => {

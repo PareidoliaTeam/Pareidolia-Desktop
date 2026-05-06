@@ -1183,6 +1183,53 @@ body, html {
   margin-top: 1.25rem;
 }
 
+.dataset-cleanup-modal-content {
+  max-width: 520px;
+}
+
+.dataset-cleanup-message {
+  color: var(--onyx);
+  line-height: 1.45;
+  margin: 0 0 1rem;
+}
+
+.dataset-cleanup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--silver);
+  border-radius: 6px;
+}
+
+.dataset-cleanup-item {
+  padding: 0.65rem 0.75rem;
+  background-color: rgba(255, 95, 95, 0.08);
+  border: 1px solid rgba(255, 95, 95, 0.24);
+  border-radius: 6px;
+  color: var(--onyx);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.dataset-cleanup-item strong {
+  color: var(--vibrant-coral);
+}
+
+.dataset-cleanup-reason {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--dim-grey);
+  font-size: 0.78rem;
+}
+
+.dataset-cleanup-actions {
+  margin-top: 1.25rem;
+}
+
 /* ========================= */
 /* LABELS SECTION STYLES */
 /* ========================= */
