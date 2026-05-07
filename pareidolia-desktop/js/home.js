@@ -70,6 +70,10 @@ const trainFrameworkInputs = document.querySelectorAll('[data-framework-toggle]'
 const testFrameworkInputs = document.querySelectorAll('input[name="test-framework"]');
 const predictionFrameworkInputs = document.querySelectorAll('input[name="prediction-framework"]');
 
+// Training Response Display
+const stepOutputAreaWrapper = document.getElementsByClassName('step-output-area-wrapper');
+const stepOutputAreaLabel = document.getElementById('step-output-area-label');
+
 function getSelectedFramework() {
     const selectedRadio = document.querySelector('[data-framework-toggle]:checked');
     return selectedRadio && selectedRadio.value === 'false' ? 'pytorch' : 'tensorflow';
@@ -2055,6 +2059,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupChartResizeSync();
     requestChartResize();
     const epochRegex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
+    const trainingStepsRegex = /^(?:Loading images from JSON dataset.*|Building PyTorch.*|Starting PyTorch training|Converting model to ONNX format.*|Converting ONNX model to TF format.*|Wrapping Tensorflow model with resize and center crop preprocessing.*|Finalizing TFLite model output.*|TFLite model conversion completed successfully)$/i;
     let stdoutBuffer = '';
     let stderrBuffer = '';
 
@@ -2102,6 +2107,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
                 document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
+            }
+
+            const matchStep = trimmedLine.match(trainingStepsRegex);
+            if(matchStep){
+                if (matchStep) {
+                    const step = matchStep[0];
+
+                    if (step.startsWith('Loading images from JSON dataset')) {
+                        stepOutputAreaLabel.textContent = 'Loading Dataset...';
+
+                    } else if (step.startsWith('Building PyTorch')) {
+                        stepOutputAreaLabel.textContent = 'Building Model...';
+
+                    } else if (step.startsWith('Starting PyTorch training')) {
+                        stepOutputAreaLabel.textContent = 'Training Started...';
+
+                    } else if (step.startsWith('Converting model to ONNX format')) {
+                        stepOutputAreaLabel.textContent = 'Converting to ONNX...';
+
+                    } else if (step.startsWith('Converting ONNX model to TF format')) {
+                        stepOutputAreaLabel.textContent = 'Converting to TensorFlow...';
+
+                    } else if (step.startsWith('Wrapping TensorFlow model with resize and center crop preprocessing')) {
+                        stepOutputAreaLabel.textContent = 'Wrapping TensorFlow model...';
+
+                    } else if (step.startsWith('Finalizing TFLite model output')) {
+                        stepOutputAreaLabel.textContent = 'Finalizing TFLite model...';
+
+                    } else if (step.startsWith('TFLite model conversion completed successfully')) {
+                        stepOutputAreaLabel.textContent = 'TFLite Conversion Completed!';
+
+                    }
+                }
             }
         });
     };

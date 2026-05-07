@@ -805,6 +805,7 @@ if __name__ == "__main__":
 
     normalization_mean = IMAGENET_MEAN
     normalization_std = IMAGENET_STD
+
     data_module = ImageDataModule(
         data_dir="./data",
         batch_size=64,
@@ -817,6 +818,11 @@ if __name__ == "__main__":
         normalization_mean=normalization_mean,
         normalization_std=normalization_std,
     )
+
+    # Prime the datamodule once so both training modes load the JSON dataset
+    # before the training handoff, which keeps the console order consistent.
+    data_module.prepare_data()
+    data_module.setup("fit")
 
     if project_type == MODEL_TYPE_SCRATCH:
         selected_layers = selected_layers or DEFAULT_SCRATCH_LAYERS
@@ -869,6 +875,7 @@ if __name__ == "__main__":
 
     csv_logger = CSVLogger("logs", name=checkpoint_prefix)
 
+    
     trainer = pl.Trainer(
         max_epochs=epochs,
         accelerator="auto",
@@ -883,6 +890,7 @@ if __name__ == "__main__":
     )
     model = model.to(trainer.strategy.root_device)
 
+    print("Starting PyTorch training")
     trainer.fit(model, datamodule=data_module)
 
     final_ckpt_path = os.path.join(model_folder, "model.ckpt")
