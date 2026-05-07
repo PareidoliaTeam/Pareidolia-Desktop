@@ -2059,7 +2059,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupChartResizeSync();
     requestChartResize();
     const epochRegex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
-    const trainingStepsRegex = /^(?:Loading images from JSON dataset.*|Building PyTorch.*|Starting PyTorch training|Converting model to ONNX format.*|Converting ONNX model to TF format.*|Wrapping Tensorflow model with resize and center crop preprocessing.*|Finalizing TFLite model output.*|TFLite model conversion completed successfully)$/i;
+    const trainingStepsRegex = /^(?:Loading images from JSON dataset.*|Building PyTorch.*|Building TensorFlow.*|Starting TensorFlow training.*|Starting PyTorch training|Converting model to ONNX format.*|Converting ONNX model to TF format.*|Wrapping TensorFlow model with resize and center crop preprocessing.*|Finalizing TFLite model output.*|TFLite model conversion completed successfully|Converting model to TFLite format.*|Model conversion completed successfully)$/i;
     let stdoutBuffer = '';
     let stderrBuffer = '';
 
@@ -2117,11 +2117,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (step.startsWith('Loading images from JSON dataset')) {
                         stepOutputAreaLabel.textContent = 'Loading Dataset...';
 
-                    } else if (step.startsWith('Building PyTorch')) {
+                    } else if (step.startsWith('Building PyTorch') || step.startsWith('Building TensorFlow')) {
                         stepOutputAreaLabel.textContent = 'Building Model...';
 
-                    } else if (step.startsWith('Starting PyTorch training')) {
-                        stepOutputAreaLabel.textContent = 'Training Started...';
+                    } else if (step.startsWith('Starting PyTorch training') || step.startsWith('Starting TensorFlow training')) {
+                        stepOutputAreaLabel.textContent = 'Training...';
 
                     } else if (step.startsWith('Converting model to ONNX format')) {
                         stepOutputAreaLabel.textContent = 'Converting to ONNX...';
@@ -2132,10 +2132,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     } else if (step.startsWith('Wrapping TensorFlow model with resize and center crop preprocessing')) {
                         stepOutputAreaLabel.textContent = 'Wrapping TensorFlow model...';
 
-                    } else if (step.startsWith('Finalizing TFLite model output')) {
+                    } else if (step.startsWith('Finalizing TFLite model output') || step.startsWith('Converting model to TFLite format')) {
                         stepOutputAreaLabel.textContent = 'Finalizing TFLite model...';
 
-                    } else if (step.startsWith('TFLite model conversion completed successfully')) {
+                    } else if (step.startsWith('TFLite model conversion completed successfully') || step.startsWith('Model conversion completed successfully')) {
                         stepOutputAreaLabel.textContent = 'TFLite Conversion Completed!';
 
                     }
