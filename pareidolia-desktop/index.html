@@ -243,7 +243,7 @@
 
         <!-- Prediction Tab -->
         <div id="tab-predict" class="tab-content" onclick="openTab(event, 'tab-predict')">
-          <h3>Model Prediction - Drag and Drop System (We can make pretty ltr)</h3>
+          <h3>Model Prediction - Drag and Drop System</h3>
           <p id="prediction-last-trained-framework" class="last-trained-framework-status">Latest trained: Never</p>
           <div class="choice-stack runtime-framework-choice">
             <span class="choice-kicker">Framework</span>
@@ -535,32 +535,39 @@
 
       <!--- EZ Mode Block Builder -->
       <div id="visual-workspace" class="workspace-area">
-        <aside class="layer-palette">
-          <h3>Layers</h3>
-          <div class="layer-item" draggable="true" data-type="Conv2D">Conv2D</div>
-          <div class="layer-item" draggable="true" data-type="MaxPooling2D">MaxPooling2D</div>
-          <div class="layer-item" draggable="true" data-type="AveragePooling2D">AveragePooling2D</div>
-          <div class="layer-item" draggable="true" data-type="GlobalAveragePooling2D">GlobalAvgPool</div>
-          <div class="layer-item" draggable="true" data-type="Flatten">Flatten</div>
-          <div class="layer-item" draggable="true" data-type="Dense">Dense</div>
-          <div class="layer-item" draggable="true" data-type="Dropout">Dropout</div>
-          <div class="layer-item" draggable="true" data-type="RandomFlip">Random Flip</div>
-          <div class="layer-item" draggable="true" data-type="RandomRotation">Random Rotation</div>
-          <div class="layer-item" draggable="true" data-type="RandomZoom">Random Zoom</div>
-          <div class="layer-item" draggable="true" data-type="RandomContrast">Random Contrast</div>
-        </aside>
+        <div class="builder-workspace-main">
+          <aside class="layer-palette">
+            <h3>Layers</h3>
+            <div class="layer-item" draggable="true" data-type="Conv2D">Conv2D</div>
+            <div class="layer-item" draggable="true" data-type="MaxPooling2D">MaxPooling2D</div>
+            <div class="layer-item" draggable="true" data-type="AveragePooling2D">AveragePooling2D</div>
+            <div class="layer-item" draggable="true" data-type="GlobalAveragePooling2D">GlobalAvgPool</div>
+            <div class="layer-item" draggable="true" data-type="Flatten">Flatten</div>
+            <div class="layer-item" draggable="true" data-type="Dense">Dense</div>
+            <div class="layer-item" draggable="true" data-type="Dropout">Dropout</div>
+            <div class="layer-item" draggable="true" data-type="RandomFlip">Random Flip</div>
+            <div class="layer-item" draggable="true" data-type="RandomRotation">Random Rotation</div>
+            <div class="layer-item" draggable="true" data-type="RandomZoom">Random Zoom</div>
+            <div class="layer-item" draggable="true" data-type="RandomContrast">Random Contrast</div>
+          </aside>
 
-        <!-- Drag and drop area -->
-        <main class="builder-canvas" id="builder-canvas">
-          <div class="builder-block-window">Drag here</div>
-        </main>
+          <!-- Drag and drop area -->
+          <main class="builder-canvas" id="builder-canvas">
+            <div class="builder-block-window">Drag here</div>
+          </main>
 
-        <!-- Layer Settings for ez mode-->
-        <section class="layer-settings" id="layer-settings">
-          <h3>Settings</h3>
-          <div id="settings-content">
-            <p class="hint">Select a layer to edit.</p>
-          </div>
+          <!-- Layer Settings for ez mode-->
+          <section class="layer-settings" id="layer-settings">
+            <h3>Settings</h3>
+            <div id="settings-content">
+              <p class="hint">Select a layer to edit.</p>
+            </div>
+          </section>
+        </div>
+
+        <section class="layer-description-panel" id="layer-description-panel" aria-live="polite">
+          <h3 id="layer-description-title">Layer Guide</h3>
+          <p id="layer-description-text">Click a layer on the left to see what it does and when to use it.</p>
         </section>
       </div>
 

@@ -174,8 +174,57 @@ const builderModalBtn = document.getElementById('builder-modal-btn');
 const builderModalCloseBtn = document.getElementById('builder-modal-close');
 const layerItems = document.querySelectorAll('.layer-item');
 const builderCanvas = document.getElementById('builder-canvas');
+const layerDescriptionTitle = document.getElementById('layer-description-title');
+const layerDescriptionText = document.getElementById('layer-description-text');
 const viewCodeBtn = document.getElementById('view-code-btn');
 const viewBlockBtn = document.getElementById('view-blocks-btn');
+
+const layerDescriptions = {
+    Conv2D: {
+        title: 'Conv2D',
+        text: 'Finds visual patterns by sliding filters across an image. Early Conv2D layers learn edges and textures, while later ones combine those signals into shapes or object parts.'
+    },
+    MaxPooling2D: {
+        title: 'MaxPooling2D',
+        text: 'Shrinks feature maps by keeping the strongest value in each small region. This reduces computation and helps the model focus on the most obvious features.'
+    },
+    AveragePooling2D: {
+        title: 'AveragePooling2D',
+        text: 'Shrinks feature maps by averaging each small region. It smooths activations and keeps broader context instead of only preserving the strongest response.'
+    },
+    GlobalAveragePooling2D: {
+        title: 'Global Average Pooling',
+        text: 'Turns each feature map into one average value. It is often used near the end of an image model to summarize learned features before classification.'
+    },
+    Flatten: {
+        title: 'Flatten',
+        text: 'Converts multi-dimensional image features into one long vector. This prepares convolution or pooling output for Dense layers.'
+    },
+    Dense: {
+        title: 'Dense',
+        text: 'Connects every input value to every output unit. Dense layers combine learned features to make decisions, especially near the end of a classifier.'
+    },
+    Dropout: {
+        title: 'Dropout',
+        text: 'Randomly ignores some activations during training. This helps prevent overfitting by making the model less dependent on any single feature.'
+    },
+    RandomFlip: {
+        title: 'Random Flip',
+        text: 'Randomly flips training images horizontally, vertically, or both. This teaches the model that flipped versions should still count as the same kind of example.'
+    },
+    RandomRotation: {
+        title: 'Random Rotation',
+        text: 'Randomly rotates training images by a small amount. It helps the model handle tilted examples without needing more labeled images.'
+    },
+    RandomZoom: {
+        title: 'Random Zoom',
+        text: 'Randomly zooms training images in or out. This improves robustness when the subject appears at different sizes or distances.'
+    },
+    RandomContrast: {
+        title: 'Random Contrast',
+        text: 'Randomly changes image contrast during training. This helps the model work better across lighting differences and camera conditions.'
+    }
+};
 
 // charts
 let accuracyChart, lossChart;
@@ -1397,6 +1446,18 @@ function clearSidebarSearches() {
 // BUILDER RELATED FUNCTIONS
 // ============================================================
 
+function showLayerDescription(type) {
+    const description = layerDescriptions[type];
+    if (!description || !layerDescriptionTitle || !layerDescriptionText) return;
+
+    layerDescriptionTitle.textContent = description.title;
+    layerDescriptionText.textContent = description.text;
+
+    layerItems.forEach(item => {
+        item.classList.toggle('is-selected', item.dataset.type === type);
+    });
+}
+
 /**
  * Adds a layer via a drag and drop system
  * @param type
@@ -1421,9 +1482,10 @@ function addLayerToCanvas(type, savedParams = null) {
 
     // show settings
     block.onclick = () => {
-        if(activeBlock) activeBlock.style.border = "none";
+        if(activeBlock) activeBlock.classList.remove('is-active');
         activeBlock = block;
-        block.style.border = "2px solid #ffcc00";
+        block.classList.add('is-active');
+        showLayerDescription(type);
         showSettings(type, block);
     };
 
@@ -1552,6 +1614,14 @@ function syncCodeToBlocks() {
     } catch (e) {
         //alert("INVALID.");
     }
+}
+
+function layoutCodeEditor() {
+    if (!editor) return;
+    requestAnimationFrame(() => {
+        editor.layout();
+        requestAnimationFrame(() => editor.layout());
+    });
 }
 
 /**
@@ -1721,6 +1791,19 @@ builderModalCloseBtn.addEventListener('click', (e) => {
 
 // adds dragging and layer logic to layer items
 layerItems.forEach(item => {
+    item.setAttribute('role', 'button');
+    item.tabIndex = 0;
+
+    item.addEventListener('click', () => {
+        showLayerDescription(item.dataset.type);
+    });
+
+    item.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        showLayerDescription(item.dataset.type);
+    });
+
     item.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('layerType', e.target.getAttribute('data-type'));
         e.dataTransfer.setData('isNew', 'true');
@@ -1746,7 +1829,10 @@ builderCanvas.addEventListener('drop', async(e) => {
 viewCodeBtn.addEventListener('click', () => {
     syncBlocksToCode();
     document.getElementById('visual-workspace').style.display = 'none';
-    document.getElementById('code-workspace').style.display = 'block';
+    document.getElementById('code-workspace').style.display = 'flex';
+    viewBlockBtn.classList.remove('active');
+    viewCodeBtn.classList.add('active');
+    layoutCodeEditor();
 });
 
 // Switch to "block" mode for sequential model editor
@@ -1754,6 +1840,8 @@ viewBlockBtn.addEventListener('click', () => {
     syncCodeToBlocks();
     document.getElementById('code-workspace').style.display = 'none';
     document.getElementById('visual-workspace').style.display = 'flex';
+    viewCodeBtn.classList.remove('active');
+    viewBlockBtn.classList.add('active');
 });
 
 // EpochSlider to change
