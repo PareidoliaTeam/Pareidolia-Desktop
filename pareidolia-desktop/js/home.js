@@ -2263,3 +2263,38 @@ async function processPrediction(imagePath) {
         console.error(result.error);
     }
 }
+
+// ============================================================
+// Help Tooltip Positioning
+// Tooltips use position:fixed so they escape overflow:hidden
+// containers anywhere in the layout.
+// ============================================================
+document.querySelectorAll('.help-icon-wrapper').forEach(wrapper => {
+    const tooltip = wrapper.querySelector('.help-tooltip');
+    if (!tooltip) return;
+
+    wrapper.addEventListener('mouseenter', () => {
+        const rect = wrapper.getBoundingClientRect();
+        const ttWidth = 240;
+        const gap = 10;
+        const goDown = wrapper.dataset.tooltipDirection === 'down';
+
+        // Centre above/below the icon, clamped to viewport edges
+        let left = rect.left + rect.width / 2 - ttWidth / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - ttWidth - 8));
+
+        tooltip.style.left = `${left}px`;
+        if (goDown) {
+            tooltip.style.top = `${rect.bottom + gap}px`;
+            tooltip.style.transform = 'none';
+        } else {
+            tooltip.style.top = `${rect.top - gap}px`;
+            tooltip.style.transform = 'translateY(-100%)';
+        }
+        tooltip.classList.add('is-visible');
+    });
+
+    wrapper.addEventListener('mouseleave', () => {
+        tooltip.classList.remove('is-visible');
+    });
+});
