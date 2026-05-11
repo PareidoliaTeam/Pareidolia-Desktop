@@ -33,6 +33,7 @@ const projectTypeInputs = document.getElementsByName('project-type');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalClose = document.querySelector('.modal-close');
+const modelModalClose = document.getElementById('model-modal-close');
 const deleteModelModal = document.getElementById('delete-model-modal');
 const deleteModelModalClose = document.getElementById('delete-model-modal-close');
 const deleteModelName = document.getElementById('delete-model-name');
@@ -1704,7 +1705,7 @@ modalCancelBtn.addEventListener('click', (e) => {
 });
 
 // Modal Close button (X) - close modal
-modalClose.addEventListener('click', (e) => {
+modelModalClose.addEventListener('click', (e) => {
     e.stopPropagation();
     closeAddProjectModal();
 });
