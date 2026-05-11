@@ -32,7 +32,7 @@ const projectNameInput = document.getElementById('project-name-input');
 const projectTypeInputs = document.getElementsByName('project-type');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
-const modalClose = document.querySelector('.modal-close');
+const closeCreateDatasetModal = document.getElementById('close-add-dataset-modal')
 const modelModalClose = document.getElementById('model-modal-close');
 const deleteModelModal = document.getElementById('delete-model-modal');
 const deleteModelModalClose = document.getElementById('delete-model-modal-close');
@@ -41,14 +41,14 @@ const deleteModelConfirmInput = document.getElementById('delete-model-confirm-in
 const deleteModelCancelBtn = document.getElementById('delete-model-cancel-btn');
 
 // Help modal elements
-const helpModal = document.getElementById('help-modal');
-const helpBtn = document.getElementById('help-btn');
-const helpModalClose = document.getElementById('help-modal-close');
+//const helpModal = document.getElementById('help-modal');
+//const helpBtn = document.getElementById('help-btn');
+//const helpModalClose = document.getElementById('help-modal-close');
 
 // Settings modal elements
-const settingsModal = document.getElementById('settings-modal');
-const settingsBtn = document.getElementById('settings-btn');
-const settingsModalClose = document.getElementById('settings-modal-close');
+//const settingsModal = document.getElementById('settings-modal');
+//const settingsBtn = document.getElementById('settings-btn');
+//const settingsModalClose = document.getElementById('settings-modal-close');
 
 //QR modal elements
 const sidebarQrPanel = document.querySelector('.sidebar-qr-panel');
@@ -656,34 +656,34 @@ function closeAddProjectModal() {
     addProjectModal.style.display= 'none';
 }
 
-/**
- * Opens the help modal dialog.
- */
-function openHelpModal() {
-    helpModal.style.display= 'flex';
-    projectNameInput.focus();
-}
-
-/**
- * Closes the help modal dialog.
- */
-function closeHelpModal() {
-    helpModal.style.display= 'none';
-}
-
-/**
- * Opens the settings modal dialog.
- */
-function openSettingsModal() {
-    settingsModal.style.display= 'flex';
-}
-
-/**
- * Closes the settings modal dialog.
- */
-function closeSettingsModal() {
-    settingsModal.style.display= 'none';
-}
+// /**
+//  * Opens the help modal dialog.
+//  */
+// function openHelpModal() {
+//     helpModal.style.display= 'flex';
+//     projectNameInput.focus();
+// }
+//
+// /**
+//  * Closes the help modal dialog.
+//  */
+// function closeHelpModal() {
+//     helpModal.style.display= 'none';
+// }
+//
+// /**
+//  * Opens the settings modal dialog.
+//  */
+// function openSettingsModal() {
+//     settingsModal.style.display= 'flex';
+// }
+//
+// /**
+//  * Closes the settings modal dialog.
+//  */
+// function closeSettingsModal() {
+//     settingsModal.style.display= 'none';
+// }
 
 /**
  * Opens the QR modal dialog.
@@ -1698,6 +1698,10 @@ function setupChartResizeSync() {
     document.addEventListener('fullscreenchange', requestChartResize);
 }
 
+function closeAddDatasetModal(){
+    datasetImportModal.style.display= 'none';
+}
+
 // ============================================================
 // Event Listeners
 // ============================================================
@@ -1738,29 +1742,29 @@ if (datasetImportBtn) {
     });
 }
 
-// Open Help modal
-helpBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openHelpModal();
-})
-
-// Help Modal Close button (X) - close modal
-helpModalClose.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeHelpModal();
-});
-
-// Open Settings modal
-settingsBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openSettingsModal();
-})
-
-// Close Settings modal
-settingsModalClose.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeSettingsModal();
-})
+// // Open Help modal
+// helpBtn.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     openHelpModal();
+// })
+//
+// // Help Modal Close button (X) - close modal
+// helpModalClose.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     closeHelpModal();
+// });
+//
+// // Open Settings modal
+// settingsBtn.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     openSettingsModal();
+// })
+//
+// // Close Settings modal
+// settingsModalClose.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     closeSettingsModal();
+// })
 
 // Modal Create button - submit project creation
 modalCreateBtn.addEventListener('click', async (e) => {
@@ -1778,6 +1782,18 @@ modalCancelBtn.addEventListener('click', (e) => {
 modelModalClose.addEventListener('click', (e) => {
     e.stopPropagation();
     closeAddProjectModal();
+});
+
+closeCreateDatasetModal.addEventListener('click', (e) =>{
+    e.stopPropagation();
+    closeAddDatasetModal();
+});
+
+datasetImportModal.addEventListener('click', (e) =>{
+    e.stopPropagation();
+    if(e.target ===  datasetImportModal){
+        closeAddDatasetModal();
+    }
 });
 
 // Modal background click - close modal
