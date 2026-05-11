@@ -275,6 +275,44 @@ export async function createDatasetFolder(projectName) {
   }
 }
 
+const DATASET_REFERENCE_FILE = 'dataset-reference.json';
+
+function getDatasetReferenceFilePath(datasetPath) {
+  return path.join(datasetPath, DATASET_REFERENCE_FILE);
+}
+
+function resolveDatasetContentPath(datasetPath) {
+  const referenceFilePath = getDatasetReferenceFilePath(datasetPath);
+
+  if (!fs.existsSync(referenceFilePath)) {
+    return datasetPath;
+  }
+
+  try {
+    const referenceData = JSON.parse(fs.readFileSync(referenceFilePath, 'utf-8'));
+    return referenceData?.path || referenceData?.sourcePath || datasetPath;
+  } catch (error) {
+    console.error(`Error reading dataset reference at ${referenceFilePath}: ${error.message}`);
+    return datasetPath;
+  }
+}
+
+export async function createDatasetReference(datasetName, sourcePath) {
+  try {
+    const datasetPath = await createDatasetFolder(datasetName);
+    const referenceFilePath = getDatasetReferenceFilePath(datasetPath);
+    const referenceData = {
+      path: sourcePath
+    };
+
+    fs.writeFileSync(referenceFilePath, JSON.stringify(referenceData, null, 2), 'utf-8');
+    return datasetPath;
+  } catch (error) {
+    console.error(`Error creating dataset reference: ${error.message}`);
+    throw error;
+  }
+}
+
 /**
  * Creates a model folder inside the models folder within Pareidolia.
  * Also creates a model-settings.json file with initial configuration.
@@ -546,7 +584,7 @@ export async function modelDetailsForPython(modelName) {
 
     const labelsJson = {};
     for (const [labelName, datasets] of Object.entries(settings.labels || {})) {
-      labelsJson[labelName] = Object.values(datasets);
+      labelsJson[labelName] = Object.values(datasets).map((datasetPath) => resolveDatasetContentPath(datasetPath));
     }
 
     return {
@@ -646,8 +684,10 @@ export async function getModelsList() {
  */
 export async function getProjectImages(projectPath) {
   try {
+    const resolvedProjectPath = resolveDatasetContentPath(projectPath);
+
     // Read all files in path
-    const files = fs.readdirSync(projectPath);
+    const files = fs.readdirSync(resolvedProjectPath);
 
     // Filter for only images
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
@@ -655,7 +695,7 @@ export async function getProjectImages(projectPath) {
       // Return an object
       return {
         name: file,
-        url: `file://${path.join(projectPath, file)}`
+        url: `file://${path.join(resolvedProjectPath, file)}`
       };
     });
 
@@ -756,6 +796,11 @@ ipcMain.handle('get-local-ip', () => {
  */
 ipcMain.handle('create-dataset-folder', async (event, projectName) => {
   return await createDatasetFolder(projectName);
+});
+
+ipcMain.handle('create-dataset-reference', async (event, params) => {
+  const { datasetName, sourcePath } = params;
+  return await createDatasetReference(datasetName, sourcePath);
 });
 
 /**
@@ -986,24 +1031,6 @@ ipcMain.handle('update-model-settings', async (event, params) => {
   return await updateModelSettings(modelName, newSettings);
 });
 
-ipcMain.handle('move-folder', (event, params) => {
-  const { src, dest } = params || {};
-
-  if (!src || !dest) {
-    throw new Error('Source and destination folders are required.');
-  }
-
-  if (!fs.existsSync(src)) {
-    throw new Error(`Source folder not found: ${src}`);
-  }
-
-  fs.mkdirSync(dest, { recursive: true });
-  fs.cpSync(src, dest, { recursive: true });
-  fs.rmSync(src, { recursive: true, force: true });
-
-  return dest;
-});
-
 /**
  * Handle model prediction via IPC from renderer process
  */
@@ -1072,7 +1099,7 @@ ipcMain.handle('test-model', async (event, params) => {
         settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
       ];
   }
-  // Excutes the selected script and returns a the JSON output
+  // Excutes the selected script and returns a JSON output
   try {
     const result = await executePythonScript(scriptPath, args, venvPath);
     const outputString = result.output || result.stdout || result;

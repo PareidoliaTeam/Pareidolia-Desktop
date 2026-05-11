@@ -2300,7 +2300,7 @@ importVideoBtn.addEventListener('click', async () => {
 
     try {
         const datasetPath = await window.electronAPI.invoke('create-dataset-folder', datasetName);
-        const conversionResult = await window.electronAPI.invoke('convert-video', `${datasetPath}/positives`);
+        const conversionResult = await window.electronAPI.invoke('convert-video', datasetPath);
 
         if (conversionResult !== null) {
             datasetNameInput.value = '';
@@ -2324,13 +2324,12 @@ importFolderBtn.addEventListener('click', async () => {
             return;
         }
 
-        const datasetPath = await window.electronAPI.invoke('create-dataset-folder', datasetName);
-        const movedFolderPath = await window.electronAPI.invoke('move-folder', {
-            src: selectedFolder,
-            dest: `${datasetPath}/positives`
+        const datasetPath = await window.electronAPI.invoke('create-dataset-reference', {
+            datasetName,
+            sourcePath: selectedFolder
         });
 
-        if (movedFolderPath) {
+        if (datasetPath) {
             datasetNameInput.value = '';
             datasetImportModal.style.display = 'none';
             await loadDatasetsFromFolder();

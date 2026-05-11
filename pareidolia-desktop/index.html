@@ -496,13 +496,23 @@
 <div id="import-dataset-modal" class="create-model-modal">
   <div class="modal-content import-dataset-modal-content">
     <span class="modal-close">&times;</span>
-    <h2 class="modal-title">Import</h2>
+    <h2 class="modal-title">Import Dataset</h2>
+    <p class="import-dataset-modal-copy">Bring in a new dataset from a video or reference an existing image folder.</p>
 
     <div class="choice-stack import-dataset-choice-stack">
+      <label class="modal-section-label" for="dataset-name-input">Dataset Name</label>
       <input type="text" id="dataset-name-input" class="modal-input" placeholder="Enter dataset name" />
       <span class="choice-kicker">Import Type</span>
-      <button id="import-video-btn" class="import-btn-type">Video</button>
-      <button id="import-folder-btn" class="import-btn-type">Folder</button>
+      <div class="import-dataset-option-grid">
+        <button id="import-video-btn" class="import-btn-type">
+          <span class="import-btn-title">Import From Video</span>
+          <span class="import-btn-copy">Extract frames into a brand new dataset.</span>
+        </button>
+        <button id="import-folder-btn" class="import-btn-type">
+          <span class="import-btn-title">Reference Folder</span>
+          <span class="import-btn-copy">Use an existing image folder without copying files.</span>
+        </button>
+      </div>
     </div>
     <div class="modal-buttons">
       <button id="import-cancel-btn" class="negative-btn">Cancel</button>
