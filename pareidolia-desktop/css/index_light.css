@@ -1095,6 +1095,10 @@ body, html {
 }
 
 /* GALLERY STYLE */
+#view-dataset-gallery {
+  overflow-y: auto;
+}
+
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -1956,31 +1960,123 @@ body.dragging-outside-canvas .model-block {
 
 .training-status-area {
   margin: 20px;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.training-card {
+  background: linear-gradient(180deg, #f7f7f7 0%, var(--white-smoke) 100%);
+  border: 1px solid rgba(6, 10, 14, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(6, 10, 14, 0.05), 0 10px 18px rgba(6, 10, 14, 0.06);
+  padding: 14px 16px;
+}
+
+.progress-wrapper {
+  flex: 0 0 42%;
+}
+
+#final-summary-card {
+  flex: 1 1 58%;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.status-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim-grey);
+  font-weight: 700;
+}
+
+#progress-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--onyx);
+  min-width: 64px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.progress-track-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .progress-container {
-  width: 100%;
-  height: 20px;
-  background: var(--silver);
-  border-radius: 10px;
+  width: auto;
+  flex: 1;
+  height: 12px;
+  background: linear-gradient(180deg, #c4c8c8 0%, var(--silver) 100%);
+  border-radius: 999px;
   overflow: hidden;
-  margin-top: 5px;
+  border: 1px solid rgba(6, 10, 14, 0.1);
 }
 
 #epoch-progress-fill {
   width: 0%;
   height: 100%;
-  background: var(--onyx);
-  transition: width 0.3s ease;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #222a30 0%, var(--onyx) 55%, #2f3a42 100%);
+  transition: width 0.32s ease;
 }
 
 #final-summary-card h3 {
   margin-top: 0;
 }
 
+.summary-heading-row {
+  margin-bottom: 10px;
+}
+
+.summary-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .summary-grid {
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.summary-item {
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(6, 10, 14, 0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex: 1 1 220px;
+  min-width: 180px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-label {
+  font-size: 0.82rem;
+  color: var(--dim-grey);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.summary-value {
+  font-size: 1rem;
+  color: var(--onyx);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .charts-container {
@@ -2002,6 +2098,30 @@ body.dragging-outside-canvas .model-block {
 
 .metrics .chart-wrapper {
   height: 320px;
+}
+
+@media (max-width: 900px) {
+  .training-status-area {
+    flex-direction: column;
+  }
+
+  .progress-wrapper,
+  #final-summary-card {
+    flex: 1 1 auto;
+  }
+
+  .progress-header {
+    margin-bottom: 6px;
+  }
+
+  .progress-track-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .summary-grid {
+    flex-wrap: wrap;
+  }
 }
 
 /*Testing Tab */

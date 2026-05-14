@@ -132,32 +132,53 @@
 
 	          <!-- Training Results -->
 	          <section class="metrics">
-	            <div class="training-status-area" style="margin: 20px;">
-	              <div class="progress-wrapper">
-	                <label id="progress-label">Overall Progress: 0%</label>
-	                <div class="progress-container">
-	                  <div id="epoch-progress-fill"></div>
-	                </div>
-	              </div>
+              <div class="training-status-area">
+                <!-- <div class="progress-wrapper training-card">
+                  <div class="progress-header">
+                    <span class="status-kicker">Training Progress</span>
+                  </div>
+                  <div class="progress-track-row">
+                    
+                  </div>
+	              </div> -->
 
-	              <div id="final-summary-card">
-	                <div class="labels-heading-row" style="margin-bottom: 0.5rem;">
-	                  <h3 style="margin-top: 0; margin-bottom: 0;">Training Summary</h3>
-	                  <div class="help-icon-wrapper" data-tooltip-direction="down">
-	                    <span class="help-icon">?</span>
-	                    <div class="help-tooltip">
-	                      <p><strong>Final Accuracy:</strong> How often the model predicted correctly on training data. Higher is better.</p>
-	                      <p><strong>Final Loss:</strong> How wrong the model's predictions were during training. Lower is better.</p>
-	                      <p><strong>Val Accuracy:</strong> Accuracy measured on unseen validation data — a more honest measure of real-world performance.</p>
-	                      <p><strong>Val Loss:</strong> Loss on validation data. If this rises while training loss falls, the model may be overfitting.</p>
-	                    </div>
-	                  </div>
+                <div id="final-summary-card" class="training-card">
+                  <div class="labels-heading-row summary-heading-row">
+                    <h3>Training Summary</h3>
+                    <div class="help-icon-wrapper" data-tooltip-direction="down">
+                      <span class="help-icon">?</span>
+                      <div class="help-tooltip">
+                        <p><strong>Progress Bar:</strong> Fills up as each epoch completes. The bar may stay at 100% for a moment while the training process finalizes records and converts the model — this is normal.</p>
+                        <p><strong>Final Accuracy:</strong> How often the model predicted correctly on training data. Higher is better.</p>
+                        <p><strong>Final Loss:</strong> How wrong the model's predictions were during training. Lower is better.</p>
+                        <p><strong>Val Accuracy:</strong> Accuracy measured on unseen validation data — a more honest measure of real-world performance.</p>
+                        <p><strong>Val Loss:</strong> Loss on validation data. If this rises while training loss falls, the model may be overfitting.</p>
+                      </div>
+                    </div>
+	                </div>
+	                <div class="summary-progress-row">
+                    <label id="progress-label">0%</label>
+                    <div class="progress-container">
+                      <div id="epoch-progress-fill"></div>
+                    </div>
 	                </div>
 	                <div class="summary-grid">
-	                  <div><strong>Final Accuracy:</strong> <span id="sum-acc">-</span></div>
-	                  <div><strong>Final Loss:</strong> <span id="sum-loss">-</span></div>
-	                  <div><strong>Val Accuracy:</strong> <span id="sum-val-acc">-</span></div>
-	                  <div><strong>Val Loss:</strong> <span id="sum-val-loss">-</span></div>
+                    <div class="summary-item">
+                      <span class="summary-label">Final Accuracy</span>
+                      <span id="sum-acc" class="summary-value">-</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">Final Loss</span>
+                      <span id="sum-loss" class="summary-value">-</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">Val Accuracy</span>
+                      <span id="sum-val-acc" class="summary-value">-</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">Val Loss</span>
+                      <span id="sum-val-loss" class="summary-value">-</span>
+                    </div>
 	                </div>
 	              </div>
 	            </div>
@@ -411,11 +432,11 @@
     </div>
     <div class="image-modal-right">
       <h2 class="modal-title">Image Options</h2>
-      <label for="label">Dataset Label:</label>
+      <!-- <label for="label">Dataset Label:</label>
       <select name="label" id="label">
         <option value="positive">Positive</option>
         <option value="negative">Negative</option>
-      </select>
+      </select> -->
       <div class="modal-actions">
         <button class="action-btn">Open in Folder</button>
         <button class="negative-btn">Delete</button>

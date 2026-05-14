@@ -1955,7 +1955,7 @@ modelTrainBtn.addEventListener('click', async () => {
             // modelTrainResults.style.color = '#28a745';
             console.log('%c[UI] Training successful!', 'color: #28a745; font-weight: bold;');
             document.getElementById('epoch-progress-fill').style.width = `100%`;
-            document.getElementById('progress-label').textContent = `Overall Progress: 100%`;
+            document.getElementById('progress-label').textContent = `100%`;
 
             const summaryCard = document.getElementById('final-summary-card');
             summaryCard.style.display = 'block';
@@ -2101,7 +2101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const percent = Math.round((currentEpoch / totalEpochs) * 100);
 
                 document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
-                document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
+                document.getElementById('progress-label').textContent = `${percent}%`;
             }
         });
     };
