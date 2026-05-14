@@ -6,7 +6,7 @@
   --platinum: #ecececff;
   --lemon-chiffon: #fffbb7ff;
   --light-green: #adffb5ff;
-  --vibrant-coral: #ff5f5fff;
+  --vibrant-coral: #ff1616;
   --bright-blue: #0084ff;
 
   --app-bg: var(--platinum);
@@ -254,7 +254,7 @@ body, html {
 
 .negative-btn {
   margin-top: auto;
-  background: linear-gradient(180deg, #ff7a7a 0%, var(--vibrant-coral) 100%);
+  background: linear-gradient(180deg, #fd0707 0%, var(--vibrant-coral) 100%);
   color: var(--white-smoke);
   border: 1px solid rgba(255, 95, 95, 0.35);
   padding: 12px;

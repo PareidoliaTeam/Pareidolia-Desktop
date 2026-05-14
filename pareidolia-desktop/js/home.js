@@ -13,6 +13,8 @@ const datasetPathDisplay = document.getElementById('current-dataset-filepath');
 const datasetsList = document.getElementById('datasetsList');
 const datasetSearchInput = document.getElementById('dataset-search');
 const deleteDatasetBtn = document.getElementById('delete-dataset-btn');
+const galleryNameDisplay = document.getElementById('current-gallery-title');
+const galleryPathDisplay = document.getElementById('current-gallery-filepath');
 
 // Model elements
 const modelNameDisplay = document.getElementById('current-model-title');
@@ -615,14 +617,14 @@ async function checkExistingDatasets(modelName, modelNamePath) {
 /**
  * Shows the dataset info view and displays the dataset name.
  * @param {string} datasetName - The name of the dataset to display
- * @param {string} datasetNamePath - The path of the dataset to display
+ * @param {string} datasetPath - The path of the dataset to display
  */
-function showDataset(datasetName,datasetPath) {
+async function showDataset(datasetName,datasetPath) {
     if (datasetNameDisplay) {
         datasetNameDisplay.textContent = datasetName;
     }
     if (datasetPathDisplay){
-        datasetPathDisplay.textContent = datasetPath;
+        datasetPathDisplay.textContent = await window.electronAPI.invoke('get-dataset-path', datasetPath);
     }
     sessionStorage.setItem('projectName', datasetName);
     sessionStorage.setItem('projectPath', datasetPath);
@@ -1301,6 +1303,7 @@ async function loadDatasetsFromFolder() {
             li.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const datasetPath = li.getAttribute('data-path');
+                //
                 const datasetDisplayName = div.textContent;
 
                 showDataset(datasetDisplayName,datasetPath);
@@ -1367,15 +1370,17 @@ async function loadModelsFromFolder() {
  */
 async function loadCarousel() {
     const currentPath = sessionStorage.getItem('projectPath');
-    if(projectPath) {
+    if(currentPath) {
         // Request images
         console.log(currentPath);
         const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         // Loop through images and create elements
         carousel.innerHTML = '';
+
         images.forEach(imgData => {
             const imgElement = document.createElement('img');
+            imgElement.loading = 'lazy';
             imgElement.src = imgData.url;
             imgElement.alt = imgData.name;
             imgElement.className = 'carousel-item';
@@ -1389,21 +1394,29 @@ async function loadCarousel() {
  * Loads gallery and attaches images into it
  */
 async function loadGallery(){
-    const currentPath = sessionStorage.getItem('projectPath');
-    //const currentName = sessionStorage.getItem('projectName');
-    if(projectPath){
+    const storedPath = sessionStorage.getItem('projectPath');
+    const currentName = sessionStorage.getItem('projectName');
+
+    if(storedPath){
+        const currentPath = await window.electronAPI.invoke('get-dataset-path', storedPath);
+        galleryNameDisplay.textContent = currentName || 'Dataset';
+        galleryPathDisplay.textContent = currentPath;
         galleryContainer.innerHTML = '';
         const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         images.forEach(imgData => {
             const imgElement = document.createElement('img');
+            imgElement.loading = 'lazy';
             imgElement.src = imgData.url;
             imgElement.alt = imgData.name;
             imgElement.className = 'gallery-item';
 
             //Add click listener
-            imgElement.addEventListener('click', () => {
-                openOptionsModal(imgData);
+            imgElement.addEventListener('click', async () => {
+                const result = await window.electronAPI.invoke('open-file', imgData.url);
+                if (!result) {
+                    console.error('Could not open image');
+                }
             });
 
             galleryContainer.appendChild(imgElement);

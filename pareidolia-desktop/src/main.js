@@ -3,7 +3,7 @@
   * Renamed functions to distinguish dataset and model creation. 
 */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
@@ -267,7 +267,7 @@ export async function createDatasetFolder(projectName) {
     } else {
       console.log(`Project folder already exists at: ${projectPath}`);
     }
-
+3
     return projectPath;
   } catch (error) {
     console.error(`Error creating project folder: ${error.message}`);
@@ -277,11 +277,25 @@ export async function createDatasetFolder(projectName) {
 
 const DATASET_REFERENCE_FILE = 'dataset-reference.json';
 
+/**
+ * Gets the dataset reference
+ * @param datasetPath
+ * @returns {string}
+ */
 function getDatasetReferenceFilePath(datasetPath) {
   return path.join(datasetPath, DATASET_REFERENCE_FILE);
 }
 
+/**
+ * Checks to see what kind of dataset it is and returns the path
+ * @param datasetPath - The path to the dataset
+ * @returns {*}
+ */
 function resolveDatasetContentPath(datasetPath) {
+  if (!datasetPath || typeof datasetPath !== 'string') {
+    return '';
+  }
+
   const referenceFilePath = getDatasetReferenceFilePath(datasetPath);
 
   if (!fs.existsSync(referenceFilePath)) {
@@ -297,6 +311,12 @@ function resolveDatasetContentPath(datasetPath) {
   }
 }
 
+/**
+ * Creates a datset from a folder elsewhere on the system
+ * @param datasetName - The name of a dataset
+ * @param sourcePath - The path to the real folder
+ * @returns {Promise<string>} - The full path to the dataset folder
+ */
 export async function createDatasetReference(datasetName, sourcePath) {
   try {
     const datasetPath = await createDatasetFolder(datasetName);
@@ -797,10 +817,19 @@ ipcMain.handle('get-local-ip', () => {
 ipcMain.handle('create-dataset-folder', async (event, projectName) => {
   return await createDatasetFolder(projectName);
 });
-
+/**
+ * Handle creating a dataset reference folder via IPC from renderer process
+ */
 ipcMain.handle('create-dataset-reference', async (event, params) => {
   const { datasetName, sourcePath } = params;
   return await createDatasetReference(datasetName, sourcePath);
+});
+
+/**
+ * Handle resolving the dataset path
+ */
+ipcMain.handle('get-dataset-path', async (event, sourcePath) => {
+  return resolveDatasetContentPath(sourcePath);
 });
 
 /**
@@ -821,7 +850,12 @@ ipcMain.handle('create-model-folder', async (event, modelName) => {
 ipcMain.handle('select-folder', async () => {
   return await selectFolder();
 });
-
+/**
+ * Handle opening a file to the default application
+ */
+ipcMain.handle('open-file', async (event, filePath) => {
+  return await shell.openPath(filePath);
+});
 
 // ============================================
 // PYTHON EXECUTION HANDLERS

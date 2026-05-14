@@ -282,7 +282,7 @@
       </div>
     </div>
 
-    <!-- Dataset Home View-->
+    <!-- Dataset Home View
     <div id="view-dataset-home" class="app-view" style="display: none">
       <header class="navbar">
         <h2>Datasets</h2>
@@ -290,7 +290,7 @@
       </header>
       <span>Click on a dataset to view more info.</span>
       <hr class="divider">
-    </div>
+    </div>-->
 
     <!-- Dataset Info View-->
     <div id="view-dataset-info" class="app-view" style="display: none">
@@ -299,7 +299,7 @@
           <h2 id="current-dataset-title">Dataset: Loading...</h2>
           <div id="current-dataset-filepath">File Path</div>
         </div>
-        <button class="back-btn" onclick="showView('view-dataset-home')">← Back</button>
+        <button class="back-btn" onclick="showView('view-home')">← Back</button>
       </header>
       <hr class="divider">
 
@@ -327,7 +327,7 @@
           <h2 id="current-gallery-title">Dataset: Loading...</h2>
           <div id="current-gallery-filepath">File Path</div>
         </div>
-        <button class="back-btn" onclick="showView('view-dataset-info')">← Back to Dataset</button>
+        <button class="back-btn" onclick="showView('view-dataset-info')">← Back</button>
       </header>
       <hr class="divider">
         <!-- Gallery  -->
@@ -347,11 +347,6 @@
     </div>
     <div class="image-modal-right">
       <h2 class="modal-title">Image Options</h2>
-      <label for="label">Dataset Label:</label>
-      <select name="label" id="label">
-        <option value="positive">Positive</option>
-        <option value="negative">Negative</option>
-      </select>
       <div class="modal-actions">
         <button class="action-btn">Open in Folder</button>
         <button class="negative-btn">Delete</button>
