@@ -2011,6 +2011,7 @@ deleteModelBtn.addEventListener('click', (e) => {
     openDeleteModelModal();
 });
 
+
 // Delete model modal close buttons
 deleteModelModalClose.addEventListener('click', closeDeleteModelModal);
 deleteModelCancelBtn.addEventListener('click', closeDeleteModelModal);
@@ -2173,6 +2174,16 @@ runTestButton.addEventListener('click',async ()=> {
         if (testMessage) testMessage.textContent = errorMessage;
         console.error(errorMessage);
     }
+})
+
+// Opens dataset folder
+datasetNameDisplay.addEventListener('click',async ()=> {
+    await window.electronAPI.invoke('open-file', sessionStorage.getItem('projectPath'));
+});
+
+// Opens model folder
+modelNameDisplay.addEventListener('click', async ()=> {
+    await window.electronAPI.invoke('open-file', sessionStorage.getItem('projectPath'));
 })
 
 // ============================================================

@@ -739,6 +739,28 @@ body, html {
   margin-top: 4px;
 }
 
+#current-model-title,
+#current-dataset-title {
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 6px;
+  text-underline-offset: 5px;
+  transition: color 0.18s ease, background-color 0.18s ease, text-decoration-color 0.18s ease;
+}
+
+#current-model-title:hover,
+#current-dataset-title:hover {
+  color: var(--bright-blue);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
+}
+
+#current-model-title:active,
+#current-dataset-title:active {
+  color: var(--onyx);
+}
+
 /* SETTINGS LAYOUT*/
 .settings-panel {
   display: grid;
