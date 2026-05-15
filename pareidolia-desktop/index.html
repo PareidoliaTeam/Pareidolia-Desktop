@@ -62,6 +62,7 @@
       </div>
     </section>
     <button class="create-btn">+ Create</button>
+    <button class="create-btn" id="dataset-import-btn" style="display: none;">+ Import</button>
   </aside>
   <!-- Main "Window" Area-->
   <main class="main-view">
@@ -75,8 +76,8 @@
       <div class="home-footer-shell">
         <!-- Bottom set of buttons for additional things -->
         <footer class="bottom">
-          <button id="help-btn" class="btm-btn">? Help</button>
-          <button id="settings-btn" class="btm-btn">⚙ Settings</button>
+          <!-- <button id="help-btn" class="btm-btn">? Help</button>
+          <button id="settings-btn" class="btm-btn">⚙ Settings</button> -->
         </footer>
       </div>
     </div>
@@ -370,7 +371,7 @@
       </div>
     </div>
 
-    <!-- Dataset Home View-->
+    <!-- Dataset Home View
     <div id="view-dataset-home" class="app-view" style="display: none">
       <header class="navbar">
         <h2>Datasets</h2>
@@ -378,7 +379,7 @@
       </header>
       <span>Click on a dataset to view more info.</span>
       <hr class="divider">
-    </div>
+    </div>-->
 
     <!-- Dataset Info View-->
     <div id="view-dataset-info" class="app-view" style="display: none">
@@ -387,7 +388,7 @@
           <h2 id="current-dataset-title">Dataset: Loading...</h2>
           <div id="current-dataset-filepath">File Path</div>
         </div>
-        <button class="back-btn" onclick="showView('view-dataset-home')">← Back</button>
+        <button class="back-btn" onclick="showView('view-home')">← Back</button>
       </header>
       <hr class="divider">
 
@@ -415,7 +416,7 @@
           <h2 id="current-gallery-title">Dataset: Loading...</h2>
           <div id="current-gallery-filepath">File Path</div>
         </div>
-        <button class="back-btn" onclick="showView('view-dataset-info')">← Back to Dataset</button>
+        <button class="back-btn" onclick="showView('view-dataset-info')">← Back</button>
       </header>
       <hr class="divider">
         <!-- Gallery  -->
@@ -435,11 +436,6 @@
     </div>
     <div class="image-modal-right">
       <h2 class="modal-title">Image Options</h2>
-      <!-- <label for="label">Dataset Label:</label>
-      <select name="label" id="label">
-        <option value="positive">Positive</option>
-        <option value="negative">Negative</option>
-      </select> -->
       <div class="modal-actions">
         <button class="action-btn">Open in Folder</button>
         <button class="negative-btn">Delete</button>
@@ -565,21 +561,57 @@
 
 <!-- Add Project Modal -->
 <div id="add-model-modal" class="create-model-modal">
-  <div class="modal-content">
-    <span class="modal-close">&times;</span>
-    <h2>Create New Model</h2>
+  <div class="modal-content create-model-modal-content">
+    <span id="model-modal-close" class="modal-close">&times;</span>
+    <h2 class="modal-title">Create New Model</h2>
+    <label class="modal-section-label" for="project-name-input">Model Name</label>
     <input type="text" id="project-name-input" class="modal-input" placeholder="Enter model name" />
-    
-    <br>
-    <input type="radio" id="type-scratch" name="project-type" value="scratch" checked>
-    <label for="type-scratch">Start From Scratch</label>
-    <br>
-    <input type="radio" id="type-pretrained" name="project-type" value="pretrained">
-    <label for="type-pretrained">Use Pretrained Model</label>
+
+    <div class="choice-stack create-model-choice-stack">
+      <span class="choice-kicker">Model Setup</span>
+      <div class="segmented-control create-model-segmented-control">
+        <input type="radio" id="type-scratch" name="project-type" value="scratch" checked>
+        <label class="segment-option" for="type-scratch">
+          <span class="segment-option-label">Start From Scratch</span>
+        </label>
+        <input type="radio" id="type-pretrained" name="project-type" value="pretrained">
+        <label class="segment-option" for="type-pretrained">
+          <span class="segment-option-label">Use Pretrained Model</span>
+        </label>
+      </div>
+    </div>
 
     <div class="modal-buttons">
       <button id="modal-create-btn" class="modal-btn-modal-create">Create</button>
       <button id="modal-cancel-btn" class="negative-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Data Modal -->
+<div id="import-dataset-modal" class="create-model-modal">
+  <div class="modal-content import-dataset-modal-content">
+    <span id="close-add-dataset-modal" class="modal-close">&times;</span>
+    <h2 class="modal-title">Import Dataset</h2>
+    <p class="import-dataset-modal-copy">Bring in a new dataset from a video or reference an existing image folder.</p>
+
+    <div class="choice-stack import-dataset-choice-stack">
+      <label class="modal-section-label" for="dataset-name-input">Dataset Name</label>
+      <input type="text" id="dataset-name-input" class="modal-input" placeholder="Enter dataset name" />
+      <span class="choice-kicker">Import Type</span>
+      <div class="import-dataset-option-grid">
+        <button id="import-video-btn" class="import-btn-type">
+          <span class="import-btn-title">Import From Video</span>
+          <span class="import-btn-copy">Extract frames into a brand new dataset.</span>
+        </button>
+        <button id="import-folder-btn" class="import-btn-type">
+          <span class="import-btn-title">Reference Folder</span>
+          <span class="import-btn-copy">Use an existing folder without copying files.</span>
+        </button>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button id="import-cancel-btn" class="negative-btn">Cancel</button>
     </div>
   </div>
 </div>

@@ -3,7 +3,7 @@
   * Renamed functions to distinguish dataset and model creation. 
 */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
@@ -267,10 +267,68 @@ export async function createDatasetFolder(projectName) {
     } else {
       console.log(`Project folder already exists at: ${projectPath}`);
     }
-
+3
     return projectPath;
   } catch (error) {
     console.error(`Error creating project folder: ${error.message}`);
+    throw error;
+  }
+}
+
+const DATASET_REFERENCE_FILE = 'dataset-reference.json';
+
+/**
+ * Gets the dataset reference
+ * @param datasetPath
+ * @returns {string}
+ */
+function getDatasetReferenceFilePath(datasetPath) {
+  return path.join(datasetPath, DATASET_REFERENCE_FILE);
+}
+
+/**
+ * Checks to see what kind of dataset it is and returns the path
+ * @param datasetPath - The path to the dataset
+ * @returns {*}
+ */
+function resolveDatasetContentPath(datasetPath) {
+  if (!datasetPath || typeof datasetPath !== 'string') {
+    return '';
+  }
+
+  const referenceFilePath = getDatasetReferenceFilePath(datasetPath);
+
+  if (!fs.existsSync(referenceFilePath)) {
+    return datasetPath;
+  }
+
+  try {
+    const referenceData = JSON.parse(fs.readFileSync(referenceFilePath, 'utf-8'));
+    return referenceData?.path || referenceData?.sourcePath || datasetPath;
+  } catch (error) {
+    console.error(`Error reading dataset reference at ${referenceFilePath}: ${error.message}`);
+    return datasetPath;
+  }
+}
+
+/**
+ * Creates a datset from a folder elsewhere on the system
+ * @param datasetName - The name of a dataset
+ * @param sourcePath - The path to the real folder
+ * @returns {Promise<string>} - The full path to the dataset folder
+ */
+export async function createDatasetReference(datasetName, sourcePath) {
+  try {
+    const datasetPath = await createDatasetFolder(datasetName);
+    const referenceFilePath = getDatasetReferenceFilePath(datasetPath);
+    const referenceData = {
+      path: sourcePath
+    };
+
+    fs.writeFileSync(referenceFilePath, JSON.stringify(referenceData, null, 2), 'utf-8');
+    return datasetPath;
+  } catch (error) {
+    console.error(`Error creating dataset reference: ${error.message}`);
     throw error;
   }
 }
@@ -601,7 +659,7 @@ export async function modelDetailsForPython(modelName) {
 
     const labelsJson = {};
     for (const [labelName, datasets] of Object.entries(settings.labels || {})) {
-      labelsJson[labelName] = Object.values(datasets);
+      labelsJson[labelName] = Object.values(datasets).map((datasetPath) => resolveDatasetContentPath(datasetPath));
     }
 
     return {
@@ -701,8 +759,10 @@ export async function getModelsList() {
  */
 export async function getProjectImages(projectPath) {
   try {
+    const resolvedProjectPath = resolveDatasetContentPath(projectPath);
+
     // Read all files in path
-    const files = fs.readdirSync(projectPath);
+    const files = fs.readdirSync(resolvedProjectPath);
 
     // Filter for only images
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
@@ -710,7 +770,7 @@ export async function getProjectImages(projectPath) {
       // Return an object
       return {
         name: file,
-        url: `file://${path.join(projectPath, file)}`
+        url: `file://${path.join(resolvedProjectPath, file)}`
       };
     });
 
@@ -747,6 +807,19 @@ async function convertVideo(projectPath){
       projectPath,
     ], venvPath);
   }
+}
+
+async function selectFolder() {
+  const result = await dialog.showOpenDialog({
+    title: 'Select a folder to import',
+    properties: ['openDirectory']
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return result.filePaths[0];
 }
 /**
  * Calls extract_images.py and exports images.
@@ -799,6 +872,20 @@ ipcMain.handle('get-local-ip', () => {
 ipcMain.handle('create-dataset-folder', async (event, projectName) => {
   return await createDatasetFolder(projectName);
 });
+/**
+ * Handle creating a dataset reference folder via IPC from renderer process
+ */
+ipcMain.handle('create-dataset-reference', async (event, params) => {
+  const { datasetName, sourcePath } = params;
+  return await createDatasetReference(datasetName, sourcePath);
+});
+
+/**
+ * Handle resolving the dataset path
+ */
+ipcMain.handle('get-dataset-path', async (event, sourcePath) => {
+  return resolveDatasetContentPath(sourcePath);
+});
 
 /**
  * Handle getting the Pareidolia folder path via IPC from renderer process
@@ -815,7 +902,27 @@ ipcMain.handle('create-model-folder', async (event, modelName) => {
   return await createModelFolder(modelName);
 });
 
+ipcMain.handle('select-folder', async () => {
+  return await selectFolder();
+});
+/**
+ * Handle opening a file to the default application
+ */
+ipcMain.handle('open-file', async (event, filePath) => {
+  return await shell.openPath(filePath);
+});
 
+/**
+ * Handle deleting files
+ */
+ipcMain.handle('delete-folder', async (event, filePath) => {
+  try{
+    await shell.trashItem(filePath);
+    return { success:true };
+  } catch (error) {
+    return {success:false, error: error.message};
+  }
+});
 // ============================================
 // PYTHON EXECUTION HANDLERS
 // ============================================
@@ -1144,7 +1251,7 @@ ipcMain.handle('test-model', async (event, params) => {
         resolveSavedProjectType(settings)
       ];
   }
-  // Excutes the selected script and returns a the JSON output
+  // Excutes the selected script and returns a JSON output
   try {
     const result = await executePythonScript(scriptPath, args, venvPath);
     const outputString = result.output || result.stdout || result;

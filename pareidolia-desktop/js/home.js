@@ -13,6 +13,9 @@ const datasetPathDisplay = document.getElementById('current-dataset-filepath');
 const datasetsList = document.getElementById('datasetsList');
 const datasetSearchInput = document.getElementById('dataset-search');
 const deleteDatasetBtn = document.getElementById('delete-dataset-btn');
+const galleryNameDisplay = document.getElementById('current-gallery-title');
+const galleryPathDisplay = document.getElementById('current-gallery-filepath');
+const deleteDatasetConfirmBtn = document.getElementById('delete-dataset-confirm-btn');
 
 // Model elements
 const modelNameDisplay = document.getElementById('current-model-title');
@@ -22,8 +25,10 @@ const modelSearchInput = document.getElementById('model-search');
 const sidebarModelsRadio = document.getElementById('sidebar-models-active');
 const sidebarDatasetsRadio = document.getElementById('sidebar-models-datasets');
 const addModelBtn = document.querySelector('.create-btn');
+const datasetImportBtn = document.getElementById('dataset-import-btn');
 const deleteModelBtn = document.getElementById('delete-model-btn');
 const primarySidebar = document.querySelector('.left-sidebar-models');
+const deleteModelConfirmBtn = document.getElementById('delete-model-confirm-btn');
 
 // Model modal elements
 const addProjectModal = document.getElementById('add-model-modal');
@@ -31,7 +36,8 @@ const projectNameInput = document.getElementById('project-name-input');
 const projectTypeInputs = document.getElementsByName('project-type');
 const modalCreateBtn = document.getElementById('modal-create-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
-const modalClose = document.querySelector('.modal-close');
+const closeCreateDatasetModal = document.getElementById('close-add-dataset-modal')
+const modelModalClose = document.getElementById('model-modal-close');
 const deleteModelModal = document.getElementById('delete-model-modal');
 const deleteModelModalClose = document.getElementById('delete-model-modal-close');
 const deleteModelName = document.getElementById('delete-model-name');
@@ -39,14 +45,14 @@ const deleteModelConfirmInput = document.getElementById('delete-model-confirm-in
 const deleteModelCancelBtn = document.getElementById('delete-model-cancel-btn');
 
 // Help modal elements
-const helpModal = document.getElementById('help-modal');
-const helpBtn = document.getElementById('help-btn');
-const helpModalClose = document.getElementById('help-modal-close');
+//const helpModal = document.getElementById('help-modal');
+//const helpBtn = document.getElementById('help-btn');
+//const helpModalClose = document.getElementById('help-modal-close');
 
 // Settings modal elements
-const settingsModal = document.getElementById('settings-modal');
-const settingsBtn = document.getElementById('settings-btn');
-const settingsModalClose = document.getElementById('settings-modal-close');
+//const settingsModal = document.getElementById('settings-modal');
+//const settingsBtn = document.getElementById('settings-btn');
+//const settingsModalClose = document.getElementById('settings-modal-close');
 
 //QR modal elements
 const sidebarQrPanel = document.querySelector('.sidebar-qr-panel');
@@ -91,6 +97,9 @@ function updateTrainButtonLabel(label, options = {}) {
         }
     }
 }
+
+// Dataset Modal
+const datasetImportModal = document.getElementById('import-dataset-modal');
 
 function getSelectedFramework() {
     const selectedRadio = document.querySelector('[data-framework-toggle]:checked');
@@ -843,14 +852,14 @@ async function checkExistingDatasets(modelName, modelNamePath) {
 /**
  * Shows the dataset info view and displays the dataset name.
  * @param {string} datasetName - The name of the dataset to display
- * @param {string} datasetNamePath - The path of the dataset to display
+ * @param {string} datasetPath - The path of the dataset to display
  */
-function showDataset(datasetName,datasetPath) {
+async function showDataset(datasetName,datasetPath) {
     if (datasetNameDisplay) {
         datasetNameDisplay.textContent = datasetName;
     }
     if (datasetPathDisplay){
-        datasetPathDisplay.textContent = datasetPath;
+        datasetPathDisplay.textContent = await window.electronAPI.invoke('get-dataset-path', datasetPath);
     }
     sessionStorage.setItem('projectName', datasetName);
     sessionStorage.setItem('projectPath', datasetPath);
@@ -865,6 +874,10 @@ function showDatasetGallery() {
     loadGallery();
 }
 
+function openImportModal() {
+    datasetImportModal.style.display = 'flex';
+}
+
 /**
  * Opens the add project modal dialog.
  */
@@ -877,37 +890,75 @@ function openAddProjectModal() {
  * Closes the add project modal dialog.
  */
 function closeAddProjectModal() {
+    projectNameInput.setCustomValidity('');
     addProjectModal.style.display= 'none';
 }
 
 /**
- * Opens the help modal dialog.
+ * Turns the name into all lowercase for checking
+ * @param name
+ * @returns {string}
  */
-function openHelpModal() {
-    helpModal.style.display= 'flex';
-    projectNameInput.focus();
+function normalizeNameKey(name) {
+    return String(name || '').trim().toLocaleLowerCase();
 }
 
 /**
- * Closes the help modal dialog.
+ * Shows the corrosponding error message to the input field
+ * @param inputEl
+ * @param message
  */
-function closeHelpModal() {
-    helpModal.style.display= 'none';
+function showNameValidationError(inputEl, message) {
+    if (!inputEl) {
+        return;
+    }
+
+    inputEl.setCustomValidity(message);
+    inputEl.reportValidity();
+    inputEl.focus();
 }
 
 /**
- * Opens the settings modal dialog.
+ * Checks to see if the name is existing in the corresponding list
+ * @param channel
+ * @param name
+ * @returns {Promise<boolean>}
  */
-function openSettingsModal() {
-    settingsModal.style.display= 'flex';
+async function nameExistsInCollection(list, name) {
+    const items = await window.electronAPI.invoke(list);
+    const targetName = normalizeNameKey(name);
+
+    return Object.keys(items || {}).some((existingName) => normalizeNameKey(existingName) === targetName);
 }
 
-/**
- * Closes the settings modal dialog.
- */
-function closeSettingsModal() {
-    settingsModal.style.display= 'none';
-}
+// /**
+//  * Opens the help modal dialog.
+//  */
+// function openHelpModal() {
+//     helpModal.style.display= 'flex';
+//     projectNameInput.focus();
+// }
+//
+// /**
+//  * Closes the help modal dialog.
+//  */
+// function closeHelpModal() {
+//     helpModal.style.display= 'none';
+// }
+//
+// /**
+//  * Opens the settings modal dialog.
+//  */
+// function openSettingsModal() {
+//     settingsModal.style.display= 'flex';
+// }
+//
+// /**
+//  * Closes the settings modal dialog.
+//  */
+// function closeSettingsModal() {
+//     settingsModal.style.display= 'none';
+// }
 
 /**
  * Opens the QR modal dialog.
@@ -992,6 +1043,35 @@ function openDeleteModelModal() {
     deleteModelConfirmInput.value = '';
     deleteModelModal.style.display = 'flex';
     deleteModelConfirmInput.focus();
+}
+
+/**
+ * Deletes the dataset folder
+ */
+async function deleteFolder(){
+    if(deleteDatasetConfirmInput.value === sessionStorage.getItem('projectName')){
+        await window.electronAPI.invoke('delete-folder', sessionStorage.getItem('projectPath'));
+        closeDeleteDatasetModal();
+        showView('view-home');
+        await loadDatasetsFromFolder();
+    } else{
+        console.log('Could not delete');
+        console.log(deleteDatasetConfirmInput.textContent, sessionStorage.getItem('projectName'));
+    }
+}
+
+/**
+ * Deletes the model folder
+ */
+async function deleteModelFolder(){
+    if(deleteModelConfirmInput.value === sessionStorage.getItem('projectName')){
+        await window.electronAPI.invoke('delete-folder', sessionStorage.getItem('projectPath'));
+        closeDeleteModelModal();
+        showView('view-home');
+        await loadModelsFromFolder();
+    } else{
+        console.log('Could not delete')
+    }
 }
 
 /**
@@ -1370,6 +1450,12 @@ function setSidebarCollectionMode(mode, options = {}) {
     if (datasetSearchInput) {
         datasetSearchInput.style.display = showDatasets ? '' : 'none';
     }
+    if (addModelBtn) {
+        addModelBtn.style.display = showDatasets ? 'none' : '';
+    }
+    if (datasetImportBtn) {
+        datasetImportBtn.style.display = showDatasets ? '' : 'none';
+    }
 
     syncSidebarSegmentedControls(showDatasets);
 }
@@ -1420,11 +1506,15 @@ function initializeSidebarModeToggle() {
 async function handleAddProject() {
     const modelName = projectNameInput.value.trim();
     const projectType = Array.from(projectTypeInputs).find(input => input.checked)?.value || 'scratch';
-    
-    if (!modelName) {
+    projectNameInput.setCustomValidity('');
 
-        // need to make a new modal for this pop up
-        //alert('Model name cannot be empty');
+    if (!modelName) {
+        showNameValidationError(projectNameInput, 'Model name cannot be empty.');
+        return;
+    }
+
+    if (await nameExistsInCollection('get-models-list', modelName)) {
+        showNameValidationError(projectNameInput, 'A model with this name already exists.');
         return;
     }
 
@@ -1441,6 +1531,10 @@ async function handleAddProject() {
 
         // Reload the projects list
     } catch (error) {
+        if (error?.message?.includes('already exists')) {
+            showNameValidationError(projectNameInput, 'A model with this name already exists.');
+            return;
+        }
         console.error('Error creating project:', error);
     }
     // Reload the projects list
@@ -1521,6 +1615,7 @@ async function loadDatasetsFromFolder() {
             li.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const datasetPath = li.getAttribute('data-path');
+                //
                 const datasetDisplayName = div.textContent;
 
                 showDataset(datasetDisplayName,datasetPath);
@@ -1587,15 +1682,17 @@ async function loadModelsFromFolder() {
  */
 async function loadCarousel() {
     const currentPath = sessionStorage.getItem('projectPath');
-    if(projectPath) {
+    if(currentPath) {
         // Request images
         console.log(currentPath);
         const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         // Loop through images and create elements
         carousel.innerHTML = '';
+
         images.forEach(imgData => {
             const imgElement = document.createElement('img');
+            imgElement.loading = 'lazy';
             imgElement.src = imgData.url;
             imgElement.alt = imgData.name;
             imgElement.className = 'carousel-item';
@@ -1609,21 +1706,29 @@ async function loadCarousel() {
  * Loads gallery and attaches images into it
  */
 async function loadGallery(){
-    const currentPath = sessionStorage.getItem('projectPath');
-    //const currentName = sessionStorage.getItem('projectName');
-    if(projectPath){
+    const storedPath = sessionStorage.getItem('projectPath');
+    const currentName = sessionStorage.getItem('projectName');
+
+    if(storedPath){
+        const currentPath = await window.electronAPI.invoke('get-dataset-path', storedPath);
+        galleryNameDisplay.textContent = currentName || 'Dataset';
+        galleryPathDisplay.textContent = currentPath;
         galleryContainer.innerHTML = '';
         const images = await window.electronAPI.invoke('get-project-images', currentPath);
 
         images.forEach(imgData => {
             const imgElement = document.createElement('img');
+            imgElement.loading = 'lazy';
             imgElement.src = imgData.url;
             imgElement.alt = imgData.name;
             imgElement.className = 'gallery-item';
 
             //Add click listener
-            imgElement.addEventListener('click', () => {
-                openOptionsModal(imgData);
+            imgElement.addEventListener('click', async () => {
+                const result = await window.electronAPI.invoke('open-file', imgData.url);
+                if (!result) {
+                    console.error('Could not open image');
+                }
             });
 
             galleryContainer.appendChild(imgElement);
@@ -1918,6 +2023,25 @@ function setupChartResizeSync() {
     document.addEventListener('fullscreenchange', requestChartResize);
 }
 
+function closeAddDatasetModal(){
+    datasetNameInput.setCustomValidity('');
+    datasetImportModal.style.display= 'none';
+}
+
+/**
+ * Opens the correct folder to dataset and if its a reference it opens the real location
+ * @returns {Promise<void>}
+ */
+async function openFolder(){
+    //get-dataset-path
+
+    const currentPath = sessionStorage.getItem('projectPath');
+    if(currentPath) {
+        const resolvedPath = await window.electronAPI.invoke('get-dataset-path', currentPath);
+        await window.electronAPI.invoke('open-file', resolvedPath);
+    }
+}
+
 // ============================================================
 // Event Listeners
 // ============================================================
@@ -1950,29 +2074,37 @@ addModelBtn.addEventListener('click', (e) => {
     openAddProjectModal();
 });
 
-// Open Help modal
-helpBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openHelpModal();
-})
+// Import Button - open modal to import new data
+if (datasetImportBtn) {
+    datasetImportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openImportModal();
+    });
+}
 
-// Help Modal Close button (X) - close modal
-helpModalClose.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeHelpModal();
-});
-
-// Open Settings modal
-settingsBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openSettingsModal();
-})
-
-// Close Settings modal
-settingsModalClose.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeSettingsModal();
-})
+// // Open Help modal
+// helpBtn.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     openHelpModal();
+// })
+//
+// // Help Modal Close button (X) - close modal
+// helpModalClose.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     closeHelpModal();
+// });
+//
+// // Open Settings modal
+// settingsBtn.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     openSettingsModal();
+// })
+//
+// // Close Settings modal
+// settingsModalClose.addEventListener('click', (e) => {
+//     e.stopPropagation();
+//     closeSettingsModal();
+// })
 
 // Modal Create button - submit project creation
 modalCreateBtn.addEventListener('click', async (e) => {
@@ -1987,9 +2119,21 @@ modalCancelBtn.addEventListener('click', (e) => {
 });
 
 // Modal Close button (X) - close modal
-modalClose.addEventListener('click', (e) => {
+modelModalClose.addEventListener('click', (e) => {
     e.stopPropagation();
     closeAddProjectModal();
+});
+
+closeCreateDatasetModal.addEventListener('click', (e) =>{
+    e.stopPropagation();
+    closeAddDatasetModal();
+});
+
+datasetImportModal.addEventListener('click', (e) =>{
+    e.stopPropagation();
+    if(e.target ===  datasetImportModal){
+        closeAddDatasetModal();
+    }
 });
 
 // Modal background click - close modal
@@ -2004,6 +2148,10 @@ projectNameInput.addEventListener('keypress', async (e) => {
     if (e.key === 'Enter') {
         await handleAddProject();
     }
+});
+
+projectNameInput.addEventListener('input', () => {
+    projectNameInput.setCustomValidity('');
 });
 
 // closes option modal
@@ -2221,6 +2369,19 @@ deleteModelBtn.addEventListener('click', (e) => {
     openDeleteModelModal();
 });
 
+// Delete dataset button
+deleteDatasetConfirmBtn.addEventListener('click', (e)=> {
+    e.stopPropagation();
+    deleteFolder();
+})
+
+// Delete Model Button
+deleteModelConfirmBtn.addEventListener('click', (e)=> {
+    e.stopPropagation();
+    deleteModelFolder();
+})
+
+
 // Delete model modal close buttons
 deleteModelModalClose.addEventListener('click', closeDeleteModelModal);
 deleteModelCancelBtn.addEventListener('click', closeDeleteModelModal);
@@ -2423,6 +2584,20 @@ runTestButton.addEventListener('click',async ()=> {
         }
         console.error(errorMessage);
     }
+})
+
+// Opens dataset folder for both views
+datasetNameDisplay.addEventListener('click',async ()=> {
+    openFolder();
+});
+
+galleryNameDisplay.addEventListener('click',async ()=> {
+    openFolder();
+});
+
+// Opens model folder
+modelNameDisplay.addEventListener('click', async ()=> {
+    await window.electronAPI.invoke('open-file', sessionStorage.getItem('projectPath'));
 })
 
 // ============================================================
@@ -2735,3 +2910,82 @@ document.querySelectorAll('.help-icon-wrapper').forEach(wrapper => {
         tooltip.classList.remove('is-visible');
     });
 });
+
+const importVideoBtn = document.getElementById('import-video-btn');
+const importFolderBtn = document.getElementById('import-folder-btn');
+const datasetNameInput = document.getElementById('dataset-name-input');
+
+datasetNameInput.addEventListener('input', () => {
+    datasetNameInput.setCustomValidity('');
+});
+
+importVideoBtn.addEventListener('click', async () => {
+    const datasetName = datasetNameInput?.value.trim();
+    datasetNameInput.setCustomValidity('');
+
+    if (!datasetName) {
+        showNameValidationError(datasetNameInput, 'Dataset name cannot be empty.');
+        return;
+    }
+
+    if (await nameExistsInCollection('get-datasets-list', datasetName)) {
+        showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
+        return;
+    }
+
+    try {
+        const datasetPath = await window.electronAPI.invoke('create-dataset-folder', datasetName);
+        const conversionResult = await window.electronAPI.invoke('convert-video', datasetPath);
+
+        if (conversionResult !== null) {
+            datasetNameInput.value = '';
+            datasetImportModal.style.display = 'none';
+            await loadDatasetsFromFolder();
+        }
+    } catch (error) {
+        if (error?.message?.includes('already exists')) {
+            showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
+            return;
+        }
+        console.error('Error importing video dataset:', error);
+    }
+});
+
+
+importFolderBtn.addEventListener('click', async () => {
+    const datasetName = datasetNameInput?.value.trim();
+    datasetNameInput.setCustomValidity('');
+    if (!datasetName) {
+        showNameValidationError(datasetNameInput, 'Dataset name cannot be empty.');
+        return;
+    }
+    if (await nameExistsInCollection('get-datasets-list', datasetName)) {
+        showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
+        return;
+    }
+    try {
+        const selectedFolder = await window.electronAPI.invoke('select-folder');
+        if (!selectedFolder) {
+            return;
+        }
+
+        const datasetPath = await window.electronAPI.invoke('create-dataset-reference', {
+            datasetName,
+            sourcePath: selectedFolder
+        });
+
+        if (datasetPath) {
+            datasetNameInput.value = '';
+            datasetImportModal.style.display = 'none';
+            await loadDatasetsFromFolder();
+        }
+    } catch (error) {
+        if (error?.message?.includes('already exists')) {
+            showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
+            return;
+        }
+        console.error('Error importing folder dataset:', error);
+    }
+});
+
+
