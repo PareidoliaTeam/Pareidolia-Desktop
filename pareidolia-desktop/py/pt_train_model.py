@@ -21,19 +21,19 @@ Arguments:
 
     epochs            - Integer number of training epochs.
 
-    pretrained_model_name - Name of the pre-trained model to use as backbone (e.g. "repvgg_a2", "resnet18", etc.)
+    pretrained_model_name - Name of the pre-trained model to use as backbone (e.g. "mobilenetv3_large_100", "resnet18", etc.)
 
 
 Example (macOS / Linux) — replace the paths with your own folders:
-    python pt_train_model.py '{"Apple": ["/Users/you/images/apples"], "Orange": ["/Users/you/images/oranges"]}' /Users/you/models/fruit/model.onnx 10 "repvgg_a2"
+    python pt_train_model.py '{"Apple": ["/Users/you/images/apples"], "Orange": ["/Users/you/images/oranges"]}' /Users/you/models/fruit/model.onnx 10 "mobilenetv3_large_100"
 
-    python pt_train_model.py '{"Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/positives"], "Not Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/negatives", "/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Orange/positives"]}' /Users/alexangeloorozco/Documents/PareidoliaApp/models/Round/models 3 "repvgg_a2"
+    python pt_train_model.py '{"Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/positives"], "Not Sunflowers": ["/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Flowers/negatives", "/Users/alexangeloorozco/Documents/PareidoliaApp/datasets/Orange/positives"]}' /Users/alexangeloorozco/Documents/PareidoliaApp/models/Round/models 3 "mobilenetv3_large_100"
 
 Example (Windows) — use double-quotes around the JSON and escape inner quotes:
-    python pt_train_model.py  "{\"Apple\": [\"C:/images/apples\"], \"Orange\": [\"C:/images/oranges\"]}" C:/models/fruit/model.onnx 10 "repvgg_a2"
+    python pt_train_model.py  "{\"Apple\": [\"C:/images/apples\"], \"Orange\": [\"C:/images/oranges\"]}" C:/models/fruit/model.onnx 10 "mobilenetv3_large_100"
 
 Multiple folders per label are supported:
-    python pt_train_model.py '{"Apple": ["/path/batch1", "/path/batch2"], "Orange": ["/path/oranges"]}' /Users/you/models/fruit/model.onnx 20 "repvgg_a2"
+    python pt_train_model.py '{"Apple": ["/path/batch1", "/path/batch2"], "Orange": ["/path/oranges"]}' /Users/you/models/fruit/model.onnx 20 "mobilenetv3_large_100"
 -----------------------
 """
 import json
@@ -52,7 +52,7 @@ import math
 import torch
 import torch.nn as nn
 from torchmetrics import Accuracy
-from pt_model import RepVGGClassifier, ScratchCNNClassifier
+from pt_model import MobileNetClassifier, ScratchCNNClassifier
 from image_data_module import ImageDataModule, IMAGENET_MEAN, IMAGENET_STD
 from epoch_history_printer import EpochHistoryPrinter
 from pathlib import Path
@@ -74,7 +74,6 @@ MODEL_TYPE_PRETRAINED = "pretrained"
 DEFAULT_PRETRAINED_MODEL_NAME = "mobilenetv3_large_100"
 # Other defaults tried/kept for quick comparison:
 # DEFAULT_PRETRAINED_MODEL_NAME = "tf_mobilenetv3_large_100"
-# DEFAULT_PRETRAINED_MODEL_NAME = "repvgg_a2"
 CONVERTER_VENV_NAME = "converter-venv-macos-tf219"
 CONVERTER_REQUIREMENTS = [
     "tensorflow==2.19.1",
@@ -819,7 +818,7 @@ def tf_to_tflite(tf_model_path, tflite_model_path, representative_samples, conve
             except OSError:
                 print(f"Could not delete temporary representative data file: {representative_path}")
 
-class RepVGGWithPreprocess(pl.LightningModule):
+class MobileNetWithPreprocess(pl.LightningModule):
     """
     Model wrapper that applies the exported model's normalization before
     forwarding to the base model.
@@ -927,14 +926,14 @@ if __name__ == "__main__":
         model_class = ScratchCNNClassifier
     else:
         print(f"Building PyTorch pretrained model with timm backbone: {pretrained_model_name}")
-        model = RepVGGClassifier(
+        model = MobileNetClassifier(
             model_name=pretrained_model_name,
             num_classes=len(label_names),
             lr=3e-4,
             hidden_dim=512,
         )
         checkpoint_prefix = checkpoint_prefix_for_model(project_type, pretrained_model_name)
-        model_class = RepVGGClassifier
+        model_class = MobileNetClassifier
 
     delete_existing_checkpoints(model_folder)
 
@@ -1000,7 +999,7 @@ if __name__ == "__main__":
     )
 
     # wrap model to allow for preproccessing in onnx export
-    wrapped_model = RepVGGWithPreprocess(model, mean=normalization_mean, std=normalization_std)
+    wrapped_model = MobileNetWithPreprocess(model, mean=normalization_mean, std=normalization_std)
 
     print("Converting model to ONNX format...")
     onnx_conversion_result = convert_pt_to_onnx(wrapped_model, model_folder)

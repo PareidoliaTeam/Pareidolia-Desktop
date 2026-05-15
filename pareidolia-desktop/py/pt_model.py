@@ -41,7 +41,7 @@ def _same_padding(kernel_size):
     return kernel_size // 2
 
 
-class RepVGGClassifier(pl.LightningModule):
+class MobileNetClassifier(pl.LightningModule):
     """
     Author: Armando Vega
     Date Created: 8 April 2026
@@ -49,9 +49,8 @@ class RepVGGClassifier(pl.LightningModule):
     Last Modified By: Armando Vega
     Date Last Modified: 8 April 2026
 
-    A PyTorch Lightning module that imports a timm pre-trained model as the
-    backbone and adds a custom head for classification. The class name is kept
-    for checkpoint compatibility with earlier RepVGG-based models.
+    A PyTorch Lightning module that imports a timm pre-trained MobileNet
+    backbone and adds a custom head for classification.
     """
     def __init__(self, model_name="mobilenetv3_large_100", num_classes=10, lr=1e-3, hidden_dim=512, label_smoothing=0.05):
         super().__init__()

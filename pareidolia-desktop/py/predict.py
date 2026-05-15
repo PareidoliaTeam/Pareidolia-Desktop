@@ -6,7 +6,7 @@ from tensorflow.keras.preprocessing import image
 import torch
 from torchvision import transforms
 from PIL import Image
-from pt_model import RepVGGClassifier, ScratchCNNClassifier
+from pt_model import MobileNetClassifier, ScratchCNNClassifier
 from train_model import MODEL_TYPE_PRETRAINED, MODEL_TYPE_SCRATCH, normalize_images_for_model
 from pt_train_model import compute_mean_std_welford_from_loader
 from image_data_module import ImageDataModule
@@ -92,7 +92,7 @@ def predict(model_path, img_path, labels_json_str=None, project_type=MODEL_TYPE_
             label_names = get_label_names(labels_json_str, metadata)
             project_type = metadata.get("project_type") or infer_pt_project_type_from_checkpoint(model_path, project_type)
             # Prep model for evaluation
-            model_class = RepVGGClassifier if project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
+            model_class = MobileNetClassifier if project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
             model = model_class.load_from_checkpoint(model_path, map_location="cpu")
             model.eval()
             model.freeze()

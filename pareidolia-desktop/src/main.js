@@ -909,7 +909,7 @@ ipcMain.handle('execute-train', async (event, params) => {
     JSON.stringify(labelsJson),
     modelPath,
     epochs.toString(),
-    "repvgg_a2"                 // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
+    "mobilenetv3_large_100"     // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
     
   ];*/
   //console.log("Running with trainingParamsPt:", trainingParamsPt);
@@ -930,7 +930,6 @@ ipcMain.handle('execute-train', async (event, params) => {
   const pytorchPretrainedModelName = 'mobilenetv3_large_100';
   // Other PyTorch defaults tried/kept for quick comparison:
   // const pytorchPretrainedModelName = 'tf_mobilenetv3_large_100';
-  // const pytorchPretrainedModelName = 'repvgg_a2';
 
   const args = toggle === 'tensorflow'
     ? [
