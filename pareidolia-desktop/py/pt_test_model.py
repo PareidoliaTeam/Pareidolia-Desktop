@@ -3,7 +3,7 @@ import json
 import torch
 import pytorch_lightning as pl
 from image_data_module import ImageDataModule
-from pt_model import RepVGGClassifier, ScratchCNNClassifier
+from pt_model import MobileNetClassifier, ScratchCNNClassifier
 from pt_train_model import compute_mean_std_welford_from_loader, MODEL_TYPE_PRETRAINED, MODEL_TYPE_SCRATCH
 
 
@@ -50,7 +50,7 @@ def evaluate(checkpoint_path, labels_json_string, project_type=MODEL_TYPE_PRETRA
         )
 
         checkpoint_project_type = infer_project_type_from_checkpoint(checkpoint_path, project_type)
-        model_class = RepVGGClassifier if checkpoint_project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
+        model_class = MobileNetClassifier if checkpoint_project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
 
         if checkpoint_project_type == MODEL_TYPE_SCRATCH:
             stats_loader = data_module.normalization_stats_dataloader()
@@ -61,7 +61,7 @@ def evaluate(checkpoint_path, labels_json_string, project_type=MODEL_TYPE_PRETRA
         data_module.setup(stage="test")
 
         # load model
-        model = model_class.load_from_checkpoint(checkpoint_path)
+        model = model_class.load_from_checkpoint(checkpoint_path, map_location="cpu")
         model_classes = get_model_class_count(model)
         dataset_classes = getattr(data_module, "num_classes", None)
 

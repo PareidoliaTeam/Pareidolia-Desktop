@@ -1024,6 +1024,19 @@ body, html {
   color: var(--onyx);
 }
 
+.segmented-control.is-disabled {
+  cursor: wait;
+  filter: grayscale(0.25) opacity(0.72);
+}
+
+.segmented-control.is-disabled .segment-option {
+  cursor: wait;
+}
+
+.segmented-control.is-disabled label:hover {
+  color: var(--dim-grey);
+}
+
 .segmented-control:has(input:nth-of-type(1):checked) label:nth-of-type(1),
 .segmented-control:has(input:nth-of-type(2):checked) label:nth-of-type(2) {
   color: var(--onyx);
@@ -1082,6 +1095,45 @@ body, html {
   padding: 0 18px;
   box-sizing: border-box;
   gap: 1px;
+}
+
+.train-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  min-width: 330px;
+  max-width: 330px;
+  border: 1px solid rgba(140, 32, 32, 0.32);
+  border-radius: 10px;
+  background: #fff7f5;
+  color: #8b1d1d;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--button-motion), box-shadow var(--button-motion), filter var(--button-motion);
+}
+
+.train-cancel-btn[hidden] {
+  display: none;
+}
+
+.train-cancel-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(140, 32, 32, 0.16);
+}
+
+.train-cancel-btn:active {
+  transform: translateY(1px);
+}
+
+.train-cancel-btn:disabled,
+.train-cancel-btn:disabled:hover,
+.train-cancel-btn:disabled:active {
+  cursor: wait;
+  filter: grayscale(0.25) opacity(0.7);
+  transform: none;
+  box-shadow: none;
 }
 
 .train-btn-status-row {
@@ -2732,6 +2784,14 @@ body.dragging-outside-canvas .model-block {
   padding-right: 28px;
   padding-bottom: 0;
   padding-left: 28px;
+}
+
+.test-controls .evaluation-cancel-btn {
+  align-self: flex-end;
+  min-width: 0;
+  max-width: none;
+  height: calc(36px + 1rem + 6px);
+  padding: 0 18px;
 }
 
 .test-metrics-cards {

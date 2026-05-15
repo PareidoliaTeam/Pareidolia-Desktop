@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   invoke: (channel, args) => ipcRenderer.invoke(channel, args),
   // future IPC handlers will go here in order for the web page to call Electron functions
   executeTrain: (epochs) => ipcRenderer.invoke('execute-train', epochs),
+  cancelTrain: () => ipcRenderer.invoke('cancel-train'),
+  cancelEvaluation: () => ipcRenderer.invoke('cancel-evaluation'),
+  cancelPrediction: () => ipcRenderer.invoke('cancel-prediction'),
 
   onTrainingStdout: (callback) => ipcRenderer.on('training-stdout', (event, value) => callback(value)),
   onTrainingStderr: (callback) => ipcRenderer.on('training-stderr', (event, value) => callback(value)),

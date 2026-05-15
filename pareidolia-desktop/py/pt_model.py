@@ -41,7 +41,7 @@ def _same_padding(kernel_size):
     return kernel_size // 2
 
 
-class RepVGGClassifier(pl.LightningModule):
+class MobileNetClassifier(pl.LightningModule):
     """
     Author: Armando Vega
     Date Created: 8 April 2026
@@ -49,10 +49,10 @@ class RepVGGClassifier(pl.LightningModule):
     Last Modified By: Armando Vega
     Date Last Modified: 8 April 2026
 
-    A PyTorch Lightning module that imports a pre-trained model as the backbone and a custom head for classification. The base trained model is RepVGG-A2 but
-    can be swapped out for any of the models that timm offers. 
+    A PyTorch Lightning module that imports a timm pre-trained MobileNet
+    backbone and adds a custom head for classification.
     """
-    def __init__(self, model_name="repvgg_a2", num_classes=10, lr=1e-3, hidden_dim=512):
+    def __init__(self, model_name="mobilenetv3_large_100", num_classes=10, lr=1e-3, hidden_dim=512, label_smoothing=0.05):
         super().__init__()
         self.save_hyperparameters()
 
@@ -63,7 +63,7 @@ class RepVGGClassifier(pl.LightningModule):
             global_pool="avg",
         )
 
-        n_features = self.backbone.num_features
+        n_features = self._infer_backbone_features()
         self.head = nn.Sequential(
             nn.Dropout(0.3),
             nn.Linear(n_features, hidden_dim),
@@ -76,14 +76,26 @@ class RepVGGClassifier(pl.LightningModule):
         self.val_acc = Accuracy(task="multiclass", num_classes=num_classes)
         self.test_acc = Accuracy(task="multiclass", num_classes=num_classes)
 
+    def _infer_backbone_features(self):
+        was_training = self.backbone.training
+        self.backbone.eval()
+        with torch.no_grad():
+            sample = torch.zeros(1, 3, 224, 224)
+            features = self.backbone(sample)
+            n_features = int(features.reshape(features.shape[0], -1).shape[1])
+        self.backbone.train(was_training)
+        return n_features
+
     def forward(self, x):
         features = self.backbone(x)
+        if features.ndim > 2:
+            features = torch.flatten(features, 1)
         return self.head(features)
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = nn.functional.cross_entropy(logits, y)
+        loss = nn.functional.cross_entropy(logits, y, label_smoothing=self.hparams.label_smoothing)
         acc = self.train_acc(logits, y)
 
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)

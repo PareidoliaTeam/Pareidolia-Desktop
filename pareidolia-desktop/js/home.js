@@ -68,6 +68,7 @@ const qrModalClose = document.getElementById('qr-modal-close');
 const epochSlider = document.getElementById('epoch-slider');
 const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
+const modelCancelTrainBtn = document.getElementById('model-cancel-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
 const testLastTrainedFramework = document.getElementById('test-last-trained-framework');
 const predictionLastTrainedFramework = document.getElementById('prediction-last-trained-framework');
@@ -96,6 +97,33 @@ function updateTrainButtonLabel(label, options = {}) {
             modelTrainBtn.textContent = displayLabel;
         }
     }
+}
+
+function setCancelTrainButtonState({ visible = false, disabled = false, label = 'Cancel Training' } = {}) {
+    if (!modelCancelTrainBtn) return;
+
+    modelCancelTrainBtn.hidden = !visible;
+    modelCancelTrainBtn.disabled = disabled;
+    modelCancelTrainBtn.textContent = label;
+}
+
+function setTestFrameworkControlsDisabled(disabled = false) {
+    testFrameworkInputs.forEach((input) => {
+        input.disabled = disabled;
+        const control = input.closest('.segmented-control');
+        if (control) {
+            control.classList.toggle('is-disabled', disabled);
+            control.setAttribute('aria-disabled', String(disabled));
+        }
+    });
+}
+
+function setCancelTestButtonState({ visible = false, disabled = false, label = 'Cancel Evaluation' } = {}) {
+    if (!cancelTestButton) return;
+
+    cancelTestButton.hidden = !visible;
+    cancelTestButton.disabled = disabled;
+    cancelTestButton.textContent = label;
 }
 
 // Dataset Modal
@@ -461,6 +489,12 @@ let chartResizeFrame = null;
 const chartStateByModel = new Map();
 let activeChartModelName = null;
 let activeTrainingModelName = null;
+let activeTrainingCancelRequested = false;
+let activeEvaluationRun = false;
+let activeEvaluationCancelRequested = false;
+let activePredictionRunId = 0;
+let activePredictionInFlight = false;
+let activePredictionCancelPromise = null;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -469,6 +503,7 @@ const resultsArea = document.getElementById('prediction-results');
 
 // test ids
 const runTestButton = document.getElementById('run-test-btn');
+const cancelTestButton = document.getElementById('cancel-test-btn');
 
 // ============================================================
 // Functions
@@ -2275,9 +2310,35 @@ trainFrameworkInputs.forEach((input) => {
 
 testFrameworkInputs.forEach((input) => {
   input.addEventListener('change', () => {
+    if (activeEvaluationRun) return;
     handleRuntimeFrameworkSelection('test', input);
   });
 });
+
+if (cancelTestButton) {
+  cancelTestButton.addEventListener('click', async () => {
+    if (cancelTestButton.disabled) return;
+
+    activeEvaluationCancelRequested = true;
+    setCancelTestButtonState({ visible: true, disabled: true, label: 'Canceling...' });
+    runTestButton.textContent = 'Canceling...';
+
+    try {
+        const result = await window.electronAPI.cancelEvaluation();
+        if (!result.success) {
+            console.error('[UI] Cancel evaluation failed:', result.error);
+            activeEvaluationCancelRequested = false;
+            setCancelTestButtonState({ visible: true, disabled: false, label: 'Cancel Evaluation' });
+            runTestButton.textContent = 'Running...';
+        }
+    } catch (error) {
+        console.error('[UI] Cancel evaluation IPC error:', error);
+        activeEvaluationCancelRequested = false;
+        setCancelTestButtonState({ visible: true, disabled: false, label: 'Cancel Evaluation' });
+        runTestButton.textContent = 'Running...';
+    }
+  });
+}
 
 predictionFrameworkInputs.forEach((input) => {
   input.addEventListener('change', () => {
@@ -2401,12 +2462,40 @@ deleteModelModal.addEventListener('click', (e) => {
     if (e.target === deleteModelModal) closeDeleteModelModal();
 });
 
+if (modelCancelTrainBtn) {
+    modelCancelTrainBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (modelCancelTrainBtn.disabled) return;
+
+        activeTrainingCancelRequested = true;
+        setCancelTrainButtonState({ visible: true, disabled: true, label: 'Canceling...' });
+        updateTrainButtonLabel('Canceling training...', { loading: true });
+
+        try {
+            const result = await window.electronAPI.cancelTrain();
+            if (!result.success) {
+                console.error('[UI] Cancel training failed:', result.error);
+                activeTrainingCancelRequested = false;
+                setCancelTrainButtonState({ visible: true, disabled: false, label: 'Cancel Training' });
+                updateTrainButtonLabel('Training...');
+            }
+        } catch (error) {
+            console.error('[UI] Cancel training IPC error:', error);
+            activeTrainingCancelRequested = false;
+            setCancelTrainButtonState({ visible: true, disabled: false, label: 'Cancel Training' });
+            updateTrainButtonLabel('Training...');
+        }
+    });
+}
+
 // Train Model button click handler
 modelTrainBtn.addEventListener('click', async () => {
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
     const activeRunState = createEmptyChartState();
 
+    activeTrainingCancelRequested = false;
+    setCancelTrainButtonState({ visible: false });
     modelTrainBtn.disabled = true;
     updateTrainButtonLabel('Checking datasets...');
     resetTrainingRunDisplay(activeRunState);
@@ -2445,6 +2534,7 @@ modelTrainBtn.addEventListener('click', async () => {
 
     try {
         modelTrainBtn.disabled = true;
+        setCancelTrainButtonState({ visible: true, disabled: false, label: 'Cancel Training' });
         updateTrainButtonLabel('Loading Processes...');
         // modelTrainResults.textContent = 'Training in progress...';
         // modelTrainResults.style.color = '#FFA500';
@@ -2471,7 +2561,10 @@ modelTrainBtn.addEventListener('click', async () => {
         const callDuration = Math.round((Date.now() - callStartTime) / 1000);
         console.log(`%c[UI] IPC handler completed in ${callDuration}s`, 'color: #007acc; font-weight: bold;');
 
-        if (result.success) {
+        if (result.canceled) {
+            console.log('%c[UI] Training canceled.', 'color: #8b1d1d; font-weight: bold;');
+            updateTrainButtonLabel('Training canceled', { loading: false });
+        } else if (result.success) {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
             // modelTrainResults.textContent = `Training completed successfully!${execTime}`;
             // modelTrainResults.style.color = '#28a745';
@@ -2523,13 +2616,25 @@ modelTrainBtn.addEventListener('click', async () => {
         updateTrainButtonLabel('Training failed');
     } finally {
         activeTrainingModelName = null;
+        activeTrainingCancelRequested = false;
+        setCancelTrainButtonState({ visible: false });
         modelTrainBtn.disabled = false;
         updateTrainButtonLabel('Train Model');
     }
 });
 
 // Test button in testing tab of a model
-runTestButton.addEventListener('click',async ()=> {
+runTestButton.addEventListener('click', async () => {
+    if (activeEvaluationRun) return;
+
+    activeEvaluationRun = true;
+    activeEvaluationCancelRequested = false;
+    runTestButton.disabled = true;
+    runTestButton.textContent = 'Running...';
+    setTestFrameworkControlsDisabled(true);
+    setCancelTestButtonState({ visible: true, disabled: false, label: 'Cancel Evaluation' });
+
+    try {
     const modelName = sessionStorage.getItem('projectName');
     const testMessage = document.getElementById('test-results-message');
     const testAccuracyVal = document.getElementById('test-accuracy-val');
@@ -2538,7 +2643,9 @@ runTestButton.addEventListener('click',async ()=> {
     const selectedFramework = getSelectedRuntimeFramework('test');
 
     const isReady = await checkRuntimeFrameworkReadiness('test', selectedFramework);
-    if (!isReady) return;
+    if (!isReady) {
+        return;
+    }
 
     renderTestResultState({
         ...getCachedTestResult(selectedFramework),
@@ -2546,11 +2653,23 @@ runTestButton.addEventListener('click',async ()=> {
         message: `Running ${getFrameworkDisplayName(selectedFramework)} evaluation...`
     });
 
-    const result = await window.electronAPI.invoke('test-model', {
-        modelName: modelName,
-        modelType: selectedFramework
-    });
-    if (result.success) {
+    let result;
+    try {
+        result = await window.electronAPI.invoke('test-model', {
+            modelName: modelName,
+            modelType: selectedFramework
+        });
+    } catch (error) {
+        console.error('%c[UI] Evaluation IPC error:', 'color: #dc3545; font-weight: bold;', error);
+        result = { success: false, error: error.message || 'Evaluation failed.' };
+    }
+    if (result.canceled) {
+        renderTestResultState({
+            ...getCachedTestResult(selectedFramework),
+            status: 'idle',
+            message: 'Evaluation canceled.'
+        });
+    } else if (result.success) {
         console.log(result);
         const resultState = {
             framework: selectedFramework,
@@ -2594,7 +2713,15 @@ runTestButton.addEventListener('click',async ()=> {
         }
         console.error(errorMessage);
     }
-})
+    } finally {
+    activeEvaluationRun = false;
+    activeEvaluationCancelRequested = false;
+    runTestButton.disabled = false;
+    runTestButton.textContent = 'Run Evaluation';
+    setTestFrameworkControlsDisabled(false);
+    setCancelTestButtonState({ visible: false });
+    }
+});
 
 // Opens dataset folder for both views
 datasetNameDisplay.addEventListener('click',async ()=> {
@@ -2657,7 +2784,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const match = trimmedLine.match(epochRegex);
-            if (match && activeTrainingModelName) {
+            if (match && activeTrainingModelName && !activeTrainingCancelRequested) {
                 const [_, epoch, tLoss, tAcc, vLoss, vAcc] = match;
                 const eLabel = `E${epoch}`;
 
@@ -2680,7 +2807,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.getElementById('progress-label').textContent = `${percent}%`;
             }
 
-            const matchStep = trimmedLine.match(trainingStepsRegex);
+            const matchStep = activeTrainingCancelRequested ? null : trimmedLine.match(trainingStepsRegex);
             if(matchStep){
                 if (matchStep) {
                     const step = matchStep[0];
@@ -2816,6 +2943,20 @@ function isPredictionPreviewVisible() {
         && Boolean(predictionPreview.getAttribute('src'));
 }
 
+function cancelActivePrediction() {
+    activePredictionRunId += 1;
+    const hadActivePrediction = activePredictionInFlight;
+    activePredictionInFlight = false;
+
+    if (hadActivePrediction && window.electronAPI?.cancelPrediction) {
+        activePredictionCancelPromise = window.electronAPI.cancelPrediction().catch((error) => {
+            console.error('[Prediction] Cancel prediction IPC error:', error);
+        }).finally(() => {
+            activePredictionCancelPromise = null;
+        });
+    }
+}
+
 // Open the file picker while the drop zone is empty.
 dropZone.addEventListener('click', () => {
     if (!isPredictionPreviewVisible()) {
@@ -2833,6 +2974,7 @@ predictFileInput.addEventListener('change', (e) => {
 });
 
 function resetPredictionZone() {
+    cancelActivePrediction();
     // clears area
     predictionPreview.src = "";
     predictionPreview.style.display = 'none';
@@ -2848,9 +2990,28 @@ predictionPreview.addEventListener('click', (e) => {
 });
 
 async function processPrediction(imagePath) {
+    if (activePredictionCancelPromise) {
+        await activePredictionCancelPromise;
+    }
+
+    if (activePredictionInFlight && window.electronAPI?.cancelPrediction) {
+        try {
+            activePredictionCancelPromise = window.electronAPI.cancelPrediction();
+            await activePredictionCancelPromise;
+        } catch (error) {
+            console.error('[Prediction] Could not cancel previous prediction:', error);
+        } finally {
+            activePredictionCancelPromise = null;
+        }
+    }
+
+    const predictionRunId = activePredictionRunId + 1;
+    activePredictionRunId = predictionRunId;
+    activePredictionInFlight = false;
+
     const selectedFramework = getSelectedRuntimeFramework('prediction');
     const isReady = await checkRuntimeFrameworkReadiness('prediction', selectedFramework);
-    if (!isReady) return;
+    if (!isReady || predictionRunId !== activePredictionRunId) return;
 
     predictionPreview.src = `file://${imagePath}`;
     predictionPreview.style.display = 'block';
@@ -2861,17 +3022,44 @@ async function processPrediction(imagePath) {
     document.getElementById('confidence-fill').style.width = '0%';
 
     const currentModelName = sessionStorage.getItem('projectName');
-    const result = await window.electronAPI.invoke('predict-image', {
+    console.log('[Prediction] Running prediction', {
         modelName: currentModelName,
-        imagePath: imagePath,
+        imagePath,
         modelType: selectedFramework
     });
+    activePredictionInFlight = true;
+    let result;
+    try {
+        result = await window.electronAPI.invoke('predict-image', {
+            modelName: currentModelName,
+            imagePath: imagePath,
+            modelType: selectedFramework
+        });
+    } catch (error) {
+        console.error('[Prediction] IPC error:', error);
+        result = { success: false, error: error.message || 'Prediction failed.' };
+    } finally {
+        if (predictionRunId === activePredictionRunId) {
+            activePredictionInFlight = false;
+        }
+    }
 
+    if (predictionRunId !== activePredictionRunId || predictionPreview.style.display === 'none') {
+        return;
+    }
 
-    if (result.success) {
+    if (result.canceled) {
+        document.getElementById('predicted-label').textContent = "Prediction canceled";
+        document.getElementById('confidence-fill').style.width = '0%';
+        document.getElementById('confidence-text').textContent = 'Model Confidence: -';
+    } else if (result.success) {
         const labelKeys = Object.keys(modelSettings?.labels || {});
-        const classIdx = result.label.includes('Class') ? result.label.split(' ')[1] : null;
-        const displayLabel = (classIdx !== null && labelKeys[classIdx]) ? labelKeys[classIdx] : result.label;
+        const classIdx = Number.isInteger(result.class_index)
+            ? result.class_index
+            : (result.label?.includes('Class') ? Number(result.label.split(' ')[1]) : null);
+        const displayLabel = (classIdx !== null && Number.isInteger(classIdx) && labelKeys[classIdx])
+            ? labelKeys[classIdx]
+            : result.label;
         document.getElementById('predicted-label').textContent = displayLabel;
 
         const confidencePct = (result.confidence * 100).toFixed(2);

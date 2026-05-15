@@ -14,7 +14,8 @@ import tensorflow as tf
 
 def representative_dataset(samples):
     for sample in samples:
-        yield [np.expand_dims(sample.astype(np.float32), axis=0)]
+        sample = np.clip(sample, 0, 255).astype(np.uint8)
+        yield [np.expand_dims(sample, axis=0)]
 
 
 def main():

@@ -12,6 +12,56 @@ import createServer from './express.js';
 import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
 import { spawn } from 'node:child_process';
 
+let activeTrainingRun = null;
+let activeEvaluationRun = null;
+let activePredictionRun = null;
+
+function safeSendTrainingEvent(sender, channel, payload) {
+  try {
+    if (!sender.isDestroyed?.()) {
+      sender.send(channel, payload);
+    }
+  } catch (error) {
+    console.warn(`Could not send ${channel}:`, error.message);
+  }
+}
+
+function requestProcessTreeStop(childProcess) {
+  if (!childProcess || !childProcess.pid || childProcess.exitCode !== null) {
+    return Promise.resolve(false);
+  }
+
+  if (process.platform === 'win32') {
+    return new Promise((resolve) => {
+      const killer = spawn('taskkill', ['/pid', String(childProcess.pid), '/T', '/F'], {
+        windowsHide: true,
+      });
+
+      killer.on('close', (code) => resolve(code === 0));
+      killer.on('error', (error) => {
+        console.warn('taskkill failed, falling back to direct process kill:', error.message);
+        try {
+          resolve(childProcess.kill());
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  try {
+    process.kill(-childProcess.pid, 'SIGTERM');
+    return Promise.resolve(true);
+  } catch (groupError) {
+    console.warn('Process group kill failed, falling back to direct process kill:', groupError.message);
+    try {
+      return Promise.resolve(childProcess.kill('SIGTERM'));
+    } catch {
+      return Promise.resolve(false);
+    }
+  }
+}
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
@@ -64,6 +114,21 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  if (activeTrainingRun?.process) {
+    activeTrainingRun.cancelRequested = true;
+    requestProcessTreeStop(activeTrainingRun.process);
+  }
+  if (activeEvaluationRun?.process) {
+    activeEvaluationRun.cancelRequested = true;
+    requestProcessTreeStop(activeEvaluationRun.process);
+  }
+  if (activePredictionRun?.process) {
+    activePredictionRun.cancelRequested = true;
+    requestProcessTreeStop(activePredictionRun.process);
   }
 });
 
@@ -949,6 +1014,14 @@ ipcMain.handle('execute-train', async (event, params) => {
   const { labelsJson, modelFolderPath, epochs, toggle, layers, projectType } = params;
   const normalizedProjectType = projectType === 'pretrained' ? 'pretrained' : 'scratch';
 
+  if (activeTrainingRun?.process && activeTrainingRun.process.exitCode === null) {
+    return {
+      success: false,
+      error: 'Training is already running. Cancel it before starting another run.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
   // Validate labelsJson
   if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
     return {
@@ -1016,7 +1089,7 @@ ipcMain.handle('execute-train', async (event, params) => {
     JSON.stringify(labelsJson),
     modelPath,
     epochs.toString(),
-    "repvgg_a2"                 // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
+    "mobilenetv3_large_100"     // specific pretrained model name from timm's PyTorch Image Models library to use for transfer learning - can be made dynamic in the future if we want to offer more options
     
   ];*/
   //console.log("Running with trainingParamsPt:", trainingParamsPt);
@@ -1034,6 +1107,10 @@ ipcMain.handle('execute-train', async (event, params) => {
   const pythonExe = process.platform === 'win32' ? path.join(venvPath, 'Scripts', 'python.exe') : path.join(venvPath, 'bin', 'python');
 
   // TensorFlow and PyTorch currently accept different argv layouts.
+  const pytorchPretrainedModelName = 'mobilenetv3_large_100';
+  // Other PyTorch defaults tried/kept for quick comparison:
+  // const pytorchPretrainedModelName = 'tf_mobilenetv3_large_100';
+
   const args = toggle === 'tensorflow'
     ? [
         '-u',
@@ -1051,29 +1128,142 @@ ipcMain.handle('execute-train', async (event, params) => {
         modelFolderPath,
         epochs.toString(),
         normalizedProjectType,
-        'repvgg_a2',
+        pytorchPretrainedModelName,
         JSON.stringify(Array.isArray(layers) ? layers : [])
       ];
 
-  return new Promise((resolve, reject) => {
-    const pythonProcess = spawn(pythonExe, args);
+  return new Promise((resolve) => {
+    const pythonProcess = spawn(pythonExe, args, {
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+    });
+    activeTrainingRun = {
+      process: pythonProcess,
+      cancelRequested: false,
+      senderId: event.sender.id,
+      startedAt: Date.now(),
+    };
 
     pythonProcess.stdout.on('data', (data) => {
       const output = data.toString();
       console.log(`[Python stdout]: ${output}`);
-      event.sender.send('training-stdout', output);
+      safeSendTrainingEvent(event.sender, 'training-stdout', output);
     });
 
     pythonProcess.stderr.on('data', (data) => {
       const output = data.toString();
       console.error(`[Python stderr]: ${output}`);
-      event.sender.send('training-stderr', output);
+      safeSendTrainingEvent(event.sender, 'training-stderr', output);
     });
 
-    pythonProcess.on('close', (code) => {
-      resolve({ success: code === 0, code: code });
+    pythonProcess.on('error', (error) => {
+      const wasCanceled = activeTrainingRun?.process === pythonProcess && activeTrainingRun.cancelRequested;
+      if (activeTrainingRun?.process === pythonProcess) {
+        activeTrainingRun = null;
+      }
+      resolve({
+        success: false,
+        canceled: wasCanceled,
+        error: wasCanceled ? 'Training canceled.' : error.message,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    pythonProcess.on('close', (code, signal) => {
+      const wasCanceled = activeTrainingRun?.process === pythonProcess && activeTrainingRun.cancelRequested;
+      if (activeTrainingRun?.process === pythonProcess) {
+        activeTrainingRun = null;
+      }
+      resolve({
+        success: code === 0 && !wasCanceled,
+        canceled: wasCanceled,
+        code: code,
+        signal: signal,
+        timestamp: new Date().toISOString()
+      });
     });
   });
+});
+
+ipcMain.handle('cancel-train', async () => {
+  if (!activeTrainingRun?.process || activeTrainingRun.process.exitCode !== null) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'No training process is running.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  activeTrainingRun.cancelRequested = true;
+  const stopRequested = await requestProcessTreeStop(activeTrainingRun.process);
+
+  return {
+    success: stopRequested,
+    canceled: stopRequested,
+    error: stopRequested ? null : 'Could not stop the training process.',
+    timestamp: new Date().toISOString()
+  };
+});
+
+ipcMain.handle('cancel-evaluation', async () => {
+  if (!activeEvaluationRun?.process || activeEvaluationRun.process.exitCode !== null) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'No evaluation process is running.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  activeEvaluationRun.cancelRequested = true;
+  const stopRequested = await requestProcessTreeStop(activeEvaluationRun.process);
+
+  return {
+    success: stopRequested,
+    canceled: stopRequested,
+    error: stopRequested ? null : 'Could not stop the evaluation process.',
+    timestamp: new Date().toISOString()
+  };
+});
+
+ipcMain.handle('cancel-prediction', async () => {
+  if (!activePredictionRun) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'No prediction process is running.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  activePredictionRun.cancelRequested = true;
+  if (!activePredictionRun.process) {
+    return {
+      success: true,
+      canceled: true,
+      pending: true,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  if (activePredictionRun.process.exitCode !== null) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'Prediction process has already exited.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  const stopRequested = await requestProcessTreeStop(activePredictionRun.process);
+
+  return {
+    success: stopRequested,
+    canceled: stopRequested,
+    error: stopRequested ? null : 'Could not stop the prediction process.',
+    timestamp: new Date().toISOString()
+  };
 });
 /**
  * Handle getting the images in a selected project
@@ -1155,6 +1345,22 @@ ipcMain.handle('get-model-runtime-status', async (event, params) => {
  * Handle model prediction via IPC from renderer process
  */
 ipcMain.handle('predict-image', async (event, params) => {
+  if (activePredictionRun) {
+    return {
+      success: false,
+      error: 'Prediction is already running. Cancel it before starting another one.'
+    };
+  }
+
+  activePredictionRun = {
+    senderId: event.sender.id,
+    imagePath: params?.imagePath,
+    process: null,
+    cancelRequested: false,
+    startedAt: Date.now(),
+  };
+
+  try {
   const { modelName, imagePath, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
@@ -1176,17 +1382,37 @@ ipcMain.handle('predict-image', async (event, params) => {
     };
   }
 
+  if (activePredictionRun?.cancelRequested) {
+    return { success: false, canceled: true, error: 'Prediction canceled.' };
+  }
+
   let scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
       ? path.join(__dirname, '../../py/predict.py')
       : path.join(process.resourcesPath, 'py/predict.py');
 
-  try {
     const projectType = resolveSavedProjectType(settings);
     const result = await executePythonScript(
       scriptPath,
       [artifact.modelPath, imagePath, JSON.stringify(labelsJson), projectType],
-      venvPath
+      venvPath,
+      {
+        spawnOptions: {
+          detached: process.platform !== 'win32',
+          windowsHide: true,
+        },
+        onProcess: (pythonProcess) => {
+          if (activePredictionRun) {
+            activePredictionRun.process = pythonProcess;
+            if (activePredictionRun.cancelRequested) {
+              requestProcessTreeStop(pythonProcess);
+            }
+          }
+        },
+      }
     );
+    if (activePredictionRun?.cancelRequested) {
+      return { success: false, canceled: true, error: 'Prediction canceled.' };
+    }
     const outputString = result.output || result.stdout || (typeof result === 'string' ? result : null);
 
     if (!outputString) {
@@ -1195,12 +1421,27 @@ ipcMain.handle('predict-image', async (event, params) => {
     }
 
     const cleanedOutput = outputString.trim();
-    console.log("Parsing Cleaned Output:", cleanedOutput);
+    const jsonLine = cleanedOutput.split('\n').reverse().find(line => {
+      try {
+        JSON.parse(line.trim());
+        return true;
+      } catch {
+        return false;
+      }
+    });
 
-    return JSON.parse(cleanedOutput);
+    if (!jsonLine) {
+      console.error("No JSON output found in prediction output:", cleanedOutput);
+      return { success: false, error: "Python helper returned no JSON output." };
+    }
+
+    console.log("Parsing Cleaned Output:", jsonLine.trim());
+    return JSON.parse(jsonLine.trim());
   } catch (error) {
     console.error("Predict IPC Error:", error);
     return { success: false, error: error.message };
+  } finally {
+    activePredictionRun = null;
   }
 });
 
@@ -1209,6 +1450,21 @@ ipcMain.handle('predict-image', async (event, params) => {
  */
 
 ipcMain.handle('test-model', async (event, params) => {
+  if (activeEvaluationRun) {
+    return {
+      success: false,
+      error: 'Evaluation is already running. Wait for it to finish before starting another one.'
+    };
+  }
+
+  activeEvaluationRun = {
+    senderId: event.sender.id,
+    process: null,
+    cancelRequested: false,
+    startedAt: Date.now(),
+  };
+
+  try {
   const { modelName, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
@@ -1252,8 +1508,20 @@ ipcMain.handle('test-model', async (event, params) => {
       ];
   }
   // Excutes the selected script and returns a JSON output
-  try {
-    const result = await executePythonScript(scriptPath, args, venvPath);
+    const result = await executePythonScript(scriptPath, args, venvPath, {
+      spawnOptions: {
+        detached: process.platform !== 'win32',
+        windowsHide: true,
+      },
+      onProcess: (pythonProcess) => {
+        if (activeEvaluationRun) {
+          activeEvaluationRun.process = pythonProcess;
+        }
+      },
+    });
+    if (activeEvaluationRun?.cancelRequested) {
+      return { success: false, canceled: true, error: 'Evaluation canceled.' };
+    }
     const outputString = result.output || result.stdout || result;
     const jsonLine = String(outputString).split('\n').find(line => {
       try { JSON.parse(line.trim()); return true; }
@@ -1263,5 +1531,7 @@ ipcMain.handle('test-model', async (event, params) => {
     return JSON.parse(jsonLine.trim());
   } catch (error) {
     return { success: false, error: error.message };
+  } finally {
+    activeEvaluationRun = null;
   }
 });
