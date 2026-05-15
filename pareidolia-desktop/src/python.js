@@ -218,7 +218,7 @@ export function installPythonPackages(packages, indexurl = null) {
  * However, it is encouraged to make your own IPC handler and use this function within it instead of a
  * general purpose IPC handler for all Python scripts due to specific needs on the images and train pages.
  */
-export function executePythonScript(pythonPath, args = [], venvPath = null) {
+export function executePythonScript(pythonPath, args = [], venvPath = null, options = {}) {
   return new Promise((resolve) => {
     // Determine which Python executable to use
     let pythonExecutable = 'python3';
@@ -232,7 +232,10 @@ export function executePythonScript(pythonPath, args = [], venvPath = null) {
     console.log('[Python] Timestamp:', new Date().toISOString());
     
     const startTime = Date.now();
-    const pythonProcess = spawn(pythonExecutable, [pythonPath, ...args]);
+    const pythonProcess = spawn(pythonExecutable, [pythonPath, ...args], options.spawnOptions || {});
+    if (typeof options.onProcess === 'function') {
+      options.onProcess(pythonProcess);
+    }
     
     let output = '';
     let error = '';

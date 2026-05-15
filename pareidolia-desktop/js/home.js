@@ -118,6 +118,14 @@ function setTestFrameworkControlsDisabled(disabled = false) {
     });
 }
 
+function setCancelTestButtonState({ visible = false, disabled = false, label = 'Cancel Evaluation' } = {}) {
+    if (!cancelTestButton) return;
+
+    cancelTestButton.hidden = !visible;
+    cancelTestButton.disabled = disabled;
+    cancelTestButton.textContent = label;
+}
+
 // Dataset Modal
 const datasetImportModal = document.getElementById('import-dataset-modal');
 
@@ -483,6 +491,7 @@ let activeChartModelName = null;
 let activeTrainingModelName = null;
 let activeTrainingCancelRequested = false;
 let activeEvaluationRun = false;
+let activeEvaluationCancelRequested = false;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -491,6 +500,7 @@ const resultsArea = document.getElementById('prediction-results');
 
 // test ids
 const runTestButton = document.getElementById('run-test-btn');
+const cancelTestButton = document.getElementById('cancel-test-btn');
 
 // ============================================================
 // Functions
@@ -2302,6 +2312,31 @@ testFrameworkInputs.forEach((input) => {
   });
 });
 
+if (cancelTestButton) {
+  cancelTestButton.addEventListener('click', async () => {
+    if (cancelTestButton.disabled) return;
+
+    activeEvaluationCancelRequested = true;
+    setCancelTestButtonState({ visible: true, disabled: true, label: 'Canceling...' });
+    runTestButton.textContent = 'Canceling...';
+
+    try {
+        const result = await window.electronAPI.cancelEvaluation();
+        if (!result.success) {
+            console.error('[UI] Cancel evaluation failed:', result.error);
+            activeEvaluationCancelRequested = false;
+            setCancelTestButtonState({ visible: true, disabled: false, label: 'Cancel Evaluation' });
+            runTestButton.textContent = 'Running...';
+        }
+    } catch (error) {
+        console.error('[UI] Cancel evaluation IPC error:', error);
+        activeEvaluationCancelRequested = false;
+        setCancelTestButtonState({ visible: true, disabled: false, label: 'Cancel Evaluation' });
+        runTestButton.textContent = 'Running...';
+    }
+  });
+}
+
 predictionFrameworkInputs.forEach((input) => {
   input.addEventListener('change', () => {
     handleRuntimeFrameworkSelection('prediction', input);
@@ -2590,9 +2625,11 @@ runTestButton.addEventListener('click', async () => {
     if (activeEvaluationRun) return;
 
     activeEvaluationRun = true;
+    activeEvaluationCancelRequested = false;
     runTestButton.disabled = true;
     runTestButton.textContent = 'Running...';
     setTestFrameworkControlsDisabled(true);
+    setCancelTestButtonState({ visible: true, disabled: false, label: 'Cancel Evaluation' });
 
     try {
     const modelName = sessionStorage.getItem('projectName');
@@ -2623,7 +2660,13 @@ runTestButton.addEventListener('click', async () => {
         console.error('%c[UI] Evaluation IPC error:', 'color: #dc3545; font-weight: bold;', error);
         result = { success: false, error: error.message || 'Evaluation failed.' };
     }
-    if (result.success) {
+    if (result.canceled) {
+        renderTestResultState({
+            ...getCachedTestResult(selectedFramework),
+            status: 'idle',
+            message: 'Evaluation canceled.'
+        });
+    } else if (result.success) {
         console.log(result);
         const resultState = {
             framework: selectedFramework,
@@ -2669,9 +2712,11 @@ runTestButton.addEventListener('click', async () => {
     }
     } finally {
     activeEvaluationRun = false;
+    activeEvaluationCancelRequested = false;
     runTestButton.disabled = false;
     runTestButton.textContent = 'Run Evaluation';
     setTestFrameworkControlsDisabled(false);
+    setCancelTestButtonState({ visible: false });
     }
 });
 

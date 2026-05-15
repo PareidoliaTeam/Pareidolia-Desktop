@@ -2786,6 +2786,14 @@ body.dragging-outside-canvas .model-block {
   padding-left: 28px;
 }
 
+.test-controls .evaluation-cancel-btn {
+  align-self: flex-end;
+  min-width: 0;
+  max-width: none;
+  height: calc(36px + 1rem + 6px);
+  padding: 0 18px;
+}
+
 .test-metrics-cards {
   display: flex;
   gap: 20px;

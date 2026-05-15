@@ -121,6 +121,10 @@ app.on('before-quit', () => {
     activeTrainingRun.cancelRequested = true;
     requestProcessTreeStop(activeTrainingRun.process);
   }
+  if (activeEvaluationRun?.process) {
+    activeEvaluationRun.cancelRequested = true;
+    requestProcessTreeStop(activeEvaluationRun.process);
+  }
 });
 
 // In this file you can include the rest of your app's specific main process
@@ -1196,6 +1200,27 @@ ipcMain.handle('cancel-train', async () => {
     timestamp: new Date().toISOString()
   };
 });
+
+ipcMain.handle('cancel-evaluation', async () => {
+  if (!activeEvaluationRun?.process || activeEvaluationRun.process.exitCode !== null) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'No evaluation process is running.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  activeEvaluationRun.cancelRequested = true;
+  const stopRequested = await requestProcessTreeStop(activeEvaluationRun.process);
+
+  return {
+    success: stopRequested,
+    canceled: stopRequested,
+    error: stopRequested ? null : 'Could not stop the evaluation process.',
+    timestamp: new Date().toISOString()
+  };
+});
 /**
  * Handle getting the images in a selected project
  */
@@ -1352,6 +1377,8 @@ ipcMain.handle('test-model', async (event, params) => {
 
   activeEvaluationRun = {
     senderId: event.sender.id,
+    process: null,
+    cancelRequested: false,
     startedAt: Date.now(),
   };
 
@@ -1400,7 +1427,20 @@ ipcMain.handle('test-model', async (event, params) => {
   }
   // Excutes the selected script and returns a JSON output
   try {
-    const result = await executePythonScript(scriptPath, args, venvPath);
+    const result = await executePythonScript(scriptPath, args, venvPath, {
+      spawnOptions: {
+        detached: process.platform !== 'win32',
+        windowsHide: true,
+      },
+      onProcess: (pythonProcess) => {
+        if (activeEvaluationRun) {
+          activeEvaluationRun.process = pythonProcess;
+        }
+      },
+    });
+    if (activeEvaluationRun?.cancelRequested) {
+      return { success: false, canceled: true, error: 'Evaluation canceled.' };
+    }
     const outputString = result.output || result.stdout || result;
     const jsonLine = String(outputString).split('\n').find(line => {
       try { JSON.parse(line.trim()); return true; }
