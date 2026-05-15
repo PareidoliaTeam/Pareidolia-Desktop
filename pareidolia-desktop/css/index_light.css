@@ -16,8 +16,8 @@
   --border: var(--silver);
   --button-shadow: 0 2px 0 rgba(6, 10, 14, 0.22), 0 8px 16px rgba(6, 10, 14, 0.12);
   --button-shadow-hover: 0 3px 0 rgba(6, 10, 14, 0.24), 0 12px 20px rgba(6, 10, 14, 0.16);
-  --button-shadow-quirky: 0 2px 0 rgba(6, 10, 14, 0.28), 3px 3px 0 rgba(255, 251, 183, 0.7), 0 12px 20px rgba(6, 10, 14, 0.14);
-  --button-shadow-quirky-hover: 0 3px 0 rgba(6, 10, 14, 0.3), 4px 4px 0 rgba(255, 251, 183, 0.8), 0 16px 24px rgba(6, 10, 14, 0.16);
+  --button-shadow-quirky: 0 2px 0 rgba(6, 10, 14, 0.28), 0 12px 20px rgba(6, 10, 14, 0.14);
+  --button-shadow-quirky-hover: 0 3px 0 rgba(6, 10, 14, 0.3), 0 16px 24px rgba(6, 10, 14, 0.16);
   --button-motion: 240ms cubic-bezier(0.22, 1, 0.36, 1);
 
   --chart-height: 30cqh;
@@ -1868,7 +1868,7 @@ body, html {
 
 .layer-item.is-selected {
   border-color: rgba(6, 10, 14, 0.42);
-  box-shadow: 0 0 0 3px rgba(255, 251, 183, 0.92), 0 3px 0 rgba(6, 10, 14, 0.12), 0 12px 20px rgba(var(--layer-accent-rgb), 0.14);
+  box-shadow: 0 0 0 3px rgba(6, 10, 14, 0.12), 0 3px 0 rgba(6, 10, 14, 0.12), 0 12px 20px rgba(var(--layer-accent-rgb), 0.14);
 }
 
 .builder-canvas.drag-over {
@@ -1915,7 +1915,7 @@ body, html {
 
 .model-block.is-active {
   border-color: rgba(6, 10, 14, 0.42);
-  box-shadow: 0 0 0 3px rgba(255, 251, 183, 0.92), 0 4px 0 rgba(6, 10, 14, 0.16), 0 16px 26px rgba(var(--layer-accent-rgb), 0.16);
+  box-shadow: 0 0 0 3px rgba(6, 10, 14, 0.12), 0 4px 0 rgba(6, 10, 14, 0.16), 0 16px 26px rgba(var(--layer-accent-rgb), 0.16);
 }
 
 .layer-item[data-type="Conv2D"],
