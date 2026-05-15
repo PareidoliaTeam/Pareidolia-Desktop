@@ -12,6 +12,54 @@ import createServer from './express.js';
 import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
 import { spawn } from 'node:child_process';
 
+let activeTrainingRun = null;
+
+function safeSendTrainingEvent(sender, channel, payload) {
+  try {
+    if (!sender.isDestroyed?.()) {
+      sender.send(channel, payload);
+    }
+  } catch (error) {
+    console.warn(`Could not send ${channel}:`, error.message);
+  }
+}
+
+function requestProcessTreeStop(childProcess) {
+  if (!childProcess || !childProcess.pid || childProcess.exitCode !== null) {
+    return Promise.resolve(false);
+  }
+
+  if (process.platform === 'win32') {
+    return new Promise((resolve) => {
+      const killer = spawn('taskkill', ['/pid', String(childProcess.pid), '/T', '/F'], {
+        windowsHide: true,
+      });
+
+      killer.on('close', (code) => resolve(code === 0));
+      killer.on('error', (error) => {
+        console.warn('taskkill failed, falling back to direct process kill:', error.message);
+        try {
+          resolve(childProcess.kill());
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  try {
+    process.kill(-childProcess.pid, 'SIGTERM');
+    return Promise.resolve(true);
+  } catch (groupError) {
+    console.warn('Process group kill failed, falling back to direct process kill:', groupError.message);
+    try {
+      return Promise.resolve(childProcess.kill('SIGTERM'));
+    } catch {
+      return Promise.resolve(false);
+    }
+  }
+}
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
@@ -64,6 +112,13 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  if (activeTrainingRun?.process) {
+    activeTrainingRun.cancelRequested = true;
+    requestProcessTreeStop(activeTrainingRun.process);
   }
 });
 
@@ -949,6 +1004,14 @@ ipcMain.handle('execute-train', async (event, params) => {
   const { labelsJson, modelFolderPath, epochs, toggle, layers, projectType } = params;
   const normalizedProjectType = projectType === 'pretrained' ? 'pretrained' : 'scratch';
 
+  if (activeTrainingRun?.process && activeTrainingRun.process.exitCode === null) {
+    return {
+      success: false,
+      error: 'Training is already running. Cancel it before starting another run.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
   // Validate labelsJson
   if (!labelsJson || typeof labelsJson !== 'object' || Object.keys(labelsJson).length === 0) {
     return {
@@ -1059,25 +1122,78 @@ ipcMain.handle('execute-train', async (event, params) => {
         JSON.stringify(Array.isArray(layers) ? layers : [])
       ];
 
-  return new Promise((resolve, reject) => {
-    const pythonProcess = spawn(pythonExe, args);
+  return new Promise((resolve) => {
+    const pythonProcess = spawn(pythonExe, args, {
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+    });
+    activeTrainingRun = {
+      process: pythonProcess,
+      cancelRequested: false,
+      senderId: event.sender.id,
+      startedAt: Date.now(),
+    };
 
     pythonProcess.stdout.on('data', (data) => {
       const output = data.toString();
       console.log(`[Python stdout]: ${output}`);
-      event.sender.send('training-stdout', output);
+      safeSendTrainingEvent(event.sender, 'training-stdout', output);
     });
 
     pythonProcess.stderr.on('data', (data) => {
       const output = data.toString();
       console.error(`[Python stderr]: ${output}`);
-      event.sender.send('training-stderr', output);
+      safeSendTrainingEvent(event.sender, 'training-stderr', output);
     });
 
-    pythonProcess.on('close', (code) => {
-      resolve({ success: code === 0, code: code });
+    pythonProcess.on('error', (error) => {
+      const wasCanceled = activeTrainingRun?.process === pythonProcess && activeTrainingRun.cancelRequested;
+      if (activeTrainingRun?.process === pythonProcess) {
+        activeTrainingRun = null;
+      }
+      resolve({
+        success: false,
+        canceled: wasCanceled,
+        error: wasCanceled ? 'Training canceled.' : error.message,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    pythonProcess.on('close', (code, signal) => {
+      const wasCanceled = activeTrainingRun?.process === pythonProcess && activeTrainingRun.cancelRequested;
+      if (activeTrainingRun?.process === pythonProcess) {
+        activeTrainingRun = null;
+      }
+      resolve({
+        success: code === 0 && !wasCanceled,
+        canceled: wasCanceled,
+        code: code,
+        signal: signal,
+        timestamp: new Date().toISOString()
+      });
     });
   });
+});
+
+ipcMain.handle('cancel-train', async () => {
+  if (!activeTrainingRun?.process || activeTrainingRun.process.exitCode !== null) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'No training process is running.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  activeTrainingRun.cancelRequested = true;
+  const stopRequested = await requestProcessTreeStop(activeTrainingRun.process);
+
+  return {
+    success: stopRequested,
+    canceled: stopRequested,
+    error: stopRequested ? null : 'Could not stop the training process.',
+    timestamp: new Date().toISOString()
+  };
 });
 /**
  * Handle getting the images in a selected project

@@ -68,6 +68,7 @@ const qrModalClose = document.getElementById('qr-modal-close');
 const epochSlider = document.getElementById('epoch-slider');
 const epochValueDisplay = document.getElementById('epoch-value');
 const modelTrainBtn = document.getElementById('model-train-btn');
+const modelCancelTrainBtn = document.getElementById('model-cancel-train-btn');
 const modelTrainResults = document.getElementById('model-train-results');
 const testLastTrainedFramework = document.getElementById('test-last-trained-framework');
 const predictionLastTrainedFramework = document.getElementById('prediction-last-trained-framework');
@@ -96,6 +97,14 @@ function updateTrainButtonLabel(label, options = {}) {
             modelTrainBtn.textContent = displayLabel;
         }
     }
+}
+
+function setCancelTrainButtonState({ visible = false, disabled = false, label = 'Cancel Training' } = {}) {
+    if (!modelCancelTrainBtn) return;
+
+    modelCancelTrainBtn.hidden = !visible;
+    modelCancelTrainBtn.disabled = disabled;
+    modelCancelTrainBtn.textContent = label;
 }
 
 // Dataset Modal
@@ -461,6 +470,7 @@ let chartResizeFrame = null;
 const chartStateByModel = new Map();
 let activeChartModelName = null;
 let activeTrainingModelName = null;
+let activeTrainingCancelRequested = false;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -2401,12 +2411,40 @@ deleteModelModal.addEventListener('click', (e) => {
     if (e.target === deleteModelModal) closeDeleteModelModal();
 });
 
+if (modelCancelTrainBtn) {
+    modelCancelTrainBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (modelCancelTrainBtn.disabled) return;
+
+        activeTrainingCancelRequested = true;
+        setCancelTrainButtonState({ visible: true, disabled: true, label: 'Canceling...' });
+        updateTrainButtonLabel('Canceling training...', { loading: true });
+
+        try {
+            const result = await window.electronAPI.cancelTrain();
+            if (!result.success) {
+                console.error('[UI] Cancel training failed:', result.error);
+                activeTrainingCancelRequested = false;
+                setCancelTrainButtonState({ visible: true, disabled: false, label: 'Cancel Training' });
+                updateTrainButtonLabel('Training...');
+            }
+        } catch (error) {
+            console.error('[UI] Cancel training IPC error:', error);
+            activeTrainingCancelRequested = false;
+            setCancelTrainButtonState({ visible: true, disabled: false, label: 'Cancel Training' });
+            updateTrainButtonLabel('Training...');
+        }
+    });
+}
+
 // Train Model button click handler
 modelTrainBtn.addEventListener('click', async () => {
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
     const activeRunState = createEmptyChartState();
 
+    activeTrainingCancelRequested = false;
+    setCancelTrainButtonState({ visible: false });
     modelTrainBtn.disabled = true;
     updateTrainButtonLabel('Checking datasets...');
     resetTrainingRunDisplay(activeRunState);
@@ -2445,6 +2483,7 @@ modelTrainBtn.addEventListener('click', async () => {
 
     try {
         modelTrainBtn.disabled = true;
+        setCancelTrainButtonState({ visible: true, disabled: false, label: 'Cancel Training' });
         updateTrainButtonLabel('Loading Processes...');
         // modelTrainResults.textContent = 'Training in progress...';
         // modelTrainResults.style.color = '#FFA500';
@@ -2471,7 +2510,10 @@ modelTrainBtn.addEventListener('click', async () => {
         const callDuration = Math.round((Date.now() - callStartTime) / 1000);
         console.log(`%c[UI] IPC handler completed in ${callDuration}s`, 'color: #007acc; font-weight: bold;');
 
-        if (result.success) {
+        if (result.canceled) {
+            console.log('%c[UI] Training canceled.', 'color: #8b1d1d; font-weight: bold;');
+            updateTrainButtonLabel('Training canceled', { loading: false });
+        } else if (result.success) {
             const execTime = result.executionTime ? ` (${result.executionTime}s)` : '';
             // modelTrainResults.textContent = `Training completed successfully!${execTime}`;
             // modelTrainResults.style.color = '#28a745';
@@ -2523,6 +2565,8 @@ modelTrainBtn.addEventListener('click', async () => {
         updateTrainButtonLabel('Training failed');
     } finally {
         activeTrainingModelName = null;
+        activeTrainingCancelRequested = false;
+        setCancelTrainButtonState({ visible: false });
         modelTrainBtn.disabled = false;
         updateTrainButtonLabel('Train Model');
     }
@@ -2657,7 +2701,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const match = trimmedLine.match(epochRegex);
-            if (match && activeTrainingModelName) {
+            if (match && activeTrainingModelName && !activeTrainingCancelRequested) {
                 const [_, epoch, tLoss, tAcc, vLoss, vAcc] = match;
                 const eLabel = `E${epoch}`;
 
@@ -2680,7 +2724,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.getElementById('progress-label').textContent = `${percent}%`;
             }
 
-            const matchStep = trimmedLine.match(trainingStepsRegex);
+            const matchStep = activeTrainingCancelRequested ? null : trimmedLine.match(trainingStepsRegex);
             if(matchStep){
                 if (matchStep) {
                     const step = matchStep[0];
