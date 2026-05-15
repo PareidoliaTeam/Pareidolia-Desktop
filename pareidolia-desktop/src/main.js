@@ -857,6 +857,17 @@ ipcMain.handle('open-file', async (event, filePath) => {
   return await shell.openPath(filePath);
 });
 
+/**
+ * Handle deleting files
+ */
+ipcMain.handle('delete-folder', async (event, filePath) => {
+  try{
+    await shell.trashItem(filePath);
+    return { success:true };
+  } catch (error) {
+    return {success:false, error: error.message};
+  }
+});
 // ============================================
 // PYTHON EXECUTION HANDLERS
 // ============================================

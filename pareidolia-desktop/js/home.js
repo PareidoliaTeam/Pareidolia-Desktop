@@ -15,6 +15,7 @@ const datasetSearchInput = document.getElementById('dataset-search');
 const deleteDatasetBtn = document.getElementById('delete-dataset-btn');
 const galleryNameDisplay = document.getElementById('current-gallery-title');
 const galleryPathDisplay = document.getElementById('current-gallery-filepath');
+const deleteDatasetConfirmBtn = document.getElementById('delete-dataset-confirm-btn');
 
 // Model elements
 const modelNameDisplay = document.getElementById('current-model-title');
@@ -27,6 +28,7 @@ const addModelBtn = document.querySelector('.create-btn');
 const datasetImportBtn = document.getElementById('dataset-import-btn');
 const deleteModelBtn = document.getElementById('delete-model-btn');
 const primarySidebar = document.querySelector('.left-sidebar-models');
+const deleteModelConfirmBtn = document.getElementById('delete-model-confirm-btn');
 
 // Model modal elements
 const addProjectModal = document.getElementById('add-model-modal');
@@ -770,6 +772,35 @@ function openDeleteModelModal() {
     deleteModelConfirmInput.value = '';
     deleteModelModal.style.display = 'flex';
     deleteModelConfirmInput.focus();
+}
+
+/**
+ * Deletes the dataset folder
+ */
+async function deleteFolder(){
+    if(deleteDatasetConfirmInput.value === sessionStorage.getItem('projectName')){
+        await window.electronAPI.invoke('delete-folder', sessionStorage.getItem('projectPath'));
+        closeDeleteDatasetModal();
+        showView('view-home');
+        await loadDatasetsFromFolder();
+    } else{
+        console.log('Could not delete');
+        console.log(deleteDatasetConfirmInput.textContent, sessionStorage.getItem('projectName'));
+    }
+}
+
+/**
+ * Deletes the model folder
+ */
+async function deleteModelFolder(){
+    if(deleteModelConfirmInput.value === sessionStorage.getItem('projectName')){
+        await window.electronAPI.invoke('delete-folder', sessionStorage.getItem('projectPath'));
+        closeDeleteModelModal();
+        showView('view-home');
+        await loadModelsFromFolder();
+    } else{
+        console.log('Could not delete')
+    }
 }
 
 /**
@@ -2011,6 +2042,18 @@ deleteModelBtn.addEventListener('click', (e) => {
     openDeleteModelModal();
 });
 
+// Delete dataset button
+deleteDatasetConfirmBtn.addEventListener('click', (e)=> {
+    e.stopPropagation();
+    deleteFolder();
+})
+
+// Delete Model Button
+deleteModelConfirmBtn.addEventListener('click', (e)=> {
+    e.stopPropagation();
+    deleteModelFolder();
+})
+
 
 // Delete model modal close buttons
 deleteModelModalClose.addEventListener('click', closeDeleteModelModal);
@@ -2176,8 +2219,12 @@ runTestButton.addEventListener('click',async ()=> {
     }
 })
 
-// Opens dataset folder
+// Opens dataset folder for both views
 datasetNameDisplay.addEventListener('click',async ()=> {
+    await window.electronAPI.invoke('open-file', sessionStorage.getItem('projectPath'));
+});
+
+galleryNameDisplay.addEventListener('click',async ()=> {
     await window.electronAPI.invoke('open-file', sessionStorage.getItem('projectPath'));
 });
 
