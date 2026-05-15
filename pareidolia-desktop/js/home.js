@@ -107,6 +107,17 @@ function setCancelTrainButtonState({ visible = false, disabled = false, label = 
     modelCancelTrainBtn.textContent = label;
 }
 
+function setTestFrameworkControlsDisabled(disabled = false) {
+    testFrameworkInputs.forEach((input) => {
+        input.disabled = disabled;
+        const control = input.closest('.segmented-control');
+        if (control) {
+            control.classList.toggle('is-disabled', disabled);
+            control.setAttribute('aria-disabled', String(disabled));
+        }
+    });
+}
+
 // Dataset Modal
 const datasetImportModal = document.getElementById('import-dataset-modal');
 
@@ -471,6 +482,7 @@ const chartStateByModel = new Map();
 let activeChartModelName = null;
 let activeTrainingModelName = null;
 let activeTrainingCancelRequested = false;
+let activeEvaluationRun = false;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -2285,6 +2297,7 @@ trainFrameworkInputs.forEach((input) => {
 
 testFrameworkInputs.forEach((input) => {
   input.addEventListener('change', () => {
+    if (activeEvaluationRun) return;
     handleRuntimeFrameworkSelection('test', input);
   });
 });
@@ -2573,7 +2586,15 @@ modelTrainBtn.addEventListener('click', async () => {
 });
 
 // Test button in testing tab of a model
-runTestButton.addEventListener('click',async ()=> {
+runTestButton.addEventListener('click', async () => {
+    if (activeEvaluationRun) return;
+
+    activeEvaluationRun = true;
+    runTestButton.disabled = true;
+    runTestButton.textContent = 'Running...';
+    setTestFrameworkControlsDisabled(true);
+
+    try {
     const modelName = sessionStorage.getItem('projectName');
     const testMessage = document.getElementById('test-results-message');
     const testAccuracyVal = document.getElementById('test-accuracy-val');
@@ -2582,7 +2603,9 @@ runTestButton.addEventListener('click',async ()=> {
     const selectedFramework = getSelectedRuntimeFramework('test');
 
     const isReady = await checkRuntimeFrameworkReadiness('test', selectedFramework);
-    if (!isReady) return;
+    if (!isReady) {
+        return;
+    }
 
     renderTestResultState({
         ...getCachedTestResult(selectedFramework),
@@ -2590,10 +2613,16 @@ runTestButton.addEventListener('click',async ()=> {
         message: `Running ${getFrameworkDisplayName(selectedFramework)} evaluation...`
     });
 
-    const result = await window.electronAPI.invoke('test-model', {
-        modelName: modelName,
-        modelType: selectedFramework
-    });
+    let result;
+    try {
+        result = await window.electronAPI.invoke('test-model', {
+            modelName: modelName,
+            modelType: selectedFramework
+        });
+    } catch (error) {
+        console.error('%c[UI] Evaluation IPC error:', 'color: #dc3545; font-weight: bold;', error);
+        result = { success: false, error: error.message || 'Evaluation failed.' };
+    }
     if (result.success) {
         console.log(result);
         const resultState = {
@@ -2638,7 +2667,13 @@ runTestButton.addEventListener('click',async ()=> {
         }
         console.error(errorMessage);
     }
-})
+    } finally {
+    activeEvaluationRun = false;
+    runTestButton.disabled = false;
+    runTestButton.textContent = 'Run Evaluation';
+    setTestFrameworkControlsDisabled(false);
+    }
+});
 
 // Opens dataset folder for both views
 datasetNameDisplay.addEventListener('click',async ()=> {

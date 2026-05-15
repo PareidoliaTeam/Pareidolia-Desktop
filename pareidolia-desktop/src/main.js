@@ -13,6 +13,7 @@ import { getVenvPath, setupPythonVenv, executePythonScript } from './python.js';
 import { spawn } from 'node:child_process';
 
 let activeTrainingRun = null;
+let activeEvaluationRun = null;
 
 function safeSendTrainingEvent(sender, channel, payload) {
   try {
@@ -1342,6 +1343,19 @@ ipcMain.handle('predict-image', async (event, params) => {
  */
 
 ipcMain.handle('test-model', async (event, params) => {
+  if (activeEvaluationRun) {
+    return {
+      success: false,
+      error: 'Evaluation is already running. Wait for it to finish before starting another one.'
+    };
+  }
+
+  activeEvaluationRun = {
+    senderId: event.sender.id,
+    startedAt: Date.now(),
+  };
+
+  try {
   const { modelName, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
@@ -1396,5 +1410,8 @@ ipcMain.handle('test-model', async (event, params) => {
     return JSON.parse(jsonLine.trim());
   } catch (error) {
     return { success: false, error: error.message };
+  }
+  } finally {
+    activeEvaluationRun = null;
   }
 });
