@@ -71,6 +71,10 @@ REPRESENTATIVE_SAMPLE_COUNT = 128
 LEARNING_RATE = 0.001
 MODEL_TYPE_SCRATCH = "scratch"
 MODEL_TYPE_PRETRAINED = "pretrained"
+DEFAULT_PRETRAINED_MODEL_NAME = "mobilenetv3_large_100"
+# Other defaults tried/kept for quick comparison:
+# DEFAULT_PRETRAINED_MODEL_NAME = "tf_mobilenetv3_large_100"
+# DEFAULT_PRETRAINED_MODEL_NAME = "repvgg_a2"
 CONVERTER_VENV_NAME = "converter-venv-macos-tf219"
 CONVERTER_REQUIREMENTS = [
     "tensorflow==2.19.1",
@@ -164,6 +168,75 @@ def delete_existing_checkpoints(model_folder):
             print(f"Deleted old checkpoint: {ckpt_path}")
         except Exception as e:
             print(f"Warning: could not delete {ckpt_path}: {e}")
+
+def write_pytorch_model_metadata(
+    model_folder,
+    *,
+    label_names,
+    project_type,
+    checkpoint_prefix,
+    normalization_mean,
+    normalization_std,
+    pretrained_model_name=None,
+    selected_layers=None,
+    best_checkpoint_path=None,
+):
+    """
+    Persist the app-level model contract that is not part of raw PyTorch
+    weights: class order, preprocessing, and normalization.
+    """
+    metadata = {
+        "framework": "pytorch",
+        "project_type": project_type,
+        "label_names": list(label_names),
+        "label_to_index": {label: index for index, label in enumerate(label_names)},
+        "num_classes": len(label_names),
+        "checkpoint_prefix": checkpoint_prefix,
+        "pretrained_model_name": pretrained_model_name,
+        "selected_layers": selected_layers or [],
+        "normalization_mean": [float(value) for value in normalization_mean],
+        "normalization_std": [float(value) for value in normalization_std],
+        "input": {
+            "height": IMG_HEIGHT,
+            "width": IMG_WIDTH,
+            "channels": IMG_CHANNELS,
+            "pixel_range": "0..255",
+            "layout": "RGB",
+            "desktop_prediction_preprocess": "resize_224_normalize",
+            "tflite_preprocess": "uint8_256_resize_center_crop_normalize_in_graph"
+        },
+        "checkpoint": {
+            "file": "model.ckpt",
+            "best_checkpoint": os.path.basename(best_checkpoint_path) if best_checkpoint_path else None
+        }
+    }
+
+    metadata_path = os.path.join(model_folder, "model-metadata.pytorch.json")
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+    print(f"PyTorch model metadata saved to: {metadata_path}")
+    return metadata_path
+
+def checkpoint_prefix_for_model(project_type, pretrained_model_name):
+    if project_type == MODEL_TYPE_SCRATCH:
+        return "scratch"
+
+    normalized_name = "".join(
+        char if char.isalnum() else "-"
+        for char in str(pretrained_model_name or DEFAULT_PRETRAINED_MODEL_NAME).lower()
+    ).strip("-")
+    return normalized_name or "pretrained"
+
+def get_timm_normalization(model_name):
+    try:
+        model = timm.create_model(model_name, pretrained=False)
+        cfg = getattr(model, "pretrained_cfg", {}) or {}
+        mean = cfg.get("mean") or IMAGENET_MEAN
+        std = cfg.get("std") or IMAGENET_STD
+        return [float(value) for value in mean], [float(value) for value in std]
+    except Exception as e:
+        print(f"Warning: could not read timm preprocessing config for {model_name}: {e}")
+        return IMAGENET_MEAN, IMAGENET_STD
 
 
 def run_logged_subprocess(command, env=None, cwd=None):
@@ -332,13 +405,14 @@ def wrap_tf_saved_model_with_preprocess(base_saved_model_path, wrapped_saved_mod
         @tf.function(
             input_signature=[
                 tf.TensorSpec(
-                    shape=[1, None, None, IMG_CHANNELS],
-                    dtype=tf.float32,
+                    shape=[1, EXPORT_IMG_HEIGHT, EXPORT_IMG_WIDTH, IMG_CHANNELS],
+                    dtype=tf.uint8,
                     name="input",
                 )
             ]
         )
         def serving_default(self, x):
+            x = tf.cast(x, tf.float32)
             x = tf.image.resize(
                 x,
                 [EXPORT_IMG_HEIGHT, EXPORT_IMG_WIDTH],
@@ -710,7 +784,8 @@ def tf_to_tflite(tf_model_path, tflite_model_path, representative_samples, conve
 
             def representative_dataset():
                 for sample in representative_samples:
-                    yield [np.expand_dims(sample.astype(np.float32), axis=0)]
+                    sample = np.clip(sample, 0, 255).astype(np.uint8)
+                    yield [np.expand_dims(sample, axis=0)]
 
             converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -786,7 +861,7 @@ if __name__ == "__main__":
     arg4 = sys.argv[4]
     if arg4 in (MODEL_TYPE_SCRATCH, MODEL_TYPE_PRETRAINED):
         project_type = arg4
-        pretrained_model_name = sys.argv[5] if len(sys.argv) > 5 else "repvgg_a2"
+        pretrained_model_name = sys.argv[5] if len(sys.argv) > 5 else DEFAULT_PRETRAINED_MODEL_NAME
         selected_layers = parse_selected_layers(sys.argv[6] if len(sys.argv) > 6 else None)
     else:
         project_type = MODEL_TYPE_PRETRAINED
@@ -794,6 +869,7 @@ if __name__ == "__main__":
         selected_layers = []
 
     labels_json = json.loads(labels_json_str)
+    label_names = list(labels_json.keys())
     
     print(json.dumps(labels_json_str, indent=2))
 
@@ -803,8 +879,13 @@ if __name__ == "__main__":
 
     pl.seed_everything(42, workers=True)
 
-    normalization_mean = IMAGENET_MEAN
-    normalization_std = IMAGENET_STD
+    if project_type == MODEL_TYPE_PRETRAINED:
+        normalization_mean, normalization_std = get_timm_normalization(pretrained_model_name)
+        print(f"Using timm normalization mean: {normalization_mean}")
+        print(f"Using timm normalization std: {normalization_std}")
+    else:
+        normalization_mean = IMAGENET_MEAN
+        normalization_std = IMAGENET_STD
 
     data_module = ImageDataModule(
         data_dir="./data",
@@ -839,7 +920,7 @@ if __name__ == "__main__":
 
         model = ScratchCNNClassifier(
             layers_json=selected_layers,
-            num_classes=len(labels_json),
+            num_classes=len(label_names),
             lr=LEARNING_RATE,
         )
         checkpoint_prefix = "scratch"
@@ -848,11 +929,11 @@ if __name__ == "__main__":
         print(f"Building PyTorch pretrained model with timm backbone: {pretrained_model_name}")
         model = RepVGGClassifier(
             model_name=pretrained_model_name,
-            num_classes=len(labels_json),
+            num_classes=len(label_names),
             lr=3e-4,
             hidden_dim=512,
         )
-        checkpoint_prefix = "repvgg"
+        checkpoint_prefix = checkpoint_prefix_for_model(project_type, pretrained_model_name)
         model_class = RepVGGClassifier
 
     delete_existing_checkpoints(model_folder)
@@ -868,7 +949,7 @@ if __name__ == "__main__":
     early_stop_cb = EarlyStopping(
         monitor="val_acc",
         mode="max",
-        patience=10,
+        patience=7,
     )
 
     lr_monitor_cb = LearningRateMonitor(logging_interval="epoch")
@@ -894,15 +975,29 @@ if __name__ == "__main__":
     trainer.fit(model, datamodule=data_module)
 
     final_ckpt_path = os.path.join(model_folder, "model.ckpt")
-    trainer.save_checkpoint(final_ckpt_path)
     best_model_path = checkpoint_cb.best_model_path
     if best_model_path:
         print(f"Loading best checkpoint for export: {best_model_path}")
-        model = model_class.load_from_checkpoint(best_model_path)
+        model = model_class.load_from_checkpoint(best_model_path, map_location="cpu")
+        shutil.copyfile(best_model_path, final_ckpt_path)
+        print(f"Saved best checkpoint for desktop prediction: {final_ckpt_path}")
     else:
         print("No best checkpoint found; exporting the current in-memory model.")
+        trainer.save_checkpoint(final_ckpt_path)
 
     model.eval()
+
+    write_pytorch_model_metadata(
+        model_folder,
+        label_names=label_names,
+        project_type=project_type,
+        checkpoint_prefix=checkpoint_prefix,
+        normalization_mean=normalization_mean,
+        normalization_std=normalization_std,
+        pretrained_model_name=pretrained_model_name if project_type == MODEL_TYPE_PRETRAINED else None,
+        selected_layers=selected_layers if project_type == MODEL_TYPE_SCRATCH else [],
+        best_checkpoint_path=best_model_path,
+    )
 
     # wrap model to allow for preproccessing in onnx export
     wrapped_model = RepVGGWithPreprocess(model, mean=normalization_mean, std=normalization_std)

@@ -113,12 +113,13 @@ class ImageDataModule(pl.LightningDataModule):
     def _build_transforms(self):
         normalize = transforms.Normalize(mean=self.normalization_mean, std=self.normalization_std)
 
-        self.train_transform = transforms.Compose([ # training preprocessing: resize up, augment, then crop to model size
-            transforms.Resize((self.resize_size, self.resize_size)),
+        self.train_transform = transforms.Compose([ # robust training preprocessing for camera frames and ad-hoc uploaded images
+            transforms.RandomResizedCrop(self.img_size, scale=(0.65, 1.0), ratio=(0.8, 1.25)),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(degrees=15),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2),
-            transforms.RandomCrop(self.img_size),
+            transforms.RandomAffine(degrees=15, translate=(0.08, 0.08), scale=(0.9, 1.12), shear=5),
+            transforms.RandomPerspective(distortion_scale=0.15, p=0.2),
+            transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.2, hue=0.04),
+            transforms.RandomGrayscale(p=0.05),
             transforms.ToTensor(),
             normalize,
         ])
@@ -206,7 +207,7 @@ class ImageDataModule(pl.LightningDataModule):
             self._json_dataset_cache = (images, labels, num_classes, label_names)
         return self._json_dataset_cache
 
-    def _get_split_indices(self, n_total):
+    def _get_split_indices(self, n_total, labels=None):
         if self._split_indices_cache is not None and self._split_indices_cache["n_total"] == n_total:
             return (
                 self._split_indices_cache["train_indices"],
@@ -214,22 +215,65 @@ class ImageDataModule(pl.LightningDataModule):
                 self._split_indices_cache["test_indices"],
             )
 
-        n_val = int(self.val_split * n_total)
-        n_test = int(self.test_split * n_total)
-        n_train = n_total - n_val - n_test
-        if n_train <= 0:
-            raise ValueError(
-                f"Dataset too small for val_split={self.val_split} and test_split={self.test_split} (n_total={n_total})."
-            )
-
         generator = torch.Generator().manual_seed(self.seed)
-        all_indices = torch.randperm(n_total, generator=generator).tolist()
 
-        print("All indices: ", all_indices, file=sys.stderr)  # Print the first 10 shuffled indices for debugging
+        if labels is not None:
+            labels = np.asarray(labels)
+            if len(labels) != n_total:
+                raise ValueError(f"labels length ({len(labels)}) must match n_total ({n_total}).")
 
-        train_indices = all_indices[:n_train]
-        val_indices = all_indices[n_train:n_train + n_val]
-        test_indices = all_indices[n_train + n_val:]
+            train_indices = []
+            val_indices = []
+            test_indices = []
+
+            for class_label in np.unique(labels):
+                class_indices = np.where(labels == class_label)[0].tolist()
+                shuffled_positions = torch.randperm(len(class_indices), generator=generator).tolist()
+                shuffled_class_indices = [class_indices[pos] for pos in shuffled_positions]
+
+                n_class_total = len(shuffled_class_indices)
+                n_class_val = int(self.val_split * n_class_total)
+                n_class_test = int(self.test_split * n_class_total)
+                n_class_train = n_class_total - n_class_val - n_class_test
+                if n_class_train <= 0:
+                    raise ValueError(
+                        f"Class {class_label} is too small for val_split={self.val_split} "
+                        f"and test_split={self.test_split} (n_class_total={n_class_total})."
+                    )
+
+                train_indices.extend(shuffled_class_indices[:n_class_train])
+                val_indices.extend(shuffled_class_indices[n_class_train:n_class_train + n_class_val])
+                test_indices.extend(shuffled_class_indices[n_class_train + n_class_val:])
+
+            train_indices = [train_indices[pos] for pos in torch.randperm(len(train_indices), generator=generator).tolist()]
+            val_indices = [val_indices[pos] for pos in torch.randperm(len(val_indices), generator=generator).tolist()]
+            test_indices = [test_indices[pos] for pos in torch.randperm(len(test_indices), generator=generator).tolist()]
+        else:
+            n_val = int(self.val_split * n_total)
+            n_test = int(self.test_split * n_total)
+            n_train = n_total - n_val - n_test
+            if n_train <= 0:
+                raise ValueError(
+                    f"Dataset too small for val_split={self.val_split} and test_split={self.test_split} (n_total={n_total})."
+                )
+
+            all_indices = torch.randperm(n_total, generator=generator).tolist()
+            train_indices = all_indices[:n_train]
+            val_indices = all_indices[n_train:n_train + n_val]
+            test_indices = all_indices[n_train + n_val:]
+
+        split_counts = {}
+        if labels is not None:
+            split_counts = {
+                "train": np.bincount(labels[train_indices]).tolist(),
+                "val": np.bincount(labels[val_indices]).tolist(),
+                "test": np.bincount(labels[test_indices]).tolist(),
+            }
+        print(
+            f"Split sizes: train={len(train_indices)}, val={len(val_indices)}, test={len(test_indices)} "
+            f"class_counts={split_counts}",
+            file=sys.stderr,
+        )
 
         self._split_indices_cache = {
             "n_total": n_total,
@@ -255,7 +299,7 @@ class ImageDataModule(pl.LightningDataModule):
             self.class_names = label_names
 
             n_total = len(images)
-            train_indices, val_indices, test_indices = self._get_split_indices(n_total)
+            train_indices, val_indices, test_indices = self._get_split_indices(n_total, labels)
             eval_base = NumpyImageDataset(images, labels, transform=self.eval_transform)
 
             rep_base = NumpyImageDataset(images, labels, transform=self.rep_transform)
@@ -298,7 +342,7 @@ class ImageDataModule(pl.LightningDataModule):
         else:
             eval_base = datasets.ImageFolder(self.data_dir, transform=self.eval_transform)
             n_total = len(eval_base)
-            train_indices, val_indices, test_indices = self._get_split_indices(n_total)
+            train_indices, val_indices, test_indices = self._get_split_indices(n_total, eval_base.targets)
 
             if stage in ("fit", None):
                 train_base = datasets.ImageFolder(self.data_dir, transform=self.train_transform)
@@ -372,7 +416,7 @@ class ImageDataModule(pl.LightningDataModule):
     def normalization_stats_dataloader(self):
         if self.labels_json is not None:
             images, labels, _, _ = self._get_json_dataset()
-            train_indices, _, _ = self._get_split_indices(len(images))
+            train_indices, _, _ = self._get_split_indices(len(images), labels)
             stats_base = NumpyImageDataset(images, labels, transform=self.stats_transform)
             stats_ds = torch.utils.data.Subset(stats_base, train_indices)
         elif self.cifar10:
@@ -385,7 +429,7 @@ class ImageDataModule(pl.LightningDataModule):
             stats_ds = torch.utils.data.Subset(stats_base, train_indices)
         else:
             stats_base = datasets.ImageFolder(self.data_dir, transform=self.stats_transform)
-            train_indices, _, _ = self._get_split_indices(len(stats_base))
+            train_indices, _, _ = self._get_split_indices(len(stats_base), stats_base.targets)
             stats_ds = torch.utils.data.Subset(stats_base, train_indices)
 
         return DataLoader(

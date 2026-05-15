@@ -927,6 +927,11 @@ ipcMain.handle('execute-train', async (event, params) => {
   const pythonExe = process.platform === 'win32' ? path.join(venvPath, 'Scripts', 'python.exe') : path.join(venvPath, 'bin', 'python');
 
   // TensorFlow and PyTorch currently accept different argv layouts.
+  const pytorchPretrainedModelName = 'mobilenetv3_large_100';
+  // Other PyTorch defaults tried/kept for quick comparison:
+  // const pytorchPretrainedModelName = 'tf_mobilenetv3_large_100';
+  // const pytorchPretrainedModelName = 'repvgg_a2';
+
   const args = toggle === 'tensorflow'
     ? [
         '-u',
@@ -944,7 +949,7 @@ ipcMain.handle('execute-train', async (event, params) => {
         modelFolderPath,
         epochs.toString(),
         normalizedProjectType,
-        'repvgg_a2',
+        pytorchPretrainedModelName,
         JSON.stringify(Array.isArray(layers) ? layers : [])
       ];
 

@@ -44,13 +44,14 @@ def main():
         @tf.function(
             input_signature=[
                 tf.TensorSpec(
-                    shape=[1, None, None, IMG_CHANNELS],
-                    dtype=tf.float32,
+                    shape=[1, EXPORT_IMG_HEIGHT, EXPORT_IMG_WIDTH, IMG_CHANNELS],
+                    dtype=tf.uint8,
                     name="input",
                 )
             ]
         )
         def serving_default(self, x):
+            x = tf.cast(x, tf.float32)
             x = tf.image.resize(
                 x,
                 [EXPORT_IMG_HEIGHT, EXPORT_IMG_WIDTH],

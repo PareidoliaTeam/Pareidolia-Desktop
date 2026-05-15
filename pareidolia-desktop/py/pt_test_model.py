@@ -61,7 +61,7 @@ def evaluate(checkpoint_path, labels_json_string, project_type=MODEL_TYPE_PRETRA
         data_module.setup(stage="test")
 
         # load model
-        model = model_class.load_from_checkpoint(checkpoint_path)
+        model = model_class.load_from_checkpoint(checkpoint_path, map_location="cpu")
         model_classes = get_model_class_count(model)
         dataset_classes = getattr(data_module, "num_classes", None)
 

@@ -2676,6 +2676,11 @@ async function processPrediction(imagePath) {
     document.getElementById('confidence-fill').style.width = '0%';
 
     const currentModelName = sessionStorage.getItem('projectName');
+    console.log('[Prediction] Running prediction', {
+        modelName: currentModelName,
+        imagePath,
+        modelType: selectedFramework
+    });
     const result = await window.electronAPI.invoke('predict-image', {
         modelName: currentModelName,
         imagePath: imagePath,
@@ -2685,8 +2690,12 @@ async function processPrediction(imagePath) {
 
     if (result.success) {
         const labelKeys = Object.keys(modelSettings?.labels || {});
-        const classIdx = result.label.includes('Class') ? result.label.split(' ')[1] : null;
-        const displayLabel = (classIdx !== null && labelKeys[classIdx]) ? labelKeys[classIdx] : result.label;
+        const classIdx = Number.isInteger(result.class_index)
+            ? result.class_index
+            : (result.label?.includes('Class') ? Number(result.label.split(' ')[1]) : null);
+        const displayLabel = (classIdx !== null && Number.isInteger(classIdx) && labelKeys[classIdx])
+            ? labelKeys[classIdx]
+            : result.label;
         document.getElementById('predicted-label').textContent = displayLabel;
 
         const confidencePct = (result.confidence * 100).toFixed(2);
