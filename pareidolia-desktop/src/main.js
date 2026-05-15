@@ -316,6 +316,7 @@ export async function createModelFolder(input) {
       modelType: 'tensorflow',
       projectType: projectType, // 'scratch' or 'pretrained'
       trainedClassCounts: {},
+      testResultsByFramework: {},
       chartHistory: {
         labels: [],
         accuracy: {

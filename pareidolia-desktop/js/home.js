@@ -125,6 +125,7 @@ function syncRuntimeFrameworkToggles(framework) {
     setFrameworkInputs(predictionFrameworkInputs, defaultFramework);
     lastValidRuntimeFramework.test = defaultFramework;
     lastValidRuntimeFramework.prediction = defaultFramework;
+    renderCachedTestResult(defaultFramework);
 }
 
 function getSelectedRuntimeFramework(context) {
@@ -252,10 +253,77 @@ async function handleRuntimeFrameworkSelection(context, input) {
 
     if (isReady) {
         lastValidRuntimeFramework[context] = framework;
+        if (context === 'test') {
+            renderCachedTestResult(framework);
+        }
         return;
     }
 
     setFrameworkInputs(getRuntimeInputs(context), lastValidRuntimeFramework[context]);
+}
+
+function getTestResultElements() {
+    return {
+        message: document.getElementById('test-results-message'),
+        accuracy: document.getElementById('test-accuracy-val'),
+        loss: document.getElementById('test-loss-val'),
+        count: document.getElementById('test-count-val')
+    };
+}
+
+function createEmptyTestResult(framework) {
+    return {
+        framework,
+        status: 'empty',
+        message: `No saved ${getFrameworkDisplayName(framework)} test result yet.`,
+        accuracy: null,
+        loss: null,
+        totalImages: null,
+        modelClasses: null,
+        datasetClasses: null,
+        testedAt: null
+    };
+}
+
+function getCachedTestResult(framework) {
+    return modelSettings?.testResultsByFramework?.[framework] || createEmptyTestResult(framework);
+}
+
+function renderTestResultState(resultState) {
+    const elements = getTestResultElements();
+    const state = resultState || createEmptyTestResult(getSelectedRuntimeFramework('test'));
+
+    if (elements.message) elements.message.textContent = state.message || '';
+    if (elements.accuracy) {
+        elements.accuracy.textContent = typeof state.accuracy === 'number'
+            ? `${(state.accuracy * 100).toFixed(2)}%`
+            : state.status === 'error' ? 'Error' : '—';
+    }
+    if (elements.loss) {
+        elements.loss.textContent = typeof state.loss === 'number'
+            ? state.loss.toFixed(4)
+            : '—';
+    }
+    if (elements.count) {
+        elements.count.textContent = Number.isFinite(Number(state.totalImages))
+            ? String(state.totalImages)
+            : '—';
+    }
+}
+
+function renderCachedTestResult(framework = getSelectedRuntimeFramework('test')) {
+    renderTestResultState(getCachedTestResult(framework));
+}
+
+async function saveTestResultForFramework(modelName, framework, resultState) {
+    if (!modelSettings || !modelName) return;
+
+    modelSettings.testResultsByFramework = {
+        ...(modelSettings.testResultsByFramework || {}),
+        [framework]: resultState
+    };
+
+    await persistModelSettings(modelName, modelSettings);
 }
 
 function updateLastTrainedFrameworkDisplays(settings = modelSettings) {
@@ -955,6 +1023,7 @@ async function loadModelSettingsForView(modelName) {
         modelSettings = await window.electronAPI.invoke('get-model-settings', modelName);
         // epochs and labels
         if (!modelSettings.labels) modelSettings.labels = {};
+        if (!modelSettings.testResultsByFramework) modelSettings.testResultsByFramework = {};
         epochSlider.value = modelSettings.epochs ?? 10;
         epochValueDisplay.textContent = epochSlider.value;
         if (!modelSettings.modelType) modelSettings.modelType = 'tensorflow';
@@ -977,6 +1046,7 @@ async function loadModelSettingsForView(modelName) {
         }
         updateLastTrainedFrameworkDisplays();
         syncRuntimeFrameworkToggles();
+        renderCachedTestResult(getSelectedRuntimeFramework('test'));
 
         if (!modelSettings.projectType) modelSettings.projectType = 'scratch';
 
@@ -2299,9 +2369,11 @@ runTestButton.addEventListener('click',async ()=> {
     const isReady = await checkRuntimeFrameworkReadiness('test', selectedFramework);
     if (!isReady) return;
 
-    if (testMessage) {
-        testMessage.textContent = 'Running evaluation...';
-    }
+    renderTestResultState({
+        ...getCachedTestResult(selectedFramework),
+        status: 'running',
+        message: `Running ${getFrameworkDisplayName(selectedFramework)} evaluation...`
+    });
 
     const result = await window.electronAPI.invoke('test-model', {
         modelName: modelName,
@@ -2309,16 +2381,39 @@ runTestButton.addEventListener('click',async ()=> {
     });
     if (result.success) {
         console.log(result);
-        if (testAccuracyVal) testAccuracyVal.textContent = (result.accuracy * 100).toFixed(2) + "%";
-        if (testLossVal) testLossVal.textContent = result.loss.toFixed(4);
-        if (testCountVal) testCountVal.textContent = result.total_images;
-        if (testMessage) {
-            testMessage.textContent = result.model_classes && result.dataset_classes
+        const resultState = {
+            framework: selectedFramework,
+            status: 'success',
+            message: result.model_classes && result.dataset_classes
                 ? `Evaluated ${result.dataset_classes} labels against a ${result.model_classes}-class model.`
-                : '';
-        }
+                : `${getFrameworkDisplayName(selectedFramework)} evaluation completed.`,
+            accuracy: Number(result.accuracy),
+            loss: Number(result.loss),
+            totalImages: Number(result.total_images),
+            modelClasses: result.model_classes === null ? null : Number(result.model_classes),
+            datasetClasses: result.dataset_classes === null ? null : Number(result.dataset_classes),
+            testedAt: new Date().toISOString()
+        };
+
+        renderTestResultState(resultState);
+        await saveTestResultForFramework(modelName, selectedFramework, resultState);
     } else {
         const errorMessage = result.error || 'Evaluation failed.';
+        const resultState = {
+            framework: selectedFramework,
+            status: 'error',
+            message: errorMessage,
+            accuracy: null,
+            loss: null,
+            totalImages: null,
+            modelClasses: null,
+            datasetClasses: null,
+            testedAt: new Date().toISOString()
+        };
+
+        renderTestResultState(resultState);
+        await saveTestResultForFramework(modelName, selectedFramework, resultState);
+
         if (testAccuracyVal) testAccuracyVal.textContent = 'Error';
         if (testLossVal) testLossVal.textContent = '—';
         if (testCountVal) testCountVal.textContent = '—';
