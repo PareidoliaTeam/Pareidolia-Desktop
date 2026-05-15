@@ -11,6 +11,7 @@ from train_model import MODEL_TYPE_PRETRAINED, MODEL_TYPE_SCRATCH, normalize_ima
 from pt_train_model import compute_mean_std_welford_from_loader
 from image_data_module import ImageDataModule
 import os
+import contextlib
 
 def load_pytorch_metadata(model_path):
     metadata_path = os.path.join(os.path.dirname(model_path), "model-metadata.pytorch.json")
@@ -99,14 +100,15 @@ def predict(model_path, img_path, labels_json_str=None, project_type=MODEL_TYPE_
             normalization_mean = metadata.get("normalization_mean") or [0.485, 0.456, 0.406]
             normalization_std = metadata.get("normalization_std") or [0.229, 0.224, 0.225]
             if project_type == MODEL_TYPE_SCRATCH and labels_json_str:
-                data_module = ImageDataModule(
-                    labels_json=labels_json_str,
-                    batch_size=32,
-                    img_size=224,
-                    seed=42
-                )
-                stats_loader = data_module.normalization_stats_dataloader()
-                normalization_mean, normalization_std = compute_mean_std_welford_from_loader(stats_loader)
+                with contextlib.redirect_stdout(sys.stderr):
+                    data_module = ImageDataModule(
+                        labels_json=labels_json_str,
+                        batch_size=32,
+                        img_size=224,
+                        seed=42
+                    )
+                    stats_loader = data_module.normalization_stats_dataloader()
+                    normalization_mean, normalization_std = compute_mean_std_welford_from_loader(stats_loader)
 
             # Preprocess pipeline
             preprocess = transforms.Compose([

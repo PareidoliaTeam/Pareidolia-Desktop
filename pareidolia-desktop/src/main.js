@@ -1093,9 +1093,22 @@ ipcMain.handle('predict-image', async (event, params) => {
     }
 
     const cleanedOutput = outputString.trim();
-    console.log("Parsing Cleaned Output:", cleanedOutput);
+    const jsonLine = cleanedOutput.split('\n').reverse().find(line => {
+      try {
+        JSON.parse(line.trim());
+        return true;
+      } catch {
+        return false;
+      }
+    });
 
-    return JSON.parse(cleanedOutput);
+    if (!jsonLine) {
+      console.error("No JSON output found in prediction output:", cleanedOutput);
+      return { success: false, error: "Python helper returned no JSON output." };
+    }
+
+    console.log("Parsing Cleaned Output:", jsonLine.trim());
+    return JSON.parse(jsonLine.trim());
   } catch (error) {
     console.error("Predict IPC Error:", error);
     return { success: false, error: error.message };
