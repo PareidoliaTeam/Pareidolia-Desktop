@@ -1951,6 +1951,10 @@ function syncCodeToBlocks() {
         layers.forEach(layer => {
             addLayerToCanvas(layer.type, layer.parameters);
         });
+
+        if (layers.length === 0) {
+            canvas.innerHTML = '<div class="builder-block-window">Drag Here</div>';
+        }
     } catch (e) {
         //alert("INVALID.");
     }
@@ -2220,9 +2224,15 @@ viewCodeBtn.addEventListener('click', () => {
 
 // Switch to "block" mode for sequential model editor
 viewBlockBtn.addEventListener('click', () => {
-    syncCodeToBlocks();
-    document.getElementById('code-workspace').style.display = 'none';
-    document.getElementById('visual-workspace').style.display = 'flex';
+    const codeWorkspace = document.getElementById('code-workspace');
+    const visualWorkspace = document.getElementById('visual-workspace');
+    const isSwitchingFromCode = codeWorkspace.style.display !== 'none';
+
+    if (isSwitchingFromCode) {
+        syncCodeToBlocks();
+    }
+    codeWorkspace.style.display = 'none';
+    visualWorkspace.style.display = 'flex';
     viewCodeBtn.classList.remove('active');
     viewBlockBtn.classList.add('active');
 });
