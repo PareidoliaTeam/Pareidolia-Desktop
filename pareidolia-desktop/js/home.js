@@ -1746,6 +1746,20 @@ function closeAddDatasetModal(){
     datasetImportModal.style.display= 'none';
 }
 
+/**
+ * Opens the correct folder to dataset and if its a reference it opens the real location
+ * @returns {Promise<void>}
+ */
+async function openFolder(){
+    //get-dataset-path
+
+    const currentPath = sessionStorage.getItem('projectPath');
+    if(currentPath) {
+        const resolvedPath = await window.electronAPI.invoke('get-dataset-path', currentPath);
+        await window.electronAPI.invoke('open-file', resolvedPath);
+    }
+}
+
 // ============================================================
 // Event Listeners
 // ============================================================
@@ -2221,11 +2235,11 @@ runTestButton.addEventListener('click',async ()=> {
 
 // Opens dataset folder for both views
 datasetNameDisplay.addEventListener('click',async ()=> {
-    await window.electronAPI.invoke('open-file', sessionStorage.getItem('projectPath'));
+    openFolder();
 });
 
 galleryNameDisplay.addEventListener('click',async ()=> {
-    await window.electronAPI.invoke('open-file', sessionStorage.getItem('projectPath'));
+    openFolder();
 });
 
 // Opens model folder
