@@ -492,6 +492,9 @@ let activeTrainingModelName = null;
 let activeTrainingCancelRequested = false;
 let activeEvaluationRun = false;
 let activeEvaluationCancelRequested = false;
+let activePredictionRunId = 0;
+let activePredictionInFlight = false;
+let activePredictionCancelPromise = null;
 
 // prediction ids
 const dropZone = document.getElementById('drop-zone');
@@ -2940,6 +2943,20 @@ function isPredictionPreviewVisible() {
         && Boolean(predictionPreview.getAttribute('src'));
 }
 
+function cancelActivePrediction() {
+    activePredictionRunId += 1;
+    const hadActivePrediction = activePredictionInFlight;
+    activePredictionInFlight = false;
+
+    if (hadActivePrediction && window.electronAPI?.cancelPrediction) {
+        activePredictionCancelPromise = window.electronAPI.cancelPrediction().catch((error) => {
+            console.error('[Prediction] Cancel prediction IPC error:', error);
+        }).finally(() => {
+            activePredictionCancelPromise = null;
+        });
+    }
+}
+
 // Open the file picker while the drop zone is empty.
 dropZone.addEventListener('click', () => {
     if (!isPredictionPreviewVisible()) {
@@ -2957,6 +2974,7 @@ predictFileInput.addEventListener('change', (e) => {
 });
 
 function resetPredictionZone() {
+    cancelActivePrediction();
     // clears area
     predictionPreview.src = "";
     predictionPreview.style.display = 'none';
@@ -2972,9 +2990,28 @@ predictionPreview.addEventListener('click', (e) => {
 });
 
 async function processPrediction(imagePath) {
+    if (activePredictionCancelPromise) {
+        await activePredictionCancelPromise;
+    }
+
+    if (activePredictionInFlight && window.electronAPI?.cancelPrediction) {
+        try {
+            activePredictionCancelPromise = window.electronAPI.cancelPrediction();
+            await activePredictionCancelPromise;
+        } catch (error) {
+            console.error('[Prediction] Could not cancel previous prediction:', error);
+        } finally {
+            activePredictionCancelPromise = null;
+        }
+    }
+
+    const predictionRunId = activePredictionRunId + 1;
+    activePredictionRunId = predictionRunId;
+    activePredictionInFlight = false;
+
     const selectedFramework = getSelectedRuntimeFramework('prediction');
     const isReady = await checkRuntimeFrameworkReadiness('prediction', selectedFramework);
-    if (!isReady) return;
+    if (!isReady || predictionRunId !== activePredictionRunId) return;
 
     predictionPreview.src = `file://${imagePath}`;
     predictionPreview.style.display = 'block';
@@ -2990,14 +3027,32 @@ async function processPrediction(imagePath) {
         imagePath,
         modelType: selectedFramework
     });
-    const result = await window.electronAPI.invoke('predict-image', {
-        modelName: currentModelName,
-        imagePath: imagePath,
-        modelType: selectedFramework
-    });
+    activePredictionInFlight = true;
+    let result;
+    try {
+        result = await window.electronAPI.invoke('predict-image', {
+            modelName: currentModelName,
+            imagePath: imagePath,
+            modelType: selectedFramework
+        });
+    } catch (error) {
+        console.error('[Prediction] IPC error:', error);
+        result = { success: false, error: error.message || 'Prediction failed.' };
+    } finally {
+        if (predictionRunId === activePredictionRunId) {
+            activePredictionInFlight = false;
+        }
+    }
 
+    if (predictionRunId !== activePredictionRunId || predictionPreview.style.display === 'none') {
+        return;
+    }
 
-    if (result.success) {
+    if (result.canceled) {
+        document.getElementById('predicted-label').textContent = "Prediction canceled";
+        document.getElementById('confidence-fill').style.width = '0%';
+        document.getElementById('confidence-text').textContent = 'Model Confidence: -';
+    } else if (result.success) {
         const labelKeys = Object.keys(modelSettings?.labels || {});
         const classIdx = Number.isInteger(result.class_index)
             ? result.class_index

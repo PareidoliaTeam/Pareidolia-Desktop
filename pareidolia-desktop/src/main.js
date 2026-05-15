@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process';
 
 let activeTrainingRun = null;
 let activeEvaluationRun = null;
+let activePredictionRun = null;
 
 function safeSendTrainingEvent(sender, channel, payload) {
   try {
@@ -124,6 +125,10 @@ app.on('before-quit', () => {
   if (activeEvaluationRun?.process) {
     activeEvaluationRun.cancelRequested = true;
     requestProcessTreeStop(activeEvaluationRun.process);
+  }
+  if (activePredictionRun?.process) {
+    activePredictionRun.cancelRequested = true;
+    requestProcessTreeStop(activePredictionRun.process);
   }
 });
 
@@ -1221,6 +1226,45 @@ ipcMain.handle('cancel-evaluation', async () => {
     timestamp: new Date().toISOString()
   };
 });
+
+ipcMain.handle('cancel-prediction', async () => {
+  if (!activePredictionRun) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'No prediction process is running.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  activePredictionRun.cancelRequested = true;
+  if (!activePredictionRun.process) {
+    return {
+      success: true,
+      canceled: true,
+      pending: true,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  if (activePredictionRun.process.exitCode !== null) {
+    return {
+      success: false,
+      canceled: false,
+      error: 'Prediction process has already exited.',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  const stopRequested = await requestProcessTreeStop(activePredictionRun.process);
+
+  return {
+    success: stopRequested,
+    canceled: stopRequested,
+    error: stopRequested ? null : 'Could not stop the prediction process.',
+    timestamp: new Date().toISOString()
+  };
+});
 /**
  * Handle getting the images in a selected project
  */
@@ -1301,6 +1345,22 @@ ipcMain.handle('get-model-runtime-status', async (event, params) => {
  * Handle model prediction via IPC from renderer process
  */
 ipcMain.handle('predict-image', async (event, params) => {
+  if (activePredictionRun) {
+    return {
+      success: false,
+      error: 'Prediction is already running. Cancel it before starting another one.'
+    };
+  }
+
+  activePredictionRun = {
+    senderId: event.sender.id,
+    imagePath: params?.imagePath,
+    process: null,
+    cancelRequested: false,
+    startedAt: Date.now(),
+  };
+
+  try {
   const { modelName, imagePath, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
@@ -1322,17 +1382,37 @@ ipcMain.handle('predict-image', async (event, params) => {
     };
   }
 
+  if (activePredictionRun?.cancelRequested) {
+    return { success: false, canceled: true, error: 'Prediction canceled.' };
+  }
+
   let scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
       ? path.join(__dirname, '../../py/predict.py')
       : path.join(process.resourcesPath, 'py/predict.py');
 
-  try {
     const projectType = resolveSavedProjectType(settings);
     const result = await executePythonScript(
       scriptPath,
       [artifact.modelPath, imagePath, JSON.stringify(labelsJson), projectType],
-      venvPath
+      venvPath,
+      {
+        spawnOptions: {
+          detached: process.platform !== 'win32',
+          windowsHide: true,
+        },
+        onProcess: (pythonProcess) => {
+          if (activePredictionRun) {
+            activePredictionRun.process = pythonProcess;
+            if (activePredictionRun.cancelRequested) {
+              requestProcessTreeStop(pythonProcess);
+            }
+          }
+        },
+      }
     );
+    if (activePredictionRun?.cancelRequested) {
+      return { success: false, canceled: true, error: 'Prediction canceled.' };
+    }
     const outputString = result.output || result.stdout || (typeof result === 'string' ? result : null);
 
     if (!outputString) {
@@ -1360,6 +1440,8 @@ ipcMain.handle('predict-image', async (event, params) => {
   } catch (error) {
     console.error("Predict IPC Error:", error);
     return { success: false, error: error.message };
+  } finally {
+    activePredictionRun = null;
   }
 });
 
@@ -1426,7 +1508,6 @@ ipcMain.handle('test-model', async (event, params) => {
       ];
   }
   // Excutes the selected script and returns a JSON output
-  try {
     const result = await executePythonScript(scriptPath, args, venvPath, {
       spawnOptions: {
         detached: process.platform !== 'win32',
@@ -1450,7 +1531,6 @@ ipcMain.handle('test-model', async (event, params) => {
     return JSON.parse(jsonLine.trim());
   } catch (error) {
     return { success: false, error: error.message };
-  }
   } finally {
     activeEvaluationRun = null;
   }
