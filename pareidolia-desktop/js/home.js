@@ -123,6 +123,8 @@ function syncRuntimeFrameworkToggles(framework) {
 
     setFrameworkInputs(testFrameworkInputs, defaultFramework);
     setFrameworkInputs(predictionFrameworkInputs, defaultFramework);
+    lastValidRuntimeFramework.test = defaultFramework;
+    lastValidRuntimeFramework.prediction = defaultFramework;
 }
 
 function getSelectedRuntimeFramework(context) {
@@ -136,6 +138,104 @@ function getSelectedRuntimeFramework(context) {
 
 function getFrameworkDisplayName(framework) {
     return framework === 'pytorch' ? 'PyTorch' : 'TensorFlow';
+}
+
+function getContextDisplayName(context) {
+    return context === 'prediction' ? 'prediction' : 'testing';
+}
+
+function isClassMismatchMessage(message) {
+    return /class count mismatch|current labels define|outputs \d+ classes/i.test(message || '');
+}
+
+function openRuntimeFrameworkModal(title, message) {
+    if (!runtimeFrameworkModal || !runtimeFrameworkModalTitle || !runtimeFrameworkModalMessage) {
+        return;
+    }
+
+    runtimeFrameworkModalTitle.textContent = title;
+    runtimeFrameworkModalMessage.textContent = message;
+    runtimeFrameworkModal.style.display = 'flex';
+}
+
+function closeRuntimeFrameworkModal() {
+    if (!runtimeFrameworkModal) return;
+    runtimeFrameworkModal.style.display = 'none';
+}
+
+function getRuntimeInputs(context) {
+    return context === 'prediction' ? predictionFrameworkInputs : testFrameworkInputs;
+}
+
+async function checkRuntimeFrameworkReadiness(context, framework, options = {}) {
+    const { showModal = true } = options;
+    const modelName = sessionStorage.getItem('projectName');
+    const frameworkName = getFrameworkDisplayName(framework);
+    const contextName = getContextDisplayName(context);
+
+    if (!modelName) {
+        if (showModal) {
+            openRuntimeFrameworkModal('Open a Model First', `Open a model before selecting a framework for ${contextName}.`);
+        }
+        return false;
+    }
+
+    let status;
+    try {
+        status = await window.electronAPI.invoke('get-model-runtime-status', {
+            modelName,
+            modelType: framework
+        });
+    } catch (error) {
+        console.error('Error checking model runtime status:', error);
+        if (showModal) {
+            openRuntimeFrameworkModal('Could Not Check Model', `Could not check the saved ${frameworkName} model. Check the console for details.`);
+        }
+        return false;
+    }
+
+    if (!status?.success) {
+        if (showModal) {
+            openRuntimeFrameworkModal('Could Not Check Model', status?.error || `Could not check the saved ${frameworkName} model.`);
+        }
+        return false;
+    }
+
+    if (!status.exists) {
+        if (showModal) {
+            openRuntimeFrameworkModal(
+                `${frameworkName} Model Not Found`,
+                `Train this model with ${frameworkName} before using ${frameworkName} for ${contextName}.`
+            );
+        }
+        return false;
+    }
+
+    if (status.classMismatch) {
+        if (showModal) {
+            openRuntimeFrameworkModal(
+                'Retraining Needed',
+                `This saved ${frameworkName} model has ${status.storedClassCount} classes, but the current labels define ${status.currentClassCount}. Retrain with ${frameworkName} before using it for ${contextName}.`
+            );
+        }
+        return false;
+    }
+
+    return true;
+}
+
+async function handleRuntimeFrameworkSelection(context, input) {
+    if (!input.checked) return;
+
+    const framework = inputValueToFramework(input.value);
+    const isReady = await checkRuntimeFrameworkReadiness(context, framework);
+
+    if (isReady) {
+        lastValidRuntimeFramework[context] = framework;
+        return;
+    }
+
+    setFrameworkInputs(getRuntimeInputs(context), lastValidRuntimeFramework[context]);
 }
 
 function updateLastTrainedFrameworkDisplays(settings = modelSettings) {
@@ -178,6 +278,11 @@ const trainingValidationModal = document.getElementById('training-validation-mod
 const trainingValidationModalClose = document.getElementById('training-validation-modal-close');
 const trainingValidationList = document.getElementById('training-validation-list');
 const trainingValidationOkBtn = document.getElementById('training-validation-ok-btn');
+const runtimeFrameworkModal = document.getElementById('runtime-framework-modal');
+const runtimeFrameworkModalClose = document.getElementById('runtime-framework-modal-close');
+const runtimeFrameworkModalTitle = document.getElementById('runtime-framework-modal-title');
+const runtimeFrameworkModalMessage = document.getElementById('runtime-framework-modal-message');
+const runtimeFrameworkOkBtn = document.getElementById('runtime-framework-ok-btn');
 const deleteDatasetModal = document.getElementById('delete-dataset-modal');
 const deleteDatasetModalClose = document.getElementById('delete-dataset-modal-close');
 const deleteDatasetName = document.getElementById('delete-dataset-name');
@@ -189,6 +294,10 @@ let modelSettings = null;
 let currentLabelName = null;
 let activeBlock = null;
 let sidebarToggleAnimationFrame = null;
+const lastValidRuntimeFramework = {
+    test: 'tensorflow',
+    prediction: 'tensorflow'
+};
 
 // builder ids
 const builderModal = document.getElementById('builder-modal');
@@ -1916,6 +2025,18 @@ trainFrameworkInputs.forEach((input) => {
   });
 });
 
+testFrameworkInputs.forEach((input) => {
+  input.addEventListener('change', () => {
+    handleRuntimeFrameworkSelection('test', input);
+  });
+});
+
+predictionFrameworkInputs.forEach((input) => {
+  input.addEventListener('change', () => {
+    handleRuntimeFrameworkSelection('prediction', input);
+  });
+});
+
 
 // carousel animation
 carousel.addEventListener('animationiteration', () => {
@@ -1971,6 +2092,21 @@ if (trainingValidationOkBtn) {
 if (trainingValidationModal) {
     trainingValidationModal.addEventListener('click', (e) => {
         if (e.target === trainingValidationModal) closeTrainingValidationModal();
+    });
+}
+
+// Runtime framework modal close buttons
+if (runtimeFrameworkModalClose) {
+    runtimeFrameworkModalClose.addEventListener('click', closeRuntimeFrameworkModal);
+}
+if (runtimeFrameworkOkBtn) {
+    runtimeFrameworkOkBtn.addEventListener('click', closeRuntimeFrameworkModal);
+}
+
+// Runtime framework modal backdrop click
+if (runtimeFrameworkModal) {
+    runtimeFrameworkModal.addEventListener('click', (e) => {
+        if (e.target === runtimeFrameworkModal) closeRuntimeFrameworkModal();
     });
 }
 
@@ -2101,6 +2237,11 @@ modelTrainBtn.addEventListener('click', async () => {
                 modelSettings.chartHistory = cloneChartState(completedChartState);
                 modelSettings.lastTrained = timestamp;
                 modelSettings.lastTrainedFramework = toggle;
+                modelSettings.lastTrainedProjectType = projectType;
+                modelSettings.trainedClassCounts = {
+                    ...(modelSettings.trainedClassCounts || {}),
+                    [toggle]: Object.keys(modelSettings.labels || {}).length
+                };
                 updateLastTrainedFrameworkDisplays();
                 syncRuntimeFrameworkToggles(toggle);
                 await persistModelSettings(currentModelName, modelSettings);
@@ -2133,6 +2274,10 @@ runTestButton.addEventListener('click',async ()=> {
     const testAccuracyVal = document.getElementById('test-accuracy-val');
     const testLossVal = document.getElementById('test-loss-val');
     const testCountVal = document.getElementById('test-count-val');
+    const selectedFramework = getSelectedRuntimeFramework('test');
+
+    const isReady = await checkRuntimeFrameworkReadiness('test', selectedFramework);
+    if (!isReady) return;
 
     if (testMessage) {
         testMessage.textContent = 'Running evaluation...';
@@ -2140,7 +2285,7 @@ runTestButton.addEventListener('click',async ()=> {
 
     const result = await window.electronAPI.invoke('test-model', {
         modelName: modelName,
-        modelType: getSelectedRuntimeFramework('test')
+        modelType: selectedFramework
     });
     if (result.success) {
         console.log(result);
@@ -2158,6 +2303,9 @@ runTestButton.addEventListener('click',async ()=> {
         if (testLossVal) testLossVal.textContent = '—';
         if (testCountVal) testCountVal.textContent = '—';
         if (testMessage) testMessage.textContent = errorMessage;
+        if (isClassMismatchMessage(errorMessage)) {
+            openRuntimeFrameworkModal('Retraining Needed', errorMessage);
+        }
         console.error(errorMessage);
     }
 })
@@ -2394,6 +2542,10 @@ predictionPreview.addEventListener('click', (e) => {
 });
 
 async function processPrediction(imagePath) {
+    const selectedFramework = getSelectedRuntimeFramework('prediction');
+    const isReady = await checkRuntimeFrameworkReadiness('prediction', selectedFramework);
+    if (!isReady) return;
+
     predictionPreview.src = `file://${imagePath}`;
     predictionPreview.style.display = 'block';
     document.querySelector('.drop-zone-content').style.display = 'none';
@@ -2406,7 +2558,7 @@ async function processPrediction(imagePath) {
     const result = await window.electronAPI.invoke('predict-image', {
         modelName: currentModelName,
         imagePath: imagePath,
-        modelType: getSelectedRuntimeFramework('prediction')
+        modelType: selectedFramework
     });
 
 
@@ -2421,6 +2573,9 @@ async function processPrediction(imagePath) {
         document.getElementById('confidence-text').textContent = `Model Confidence: ${confidencePct}%`;
     } else {
         document.getElementById('predicted-label').textContent = "Error during prediction";
+        if (isClassMismatchMessage(result.error)) {
+            openRuntimeFrameworkModal('Retraining Needed', result.error);
+        }
         console.error(result.error);
     }
 }

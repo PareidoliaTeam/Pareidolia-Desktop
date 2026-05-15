@@ -12,6 +12,19 @@ from pt_train_model import compute_mean_std_welford_from_loader
 from image_data_module import ImageDataModule
 import os
 
+def infer_pt_project_type_from_checkpoint(checkpoint_path, fallback=MODEL_TYPE_SCRATCH):
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = checkpoint.get("state_dict", checkpoint)
+    keys = state_dict.keys()
+
+    if any(key.startswith("backbone.") or key.startswith("head.") for key in keys):
+        return MODEL_TYPE_PRETRAINED
+
+    if any(key.startswith("model.") for key in keys):
+        return MODEL_TYPE_SCRATCH
+
+    return MODEL_TYPE_PRETRAINED if fallback == MODEL_TYPE_PRETRAINED else MODEL_TYPE_SCRATCH
+
 def load_tf_model(model_path):
     try:
         return tf.keras.models.load_model(model_path, compile=False)
@@ -34,6 +47,7 @@ def predict(model_path, img_path, labels_json_str=None, project_type=MODEL_TYPE_
 
         # Pytorch model
         if model_path.endswith('.ckpt'):
+            project_type = infer_pt_project_type_from_checkpoint(model_path, project_type)
             # Prep model for evaluation
             model_class = RepVGGClassifier if project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
             model = model_class.load_from_checkpoint(model_path)

@@ -315,6 +315,7 @@ export async function createModelFolder(input) {
       epochs: 10,
       modelType: 'tensorflow',
       projectType: projectType, // 'scratch' or 'pretrained'
+      trainedClassCounts: {},
       chartHistory: {
         labels: [],
         accuracy: {
@@ -526,6 +527,46 @@ function resolveModelArtifact(modelName, settings = {}, requestedModelType = nul
   }
 
   return { modelFile: 'model.ckpt', modelPath: ckptPath, modelType: 'pytorch' };
+}
+
+function getExactModelArtifact(modelName, modelType) {
+  const pareidoliaPath = getPareidoliaFolderPath();
+  const modelFolder = path.join(pareidoliaPath, 'models', modelName, 'models');
+  const normalizedModelType = modelType === 'pytorch' ? 'pytorch' : 'tensorflow';
+  const modelFile = normalizedModelType === 'pytorch' ? 'model.ckpt' : 'model.keras';
+  const modelPath = path.join(modelFolder, modelFile);
+
+  return {
+    modelFile,
+    modelPath,
+    modelType: normalizedModelType,
+    exists: fs.existsSync(modelPath)
+  };
+}
+
+function resolveSavedProjectType(settings = {}) {
+  if (settings.lastTrainedProjectType === 'pretrained' || settings.lastTrainedProjectType === 'scratch') {
+    return settings.lastTrainedProjectType;
+  }
+
+  return settings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
+}
+
+function getCurrentLabelCount(settings = {}) {
+  return Object.keys(settings.labels || {}).length;
+}
+
+function getStoredClassCount(settings = {}, modelType) {
+  const trainedClassCounts = settings.trainedClassCounts || {};
+  const value = trainedClassCounts[modelType];
+
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const parsedValue = Number(value);
+
+  return Number.isFinite(parsedValue) ? parsedValue : null;
 }
 
 /**
@@ -969,6 +1010,26 @@ ipcMain.handle('update-model-settings', async (event, params) => {
   return await updateModelSettings(modelName, newSettings);
 });
 
+ipcMain.handle('get-model-runtime-status', async (event, params) => {
+  const { modelName, modelType } = params || {};
+  const settings = await getModelSettings(modelName);
+  const artifact = getExactModelArtifact(modelName, modelType);
+  const currentClassCount = getCurrentLabelCount(settings);
+  const storedClassCount = getStoredClassCount(settings, artifact.modelType);
+
+  return {
+    success: true,
+    modelType: artifact.modelType,
+    modelFile: artifact.modelFile,
+    modelPath: artifact.modelPath,
+    exists: artifact.exists,
+    currentClassCount,
+    storedClassCount,
+    classCountKnown: storedClassCount !== null,
+    classMismatch: storedClassCount !== null && storedClassCount !== currentClassCount
+  };
+});
+
 /**
  * Handle model prediction via IPC from renderer process
  */
@@ -976,17 +1037,33 @@ ipcMain.handle('predict-image', async (event, params) => {
   const { modelName, imagePath, modelType } = params;
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
-  const { modelPath } = resolveModelArtifact(modelName, settings, modelType);
+  const artifact = getExactModelArtifact(modelName, modelType);
+  const storedClassCount = getStoredClassCount(settings, artifact.modelType);
+  const currentClassCount = getCurrentLabelCount(settings);
+
+  if (!artifact.exists) {
+    return {
+      success: false,
+      error: `Train this model with ${artifact.modelType === 'pytorch' ? 'PyTorch' : 'TensorFlow'} before using it for prediction.`
+    };
+  }
+
+  if (storedClassCount !== null && storedClassCount !== currentClassCount) {
+    return {
+      success: false,
+      error: `This saved ${artifact.modelType === 'pytorch' ? 'PyTorch' : 'TensorFlow'} model has ${storedClassCount} classes, but the current labels define ${currentClassCount}. Retrain before predicting.`
+    };
+  }
 
   let scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
       ? path.join(__dirname, '../../py/predict.py')
       : path.join(process.resourcesPath, 'py/predict.py');
 
   try {
-    const projectType = settings.projectType === 'pretrained' ? 'pretrained' : 'scratch';
+    const projectType = resolveSavedProjectType(settings);
     const result = await executePythonScript(
       scriptPath,
-      [modelPath, imagePath, JSON.stringify(labelsJson), projectType],
+      [artifact.modelPath, imagePath, JSON.stringify(labelsJson), projectType],
       venvPath
     );
     const outputString = result.output || result.stdout || (typeof result === 'string' ? result : null);
@@ -1015,26 +1092,42 @@ ipcMain.handle('test-model', async (event, params) => {
   const venvPath = getVenvPath();
   const { labelsJson, settings } = await modelDetailsForPython(modelName);
   let scriptPath, args;
-  const { modelPath, modelType: resolvedModelType } = resolveModelArtifact(modelName, settings, modelType);
+  const artifact = getExactModelArtifact(modelName, modelType);
+  const storedClassCount = getStoredClassCount(settings, artifact.modelType);
+  const currentClassCount = getCurrentLabelCount(settings);
+
+  if (!artifact.exists) {
+    return {
+      success: false,
+      error: `Train this model with ${artifact.modelType === 'pytorch' ? 'PyTorch' : 'TensorFlow'} before testing with it.`
+    };
+  }
+
+  if (storedClassCount !== null && storedClassCount !== currentClassCount) {
+    return {
+      success: false,
+      error: `This saved ${artifact.modelType === 'pytorch' ? 'PyTorch' : 'TensorFlow'} model has ${storedClassCount} classes, but the current labels define ${currentClassCount}. Retrain before testing.`
+    };
+  }
 
   // Checks type of model and selects the correct script and filepath.
-  if (resolvedModelType === 'tensorflow') {
+  if (artifact.modelType === 'tensorflow') {
     scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../../py/tf_test_model.py')
         : path.join(process.resourcesPath, 'py/tf_test_model.py');
     args = [
-        modelPath,
+        artifact.modelPath,
         JSON.stringify(labelsJson),
-        settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
+        resolveSavedProjectType(settings)
       ];
   } else{
     scriptPath = MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../../py/pt_test_model.py')
         : path.join(process.resourcesPath, 'py/pt_test_model.py');
     args = [
-        modelPath,
+        artifact.modelPath,
         JSON.stringify(labelsJson),
-        settings.projectType === 'pretrained' ? 'pretrained' : 'scratch'
+        resolveSavedProjectType(settings)
       ];
   }
   // Excutes the selected script and returns a the JSON output

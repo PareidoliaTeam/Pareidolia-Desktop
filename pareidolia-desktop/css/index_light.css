@@ -66,6 +66,28 @@ body, html {
   }
 }
 
+@keyframes modal-backdrop-in {
+  from {
+    background-color: rgba(6, 10, 14, 0);
+  }
+
+  to {
+    background-color: rgba(6, 10, 14, 0.62);
+  }
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .container {
   display: flex;
   height: 100vh;
@@ -555,6 +577,22 @@ body, html {
   box-shadow: 0 4px 15px rgba(6, 10, 14, 0.2);
   position: relative;
   overflow-y: auto;
+}
+
+.modal,
+.create-model-modal,
+.qr-modal,
+.help-modal,
+.settings-modal {
+  animation: modal-backdrop-in 180ms ease-out;
+}
+
+.modal-content,
+.help-modal-content,
+.settings-modal-content,
+.qr-section {
+  transform-origin: center;
+  animation: modal-pop-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* APP VIEW STYLE */
@@ -1103,6 +1141,18 @@ body, html {
   .loader {
     animation: none;
   }
+
+  .modal,
+  .create-model-modal,
+  .qr-modal,
+  .help-modal,
+  .settings-modal,
+  .modal-content,
+  .help-modal-content,
+  .settings-modal-content,
+  .qr-section {
+    animation: none;
+  }
 }
 /* CAROUSEL STYLE */
 .carousel-container {
@@ -1275,12 +1325,14 @@ body, html {
 }
 
 .dataset-cleanup-modal-content,
-.training-validation-modal-content {
+.training-validation-modal-content,
+.runtime-framework-modal-content {
   max-width: 520px;
 }
 
 .dataset-cleanup-message,
-.training-validation-message {
+.training-validation-message,
+.runtime-framework-message {
   color: var(--onyx);
   line-height: 1.45;
   margin: 0 0 1rem;
