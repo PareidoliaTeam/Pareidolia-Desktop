@@ -148,13 +148,33 @@ function isClassMismatchMessage(message) {
     return /class count mismatch|current labels define|outputs \d+ classes/i.test(message || '');
 }
 
+function getClassMismatchMessage(storedClassCount, currentClassCount, frameworkName, contextName) {
+    return [
+        `This saved ${frameworkName} model has ${storedClassCount} classes, but the current labels define ${currentClassCount}.`,
+        `Retrain with ${frameworkName} before using it for ${contextName}.`,
+        `Or adjust labels in the training menu back to the original label count of ${storedClassCount}.`
+    ];
+}
+
 function openRuntimeFrameworkModal(title, message) {
     if (!runtimeFrameworkModal || !runtimeFrameworkModalTitle || !runtimeFrameworkModalMessage) {
         return;
     }
 
     runtimeFrameworkModalTitle.textContent = title;
-    runtimeFrameworkModalMessage.textContent = message;
+    runtimeFrameworkModalMessage.innerHTML = '';
+
+    const messageParts = Array.isArray(message)
+        ? message
+        : String(message || '').split(/\n{2,}/);
+
+    messageParts.forEach((part) => {
+        if (!part) return;
+        const paragraph = document.createElement('p');
+        paragraph.textContent = part;
+        runtimeFrameworkModalMessage.appendChild(paragraph);
+    });
+
     runtimeFrameworkModal.style.display = 'flex';
 }
 
@@ -215,7 +235,7 @@ async function checkRuntimeFrameworkReadiness(context, framework, options = {}) 
         if (showModal) {
             openRuntimeFrameworkModal(
                 'Retraining Needed',
-                `This saved ${frameworkName} model has ${status.storedClassCount} classes, but the current labels define ${status.currentClassCount}. Retrain with ${frameworkName} before using it for ${contextName}.`
+                getClassMismatchMessage(status.storedClassCount, status.currentClassCount, frameworkName, contextName)
             );
         }
         return false;

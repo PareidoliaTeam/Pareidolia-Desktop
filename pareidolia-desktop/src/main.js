@@ -569,6 +569,19 @@ function getStoredClassCount(settings = {}, modelType) {
   return Number.isFinite(parsedValue) ? parsedValue : null;
 }
 
+function getFrameworkDisplayName(modelType) {
+  return modelType === 'pytorch' ? 'PyTorch' : 'TensorFlow';
+}
+
+function getClassMismatchError(modelType, storedClassCount, currentClassCount, context) {
+  const frameworkName = getFrameworkDisplayName(modelType);
+  return [
+    `This saved ${frameworkName} model has ${storedClassCount} classes, but the current labels define ${currentClassCount}.`,
+    `Retrain before ${context}.`,
+    `Or adjust labels in the training menu back to the original label count of ${storedClassCount}.`
+  ].join('\n\n');
+}
+
 /**
  * Builds the training details to pass to the Python training script.
  * Constructs labelsJson ({ LabelName: [path1, path2, ...] }) from model settings
@@ -1051,7 +1064,7 @@ ipcMain.handle('predict-image', async (event, params) => {
   if (storedClassCount !== null && storedClassCount !== currentClassCount) {
     return {
       success: false,
-      error: `This saved ${artifact.modelType === 'pytorch' ? 'PyTorch' : 'TensorFlow'} model has ${storedClassCount} classes, but the current labels define ${currentClassCount}. Retrain before predicting.`
+      error: getClassMismatchError(artifact.modelType, storedClassCount, currentClassCount, 'predicting')
     };
   }
 
@@ -1106,7 +1119,7 @@ ipcMain.handle('test-model', async (event, params) => {
   if (storedClassCount !== null && storedClassCount !== currentClassCount) {
     return {
       success: false,
-      error: `This saved ${artifact.modelType === 'pytorch' ? 'PyTorch' : 'TensorFlow'} model has ${storedClassCount} classes, but the current labels define ${currentClassCount}. Retrain before testing.`
+      error: getClassMismatchError(artifact.modelType, storedClassCount, currentClassCount, 'testing')
     };
   }
 

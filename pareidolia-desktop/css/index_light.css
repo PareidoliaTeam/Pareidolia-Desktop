@@ -1338,6 +1338,14 @@ body, html {
   margin: 0 0 1rem;
 }
 
+.runtime-framework-message p {
+  margin: 0 0 0.65rem;
+}
+
+.runtime-framework-message p:last-child {
+  margin-bottom: 0;
+}
+
 .dataset-cleanup-list,
 .training-validation-list {
   display: flex;
