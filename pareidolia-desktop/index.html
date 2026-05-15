@@ -46,7 +46,19 @@
             </div>
           </div>
         </div>
-        <div class="sidebar-qr-connect-text">Connect</div>
+        <div class="sidebar-qr-connect-text">
+          <span>Connect</span>
+          <div class="help-icon-wrapper">
+            <span class="help-icon">?</span>
+            <div class="help-tooltip">
+              <p><strong>How to connect:</strong> Download the Pareidolia mobile app and scan this QR code to pair your device.</p>
+              <p><strong>Troubleshooting:</strong></p>
+              <p>• Make sure your phone and this computer are on the <strong>same Wi-Fi network</strong>.</p>
+              <p>• Some networks block device discovery. Try switching to a personal hotspot or a network without client isolation enabled.</p>
+              <p>• If the QR code doesn't work, restart the app and try again.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
     <button class="create-btn">+ Create</button>
@@ -93,11 +105,22 @@
 
         <!-- Training Tab -->
         <div id ="tab-train" onclick="openTab(event, 'tab-train')" class="tab-content active">
-          <h3>Model Training</h3>
+          <div class="tab-train-content">
+          <!-- <h3>Model Training</h3> -->
 	          <section class="settings-panel">
             <!-- Labels section -->
             <section class="settings-col-labels">
-              <h3>Labels</h3>
+              <div class="labels-heading-row">
+                <h3>Labels</h3>
+                <div class="help-icon-wrapper">
+                  <span class="help-icon">?</span>
+                  <div class="help-tooltip">
+                    <p>Labels are the categories your model will learn to recognize.</p>
+                    <p>Each label should represent a distinct class — for example, <strong>"cat"</strong> or <strong>"dog"</strong>.</p>
+                    <p>Add at least two labels before training. Click a label to assign datasets to it.</p>
+                  </div>
+                </div>
+              </div>
               <div class="labels-list" id="labels-list">
                 <!-- Labels will be dynamically added here -->
               </div>
@@ -109,25 +132,57 @@
 
 	          <!-- Training Results -->
 	          <section class="metrics">
-	            <div class="training-status-area" style="margin: 20px;">
-	              <div class="progress-wrapper">
-	                <label id="progress-label">Overall Progress: 0%</label>
-	                <div class="progress-container">
-	                  <div id="epoch-progress-fill"></div>
-	                </div>
-	              </div>
+              <div class="training-status-area">
+                <!-- <div class="progress-wrapper training-card">
+                  <div class="progress-header">
+                    <span class="status-kicker">Training Progress</span>
+                  </div>
+                  <div class="progress-track-row">
+                    
+                  </div>
+	              </div> -->
 
-	              <div id="final-summary-card">
-	                <h3 style="margin-top: 0;">Training Summary</h3>
+                <div id="final-summary-card" class="training-card">
+                  <div class="labels-heading-row summary-heading-row">
+                    <h3>Training Summary</h3>
+                    <div class="help-icon-wrapper" data-tooltip-direction="down">
+                      <span class="help-icon">?</span>
+                      <div class="help-tooltip">
+                        <p><strong>Progress Bar:</strong> Fills up as each epoch completes. The bar may stay at 100% for a moment while the training process finalizes records and converts the model — this is normal.</p>
+                        <p><strong>Final Accuracy:</strong> How often the model predicted correctly on training data. Higher is better.</p>
+                        <p><strong>Final Loss:</strong> How wrong the model's predictions were during training. Lower is better.</p>
+                        <p><strong>Val Accuracy:</strong> Accuracy measured on unseen validation data — a more honest measure of real-world performance.</p>
+                        <p><strong>Val Loss:</strong> Loss on validation data. If this rises while training loss falls, the model may be overfitting.</p>
+                      </div>
+                    </div>
+	                </div>
+	                <div class="summary-progress-row">
+                    <label id="progress-label">0%</label>
+                    <div class="progress-container">
+                      <div id="epoch-progress-fill"></div>
+                    </div>
+	                </div>
 	                <div class="summary-grid">
-	                  <div><strong>Final Accuracy:</strong> <span id="sum-acc">-</span></div>
-	                  <div><strong>Final Loss:</strong> <span id="sum-loss">-</span></div>
-	                  <div><strong>Val Accuracy:</strong> <span id="sum-val-acc">-</span></div>
-	                  <div><strong>Val Loss:</strong> <span id="sum-val-loss">-</span></div>
+                    <div class="summary-item">
+                      <span class="summary-label">Final Accuracy</span>
+                      <span id="sum-acc" class="summary-value">-</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">Final Loss</span>
+                      <span id="sum-loss" class="summary-value">-</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">Val Accuracy</span>
+                      <span id="sum-val-acc" class="summary-value">-</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">Val Loss</span>
+                      <span id="sum-val-loss" class="summary-value">-</span>
+                    </div>
 	                </div>
 	              </div>
 	            </div>
-
+              <!-- Charts -->
 		            <div class="charts-container">
 		              <div class="chart-wrapper">
 		                <canvas id="accuracyChart"></canvas>
@@ -138,12 +193,23 @@
 		            </div>
 		          </section>
 	          </section>
+          </div><!-- /.tab-train-content -->
 
 		          <!-- Footer -->
-	          <footer class="project-footer">
+          <footer class="project-footer">
             <div class="footer-choice-groups">
+              <!-- Training Mode -->
               <div class="choice-stack">
-                <span class="choice-kicker">Training Mode</span>
+                <div class="labels-heading-row">
+                  <span class="choice-kicker">Training Mode</span>
+                  <div class="help-icon-wrapper">
+                    <span class="help-icon">?</span>
+                    <div class="help-tooltip">
+                      <p><strong>Use Pretrained Model</strong> — Recommended for most users. Starts from a model already trained on millions of images, so it learns your labels faster and with less data.</p>
+                      <p><strong>Start From Scratch</strong> — Builds the model from random weights. Best for experienced developers who want full control over architecture and training.</p>
+                    </div>
+                  </div>
+                </div>
                 <div class="segmented-control segmented-control-mode">
                   <input type="radio" id="train-type-scratch" name="train-project-type" value="scratch">
                   <label class="segment-option" for="train-type-scratch">Start From Scratch</label>
@@ -152,15 +218,22 @@
                 </div>
               </div>
 
+              <!-- Open Editor -->
               <section class="settings-col-sequential footer-setting">
-	                <!-- <h3>Sequential Model Settings</h3> -->
-	                <div class="setting-item">
-	                  <button class="train-btn" id="builder-modal-btn">Open Editor</button>
-	                </div>
+                <div class="labels-heading-row" aria-hidden="true">
+                  <span class="choice-kicker" style="visibility: hidden;">&nbsp;</span>
+                </div>
+                <button class="train-btn" id="builder-modal-btn">Open Editor</button>
               </section>
 
+              <!-- Divider -->
+              <!-- <div class="footer-vdivider" aria-hidden="true"></div> -->
+
+              <!-- Framework -->
               <div class="choice-stack">
-                <span class="choice-kicker">Framework</span>
+                <div class="labels-heading-row">
+                  <span class="choice-kicker">Framework</span>
+                </div>
                 <div class="segmented-control segmented-control-framework">
                   <input type="radio" id="train-framework-tf" name="train" value="true" data-framework-toggle checked>
                   <label class="segment-option" for="train-framework-tf">
@@ -174,25 +247,41 @@
                   </label>
                 </div>
               </div>
-	            </div>
-	            <span class="last-trained">Last Trained: Never</span>
-	            <div class="footer-btns">
-	              <section class="settings-col-training footer-setting">
-	                <h3>Training Settings</h3>
-	                <div class="setting-item">
-	                  <label>Epoch</label>
-	                  <input id="epoch-slider" type="range" min="1" max="100" value="1">
-	                  <span id="epoch-value">1</span>
-	                  <p class="setting-desc">How many passes through the dataset?</p>
-	                </div>
-	                <!-- <h3>Results</h3>
-	                <div id="model-train-results" class="model-train-results">
-	                  <span class="train-results-placeholder">No results yet. Train the model to see results here.</span>
-	                </div> -->
-	              </section>
-	              <button id="model-train-btn" class="train-btn">Train Model</button>
-	            </div>
-	          </footer>
+
+              <!-- Epochs -->
+              <div class="choice-stack">
+                <div class="labels-heading-row">
+                  <span class="choice-kicker">Epochs</span>
+                  <div class="help-icon-wrapper">
+                    <span class="help-icon">?</span>
+                    <div class="help-tooltip">
+                      <p>An <strong>epoch</strong> is one full pass through your training data.</p>
+                      <p>More epochs = more training, but too many can cause <strong>overfitting</strong> — where the model memorizes your training images instead of learning general patterns, making it perform poorly on new images.</p>
+                      <p>A good starting point is <strong>10–20 epochs</strong>. Watch the Val Loss: if it starts rising while training loss keeps falling, set it lower.</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <input id="epoch-slider" type="range" min="1" max="100" value="1">
+                  <span id="epoch-value">1</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Train button -->
+            <div class="train-btn-stack">
+              <div class="labels-heading-row footer-label-spacer" aria-hidden="true">
+                <span class="choice-kicker" style="visibility: hidden;">&nbsp;</span>
+              </div>
+              <button id="model-train-btn" class="train-btn train-btn-main step-output-area-wrapper">
+                <span class="train-btn-status-row">
+                  <span id="step-output-area-label" class="train-btn-label">Train Model</span>
+                  <span class="loader train-btn-loader" aria-hidden="true"></span>
+                </span>
+                <small class="last-trained">Last Trained: Never</small>
+              </button>
+            </div>
+          </footer>
         </div>
 
         <!-- Testing Tab -->
@@ -346,11 +435,11 @@
     </div>
     <div class="image-modal-right">
       <h2 class="modal-title">Image Options</h2>
-      <label for="label">Dataset Label:</label>
+      <!-- <label for="label">Dataset Label:</label>
       <select name="label" id="label">
         <option value="positive">Positive</option>
         <option value="negative">Negative</option>
-      </select>
+      </select> -->
       <div class="modal-actions">
         <button class="action-btn">Open in Folder</button>
         <button class="negative-btn">Delete</button>
@@ -406,6 +495,18 @@
     <div id="training-validation-list" class="training-validation-list"></div>
     <div class="modal-actions training-validation-actions">
       <button class="action-btn" id="training-validation-ok-btn">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Runtime Framework Notice Modal -->
+<div id="runtime-framework-modal" class="modal">
+  <div class="modal-content runtime-framework-modal-content">
+    <span class="modal-close" id="runtime-framework-modal-close">&times;</span>
+    <h2 class="modal-title" id="runtime-framework-modal-title">Framework Not Ready</h2>
+    <div class="runtime-framework-message" id="runtime-framework-modal-message"></div>
+    <div class="modal-actions runtime-framework-actions">
+      <button class="action-btn" id="runtime-framework-ok-btn">OK</button>
     </div>
   </div>
 </div>
