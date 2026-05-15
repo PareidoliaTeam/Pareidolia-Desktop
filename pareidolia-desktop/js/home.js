@@ -2624,10 +2624,16 @@ dropZone.addEventListener('drop', (e) => {
 });
 
 const predictFileInput = document.getElementById('predict-file-input');
+predictionPreview.style.display = 'none';
 
-// delete
+function isPredictionPreviewVisible() {
+    return predictionPreview.style.display !== 'none'
+        && Boolean(predictionPreview.getAttribute('src'));
+}
+
+// Open the file picker while the drop zone is empty.
 dropZone.addEventListener('click', () => {
-    if (predictionPreview.style.display === 'none') {
+    if (!isPredictionPreviewVisible()) {
         predictFileInput.click();
     }
 });
