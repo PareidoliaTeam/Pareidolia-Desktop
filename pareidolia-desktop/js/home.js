@@ -74,6 +74,18 @@ const predictionFrameworkInputs = document.querySelectorAll('input[name="predict
 const stepOutputAreaWrapper = document.getElementsByClassName('step-output-area-wrapper');
 const stepOutputAreaLabel = document.getElementById('step-output-area-label');
 
+function updateTrainButtonLabel(label) {
+    if (stepOutputAreaLabel) {
+        stepOutputAreaLabel.textContent = label;
+        stepOutputAreaLabel.title = label;
+        return;
+    }
+
+    if (modelTrainBtn) {
+        modelTrainBtn.textContent = label;
+    }
+}
+
 function getSelectedFramework() {
     const selectedRadio = document.querySelector('[data-framework-toggle]:checked');
     return selectedRadio && selectedRadio.value === 'false' ? 'pytorch' : 'tensorflow';
@@ -1890,7 +1902,7 @@ modelTrainBtn.addEventListener('click', async () => {
     const currentModelName = sessionStorage.getItem('projectName');
 
     modelTrainBtn.disabled = true;
-    modelTrainBtn.textContent = 'Checking datasets...';
+    updateTrainButtonLabel('Checking datasets...');
 
     try {
         const validationResult = await validateTrainingReadiness(currentModelName);
@@ -1907,7 +1919,7 @@ modelTrainBtn.addEventListener('click', async () => {
         return;
     } finally {
         modelTrainBtn.disabled = false;
-        modelTrainBtn.textContent = 'Train Model';
+        updateTrainButtonLabel('Train Model');
     }
 
     activeTrainingModelName = currentModelName;
@@ -1927,7 +1939,7 @@ modelTrainBtn.addEventListener('click', async () => {
 
     try {
         modelTrainBtn.disabled = true;
-        modelTrainBtn.textContent = 'Training in progress...';
+        updateTrainButtonLabel('Training in progress...');
         // modelTrainResults.textContent = 'Training in progress...';
         // modelTrainResults.style.color = '#FFA500';
 
@@ -1991,15 +2003,17 @@ modelTrainBtn.addEventListener('click', async () => {
             // modelTrainResults.style.color = '#dc3545';
             console.error('%c[UI] Training failed!', 'color: #dc3545; font-weight: bold;');
             console.error('[UI] Error:', result.error);
+            updateTrainButtonLabel('Training failed');
         }
     } catch (error) {
         console.error('%c[UI] IPC error:', 'color: #dc3545; font-weight: bold;', error);
         // modelTrainResults.textContent = `IPC Error: ${error.message}`;
         // modelTrainResults.style.color = '#dc3545';
+        updateTrainButtonLabel('Training failed');
     } finally {
         activeTrainingModelName = null;
         modelTrainBtn.disabled = false;
-        modelTrainBtn.textContent = 'Train Model';
+        updateTrainButtonLabel('Train Model');
     }
 });
 
@@ -2115,28 +2129,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const step = matchStep[0];
 
                     if (step.startsWith('Loading images from JSON dataset')) {
-                        stepOutputAreaLabel.textContent = 'Loading Dataset...';
+                        updateTrainButtonLabel('Loading Dataset...');
 
                     } else if (step.startsWith('Building PyTorch') || step.startsWith('Building TensorFlow')) {
-                        stepOutputAreaLabel.textContent = 'Building Model...';
+                        updateTrainButtonLabel('Building Model...');
 
                     } else if (step.startsWith('Starting PyTorch training') || step.startsWith('Starting TensorFlow training')) {
-                        stepOutputAreaLabel.textContent = 'Training...';
+                        updateTrainButtonLabel('Training...');
 
                     } else if (step.startsWith('Converting model to ONNX format')) {
-                        stepOutputAreaLabel.textContent = 'Converting to ONNX...';
+                        updateTrainButtonLabel('Converting to ONNX...');
 
                     } else if (step.startsWith('Converting ONNX model to TF format')) {
-                        stepOutputAreaLabel.textContent = 'Converting to TensorFlow...';
+                        updateTrainButtonLabel('Converting to TensorFlow...');
 
                     } else if (step.startsWith('Wrapping TensorFlow model with resize and center crop preprocessing')) {
-                        stepOutputAreaLabel.textContent = 'Wrapping TensorFlow model...';
+                        updateTrainButtonLabel('Wrapping TensorFlow model...');
 
                     } else if (step.startsWith('Finalizing TFLite model output') || step.startsWith('Converting model to TFLite format')) {
-                        stepOutputAreaLabel.textContent = 'Finalizing TFLite model...';
+                        updateTrainButtonLabel('Finalizing TFLite model...');
 
                     } else if (step.startsWith('TFLite model conversion completed successfully') || step.startsWith('Model conversion completed successfully')) {
-                        stepOutputAreaLabel.textContent = 'TFLite Conversion Completed!';
+                        updateTrainButtonLabel('TFLite Conversion Completed!');
 
                     }
                 }
