@@ -364,6 +364,20 @@ function renderSummaryCard(chartState) {
     if (valLossDisplay) valLossDisplay.textContent = finalValLoss === null ? '-' : parseFloat(finalValLoss).toFixed(4);
 }
 
+function resetTrainingRunDisplay(chartState = createEmptyChartState()) {
+    const normalized = normalizeChartState(chartState);
+    const progressFill = document.getElementById('epoch-progress-fill');
+    const progressLabel = document.getElementById('progress-label');
+    const summaryCard = document.getElementById('final-summary-card');
+
+    if (progressFill) progressFill.style.width = '0%';
+    if (progressLabel) progressLabel.textContent = '0%';
+    if (summaryCard) summaryCard.style.display = 'block';
+
+    renderChartState(normalized);
+    renderSummaryCard(normalized);
+}
+
 function syncChartStateToCurrentModel() {
     if (!activeChartModelName) return;
 
@@ -1994,9 +2008,11 @@ deleteModelModal.addEventListener('click', (e) => {
 modelTrainBtn.addEventListener('click', async () => {
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
+    const activeRunState = createEmptyChartState();
 
     modelTrainBtn.disabled = true;
     updateTrainButtonLabel('Checking datasets...');
+    resetTrainingRunDisplay(activeRunState);
 
     try {
         const validationResult = await validateTrainingReadiness(currentModelName);
@@ -2019,12 +2035,11 @@ modelTrainBtn.addEventListener('click', async () => {
     activeTrainingModelName = currentModelName;
     activeChartModelName = currentModelName;
 
-    const activeRunState = createEmptyChartState();
     setChartStateForModel(currentModelName, activeRunState);
     if (modelSettings) {
         modelSettings.chartHistory = cloneChartState(activeRunState);
     }
-    renderChartState(activeRunState);
+    resetTrainingRunDisplay(activeRunState);
 
     const toggle = getSelectedFramework();
     console.log(`[UI] : ${toggle}`);
