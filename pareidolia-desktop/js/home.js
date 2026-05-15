@@ -890,7 +890,45 @@ function openAddProjectModal() {
  * Closes the add project modal dialog.
  */
 function closeAddProjectModal() {
+    projectNameInput.setCustomValidity('');
     addProjectModal.style.display= 'none';
+}
+
+/**
+ * Turns the name into all lowercase for checking
+ * @param name
+ * @returns {string}
+ */
+function normalizeNameKey(name) {
+    return String(name || '').trim().toLocaleLowerCase();
+}
+
+/**
+ * Shows the corrosponding error message to the input field
+ * @param inputEl
+ * @param message
+ */
+function showNameValidationError(inputEl, message) {
+    if (!inputEl) {
+        return;
+    }
+
+    inputEl.setCustomValidity(message);
+    inputEl.reportValidity();
+    inputEl.focus();
+}
+
+/**
+ * Checks to see if the name is existing in the corresponding list
+ * @param channel
+ * @param name
+ * @returns {Promise<boolean>}
+ */
+async function nameExistsInCollection(list, name) {
+    const items = await window.electronAPI.invoke(list);
+    const targetName = normalizeNameKey(name);
+
+    return Object.keys(items || {}).some((existingName) => normalizeNameKey(existingName) === targetName);
 }
 
 // /**
@@ -1468,11 +1506,15 @@ function initializeSidebarModeToggle() {
 async function handleAddProject() {
     const modelName = projectNameInput.value.trim();
     const projectType = Array.from(projectTypeInputs).find(input => input.checked)?.value || 'scratch';
-    
-    if (!modelName) {
+    projectNameInput.setCustomValidity('');
 
-        // need to make a new modal for this pop up
-        //alert('Model name cannot be empty');
+    if (!modelName) {
+        showNameValidationError(projectNameInput, 'Model name cannot be empty.');
+        return;
+    }
+
+    if (await nameExistsInCollection('get-models-list', modelName)) {
+        showNameValidationError(projectNameInput, 'A model with this name already exists.');
         return;
     }
 
@@ -1489,6 +1531,10 @@ async function handleAddProject() {
 
         // Reload the projects list
     } catch (error) {
+        if (error?.message?.includes('already exists')) {
+            showNameValidationError(projectNameInput, 'A model with this name already exists.');
+            return;
+        }
         console.error('Error creating project:', error);
     }
     // Reload the projects list
@@ -1978,6 +2024,7 @@ function setupChartResizeSync() {
 }
 
 function closeAddDatasetModal(){
+    datasetNameInput.setCustomValidity('');
     datasetImportModal.style.display= 'none';
 }
 
@@ -2101,6 +2148,10 @@ projectNameInput.addEventListener('keypress', async (e) => {
     if (e.key === 'Enter') {
         await handleAddProject();
     }
+});
+
+projectNameInput.addEventListener('input', () => {
+    projectNameInput.setCustomValidity('');
 });
 
 // closes option modal
@@ -2864,11 +2915,21 @@ const importVideoBtn = document.getElementById('import-video-btn');
 const importFolderBtn = document.getElementById('import-folder-btn');
 const datasetNameInput = document.getElementById('dataset-name-input');
 
+datasetNameInput.addEventListener('input', () => {
+    datasetNameInput.setCustomValidity('');
+});
 
 importVideoBtn.addEventListener('click', async () => {
     const datasetName = datasetNameInput?.value.trim();
+    datasetNameInput.setCustomValidity('');
 
     if (!datasetName) {
+        showNameValidationError(datasetNameInput, 'Dataset name cannot be empty.');
+        return;
+    }
+
+    if (await nameExistsInCollection('get-datasets-list', datasetName)) {
+        showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
         return;
     }
 
@@ -2882,6 +2943,10 @@ importVideoBtn.addEventListener('click', async () => {
             await loadDatasetsFromFolder();
         }
     } catch (error) {
+        if (error?.message?.includes('already exists')) {
+            showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
+            return;
+        }
         console.error('Error importing video dataset:', error);
     }
 });
@@ -2889,7 +2954,13 @@ importVideoBtn.addEventListener('click', async () => {
 
 importFolderBtn.addEventListener('click', async () => {
     const datasetName = datasetNameInput?.value.trim();
+    datasetNameInput.setCustomValidity('');
     if (!datasetName) {
+        showNameValidationError(datasetNameInput, 'Dataset name cannot be empty.');
+        return;
+    }
+    if (await nameExistsInCollection('get-datasets-list', datasetName)) {
+        showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
         return;
     }
     try {
@@ -2909,6 +2980,10 @@ importFolderBtn.addEventListener('click', async () => {
             await loadDatasetsFromFolder();
         }
     } catch (error) {
+        if (error?.message?.includes('already exists')) {
+            showNameValidationError(datasetNameInput, 'A dataset with this name already exists.');
+            return;
+        }
         console.error('Error importing folder dataset:', error);
     }
 });
