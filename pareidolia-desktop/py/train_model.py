@@ -472,12 +472,14 @@ if __name__ == "__main__":
         print("Error: No images found or failed to load images")
         sys.exit(1)
 
+    print("Loading images from JSON dataset")
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, random_state=42)
     
     print(f"Loaded {len(X_train)} images across {NUM_CLASSES} classes: {label_names}")
     
     # Create the model with the dynamic class count
+    print("Building TensorFlow Model...")
     if model_type == MODEL_TYPE_PRETRAINED:
         model = create_imported_model(NUM_CLASSES)
     else:
@@ -485,7 +487,7 @@ if __name__ == "__main__":
     print("Model created successfully")
     
     # Train the model
-    print(f"Starting training for {epochs} epochs...")
+    print(f"Starting TensorFlow training for {epochs} epochs...")
     # history = model.fit(
     #     X_train, y_train,
     #     epochs=epochs,
@@ -508,7 +510,7 @@ if __name__ == "__main__":
     final_val_accuracy = history.history['val_accuracy'][-1]
     
     # Convert model to TFLite and save both formats
-    print("Converting model to TFLite format...")
+    print("Converting model to TFLite format...", flush=True)
     conversion_result = convert_model_to_tflite(model, X_train, model_folder)
     
     if not conversion_result['success']:

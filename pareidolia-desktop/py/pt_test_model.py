@@ -1,9 +1,24 @@
 import sys
 import json
+import torch
 import pytorch_lightning as pl
 from image_data_module import ImageDataModule
 from pt_model import RepVGGClassifier, ScratchCNNClassifier
 from pt_train_model import compute_mean_std_welford_from_loader, MODEL_TYPE_PRETRAINED, MODEL_TYPE_SCRATCH
+
+
+def infer_project_type_from_checkpoint(checkpoint_path, fallback=MODEL_TYPE_PRETRAINED):
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = checkpoint.get("state_dict", checkpoint)
+    keys = state_dict.keys()
+
+    if any(key.startswith("backbone.") or key.startswith("head.") for key in keys):
+        return MODEL_TYPE_PRETRAINED
+
+    if any(key.startswith("model.") for key in keys):
+        return MODEL_TYPE_SCRATCH
+
+    return MODEL_TYPE_PRETRAINED if fallback == MODEL_TYPE_PRETRAINED else MODEL_TYPE_SCRATCH
 
 
 def get_model_class_count(model):
@@ -34,9 +49,10 @@ def evaluate(checkpoint_path, labels_json_string, project_type=MODEL_TYPE_PRETRA
             seed=42
         )
 
-        model_class = RepVGGClassifier if project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
+        checkpoint_project_type = infer_project_type_from_checkpoint(checkpoint_path, project_type)
+        model_class = RepVGGClassifier if checkpoint_project_type == MODEL_TYPE_PRETRAINED else ScratchCNNClassifier
 
-        if project_type == MODEL_TYPE_SCRATCH:
+        if checkpoint_project_type == MODEL_TYPE_SCRATCH:
             stats_loader = data_module.normalization_stats_dataloader()
             normalization_mean, normalization_std = compute_mean_std_welford_from_loader(stats_loader)
             data_module.set_normalization(normalization_mean, normalization_std)

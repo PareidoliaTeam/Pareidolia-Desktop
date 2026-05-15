@@ -76,6 +76,28 @@ const trainFrameworkInputs = document.querySelectorAll('[data-framework-toggle]'
 const testFrameworkInputs = document.querySelectorAll('input[name="test-framework"]');
 const predictionFrameworkInputs = document.querySelectorAll('input[name="prediction-framework"]');
 
+// Training Response Display
+const stepOutputAreaWrapper = document.getElementsByClassName('step-output-area-wrapper');
+const stepOutputAreaLabel = document.getElementById('step-output-area-label');
+
+function updateTrainButtonLabel(label, options = {}) {
+    const shouldShowLoader = options.loading ?? label.endsWith('...');
+    const displayLabel = shouldShowLoader ? label.replace(/\.\.\.$/, '') : label;
+
+    if (stepOutputAreaLabel) {
+        stepOutputAreaLabel.textContent = displayLabel;
+        stepOutputAreaLabel.title = label;
+    }
+
+    if (modelTrainBtn) {
+        modelTrainBtn.classList.toggle('is-loading', shouldShowLoader);
+
+        if (!stepOutputAreaLabel) {
+            modelTrainBtn.textContent = displayLabel;
+        }
+    }
+}
+
 // Dataset Modal
 const datasetImportModal = document.getElementById('import-dataset-modal');
 
@@ -110,6 +132,9 @@ function syncRuntimeFrameworkToggles(framework) {
 
     setFrameworkInputs(testFrameworkInputs, defaultFramework);
     setFrameworkInputs(predictionFrameworkInputs, defaultFramework);
+    lastValidRuntimeFramework.test = defaultFramework;
+    lastValidRuntimeFramework.prediction = defaultFramework;
+    renderCachedTestResult(defaultFramework);
 }
 
 function getSelectedRuntimeFramework(context) {
@@ -123,6 +148,191 @@ function getSelectedRuntimeFramework(context) {
 
 function getFrameworkDisplayName(framework) {
     return framework === 'pytorch' ? 'PyTorch' : 'TensorFlow';
+}
+
+function getContextDisplayName(context) {
+    return context === 'prediction' ? 'prediction' : 'testing';
+}
+
+function isClassMismatchMessage(message) {
+    return /class count mismatch|current labels define|outputs \d+ classes/i.test(message || '');
+}
+
+function getClassMismatchMessage(storedClassCount, currentClassCount, frameworkName, contextName) {
+    return [
+        `This saved ${frameworkName} model has ${storedClassCount} classes, but the current labels define ${currentClassCount}.`,
+        `Retrain with ${frameworkName} before using it for ${contextName}.`,
+        `Or adjust labels in the training menu back to the original label count of ${storedClassCount}.`
+    ];
+}
+
+function openRuntimeFrameworkModal(title, message) {
+    if (!runtimeFrameworkModal || !runtimeFrameworkModalTitle || !runtimeFrameworkModalMessage) {
+        return;
+    }
+
+    runtimeFrameworkModalTitle.textContent = title;
+    runtimeFrameworkModalMessage.innerHTML = '';
+
+    const messageParts = Array.isArray(message)
+        ? message
+        : String(message || '').split(/\n{2,}/);
+
+    messageParts.forEach((part) => {
+        if (!part) return;
+        const paragraph = document.createElement('p');
+        paragraph.textContent = part;
+        runtimeFrameworkModalMessage.appendChild(paragraph);
+    });
+
+    runtimeFrameworkModal.style.display = 'flex';
+}
+
+function closeRuntimeFrameworkModal() {
+    if (!runtimeFrameworkModal) return;
+    runtimeFrameworkModal.style.display = 'none';
+}
+
+function getRuntimeInputs(context) {
+    return context === 'prediction' ? predictionFrameworkInputs : testFrameworkInputs;
+}
+
+async function checkRuntimeFrameworkReadiness(context, framework, options = {}) {
+    const { showModal = true } = options;
+    const modelName = sessionStorage.getItem('projectName');
+    const frameworkName = getFrameworkDisplayName(framework);
+    const contextName = getContextDisplayName(context);
+
+    if (!modelName) {
+        if (showModal) {
+            openRuntimeFrameworkModal('Open a Model First', `Open a model before selecting a framework for ${contextName}.`);
+        }
+        return false;
+    }
+
+    let status;
+    try {
+        status = await window.electronAPI.invoke('get-model-runtime-status', {
+            modelName,
+            modelType: framework
+        });
+    } catch (error) {
+        console.error('Error checking model runtime status:', error);
+        if (showModal) {
+            openRuntimeFrameworkModal('Could Not Check Model', `Could not check the saved ${frameworkName} model. Check the console for details.`);
+        }
+        return false;
+    }
+
+    if (!status?.success) {
+        if (showModal) {
+            openRuntimeFrameworkModal('Could Not Check Model', status?.error || `Could not check the saved ${frameworkName} model.`);
+        }
+        return false;
+    }
+
+    if (!status.exists) {
+        if (showModal) {
+            openRuntimeFrameworkModal(
+                `${frameworkName} Model Not Found`,
+                `Train this model with ${frameworkName} before using ${frameworkName} for ${contextName}.`
+            );
+        }
+        return false;
+    }
+
+    if (status.classMismatch) {
+        if (showModal) {
+            openRuntimeFrameworkModal(
+                'Retraining Needed',
+                getClassMismatchMessage(status.storedClassCount, status.currentClassCount, frameworkName, contextName)
+            );
+        }
+        return false;
+    }
+
+    return true;
+}
+
+async function handleRuntimeFrameworkSelection(context, input) {
+    if (!input.checked) return;
+
+    const framework = inputValueToFramework(input.value);
+    const isReady = await checkRuntimeFrameworkReadiness(context, framework);
+
+    if (isReady) {
+        lastValidRuntimeFramework[context] = framework;
+        if (context === 'test') {
+            renderCachedTestResult(framework);
+        }
+        return;
+    }
+
+    setFrameworkInputs(getRuntimeInputs(context), lastValidRuntimeFramework[context]);
+}
+
+function getTestResultElements() {
+    return {
+        message: document.getElementById('test-results-message'),
+        accuracy: document.getElementById('test-accuracy-val'),
+        loss: document.getElementById('test-loss-val'),
+        count: document.getElementById('test-count-val')
+    };
+}
+
+function createEmptyTestResult(framework) {
+    return {
+        framework,
+        status: 'empty',
+        message: `No saved ${getFrameworkDisplayName(framework)} test result yet.`,
+        accuracy: null,
+        loss: null,
+        totalImages: null,
+        modelClasses: null,
+        datasetClasses: null,
+        testedAt: null
+    };
+}
+
+function getCachedTestResult(framework) {
+    return modelSettings?.testResultsByFramework?.[framework] || createEmptyTestResult(framework);
+}
+
+function renderTestResultState(resultState) {
+    const elements = getTestResultElements();
+    const state = resultState || createEmptyTestResult(getSelectedRuntimeFramework('test'));
+
+    if (elements.message) elements.message.textContent = state.message || '';
+    if (elements.accuracy) {
+        elements.accuracy.textContent = typeof state.accuracy === 'number'
+            ? `${(state.accuracy * 100).toFixed(2)}%`
+            : state.status === 'error' ? 'Error' : '—';
+    }
+    if (elements.loss) {
+        elements.loss.textContent = typeof state.loss === 'number'
+            ? state.loss.toFixed(4)
+            : '—';
+    }
+    if (elements.count) {
+        elements.count.textContent = Number.isFinite(Number(state.totalImages))
+            ? String(state.totalImages)
+            : '—';
+    }
+}
+
+function renderCachedTestResult(framework = getSelectedRuntimeFramework('test')) {
+    renderTestResultState(getCachedTestResult(framework));
+}
+
+async function saveTestResultForFramework(modelName, framework, resultState) {
+    if (!modelSettings || !modelName) return;
+
+    modelSettings.testResultsByFramework = {
+        ...(modelSettings.testResultsByFramework || {}),
+        [framework]: resultState
+    };
+
+    await persistModelSettings(modelName, modelSettings);
 }
 
 function updateLastTrainedFrameworkDisplays(settings = modelSettings) {
@@ -165,6 +375,11 @@ const trainingValidationModal = document.getElementById('training-validation-mod
 const trainingValidationModalClose = document.getElementById('training-validation-modal-close');
 const trainingValidationList = document.getElementById('training-validation-list');
 const trainingValidationOkBtn = document.getElementById('training-validation-ok-btn');
+const runtimeFrameworkModal = document.getElementById('runtime-framework-modal');
+const runtimeFrameworkModalClose = document.getElementById('runtime-framework-modal-close');
+const runtimeFrameworkModalTitle = document.getElementById('runtime-framework-modal-title');
+const runtimeFrameworkModalMessage = document.getElementById('runtime-framework-modal-message');
+const runtimeFrameworkOkBtn = document.getElementById('runtime-framework-ok-btn');
 const deleteDatasetModal = document.getElementById('delete-dataset-modal');
 const deleteDatasetModalClose = document.getElementById('delete-dataset-modal-close');
 const deleteDatasetName = document.getElementById('delete-dataset-name');
@@ -176,6 +391,10 @@ let modelSettings = null;
 let currentLabelName = null;
 let activeBlock = null;
 let sidebarToggleAnimationFrame = null;
+const lastValidRuntimeFramework = {
+    test: 'tensorflow',
+    prediction: 'tensorflow'
+};
 
 // builder ids
 const builderModal = document.getElementById('builder-modal');
@@ -349,6 +568,20 @@ function renderSummaryCard(chartState) {
     if (valAccDisplay) valAccDisplay.textContent = finalValAcc === null ? '-' : `${(finalValAcc * 100).toFixed(2)}%`;
     if (lossDisplay) lossDisplay.textContent = finalLoss === null ? '-' : parseFloat(finalLoss).toFixed(4);
     if (valLossDisplay) valLossDisplay.textContent = finalValLoss === null ? '-' : parseFloat(finalValLoss).toFixed(4);
+}
+
+function resetTrainingRunDisplay(chartState = createEmptyChartState()) {
+    const normalized = normalizeChartState(chartState);
+    const progressFill = document.getElementById('epoch-progress-fill');
+    const progressLabel = document.getElementById('progress-label');
+    const summaryCard = document.getElementById('final-summary-card');
+
+    if (progressFill) progressFill.style.width = '0%';
+    if (progressLabel) progressLabel.textContent = '0%';
+    if (summaryCard) summaryCard.style.display = 'block';
+
+    renderChartState(normalized);
+    renderSummaryCard(normalized);
 }
 
 function syncChartStateToCurrentModel() {
@@ -832,6 +1065,7 @@ async function loadModelSettingsForView(modelName) {
         modelSettings = await window.electronAPI.invoke('get-model-settings', modelName);
         // epochs and labels
         if (!modelSettings.labels) modelSettings.labels = {};
+        if (!modelSettings.testResultsByFramework) modelSettings.testResultsByFramework = {};
         epochSlider.value = modelSettings.epochs ?? 10;
         epochValueDisplay.textContent = epochSlider.value;
         if (!modelSettings.modelType) modelSettings.modelType = 'tensorflow';
@@ -854,6 +1088,7 @@ async function loadModelSettingsForView(modelName) {
         }
         updateLastTrainedFrameworkDisplays();
         syncRuntimeFrameworkToggles();
+        renderCachedTestResult(getSelectedRuntimeFramework('test'));
 
         if (!modelSettings.projectType) modelSettings.projectType = 'scratch';
 
@@ -1977,6 +2212,18 @@ trainFrameworkInputs.forEach((input) => {
   });
 });
 
+testFrameworkInputs.forEach((input) => {
+  input.addEventListener('change', () => {
+    handleRuntimeFrameworkSelection('test', input);
+  });
+});
+
+predictionFrameworkInputs.forEach((input) => {
+  input.addEventListener('change', () => {
+    handleRuntimeFrameworkSelection('prediction', input);
+  });
+});
+
 
 // carousel animation
 carousel.addEventListener('animationiteration', () => {
@@ -2035,6 +2282,21 @@ if (trainingValidationModal) {
     });
 }
 
+// Runtime framework modal close buttons
+if (runtimeFrameworkModalClose) {
+    runtimeFrameworkModalClose.addEventListener('click', closeRuntimeFrameworkModal);
+}
+if (runtimeFrameworkOkBtn) {
+    runtimeFrameworkOkBtn.addEventListener('click', closeRuntimeFrameworkModal);
+}
+
+// Runtime framework modal backdrop click
+if (runtimeFrameworkModal) {
+    runtimeFrameworkModal.addEventListener('click', (e) => {
+        if (e.target === runtimeFrameworkModal) closeRuntimeFrameworkModal();
+    });
+}
+
 // Delete dataset modal open button
 deleteDatasetBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2082,9 +2344,11 @@ deleteModelModal.addEventListener('click', (e) => {
 modelTrainBtn.addEventListener('click', async () => {
     const epochs = epochSlider.value;
     const currentModelName = sessionStorage.getItem('projectName');
+    const activeRunState = createEmptyChartState();
 
     modelTrainBtn.disabled = true;
-    modelTrainBtn.textContent = 'Checking datasets...';
+    updateTrainButtonLabel('Checking datasets...');
+    resetTrainingRunDisplay(activeRunState);
 
     try {
         const validationResult = await validateTrainingReadiness(currentModelName);
@@ -2101,18 +2365,17 @@ modelTrainBtn.addEventListener('click', async () => {
         return;
     } finally {
         modelTrainBtn.disabled = false;
-        modelTrainBtn.textContent = 'Train Model';
+        updateTrainButtonLabel('Train Model');
     }
 
     activeTrainingModelName = currentModelName;
     activeChartModelName = currentModelName;
 
-    const activeRunState = createEmptyChartState();
     setChartStateForModel(currentModelName, activeRunState);
     if (modelSettings) {
         modelSettings.chartHistory = cloneChartState(activeRunState);
     }
-    renderChartState(activeRunState);
+    resetTrainingRunDisplay(activeRunState);
 
     const toggle = getSelectedFramework();
     console.log(`[UI] : ${toggle}`);
@@ -2121,7 +2384,7 @@ modelTrainBtn.addEventListener('click', async () => {
 
     try {
         modelTrainBtn.disabled = true;
-        modelTrainBtn.textContent = 'Training in progress...';
+        updateTrainButtonLabel('Loading Processes...');
         // modelTrainResults.textContent = 'Training in progress...';
         // modelTrainResults.style.color = '#FFA500';
 
@@ -2153,7 +2416,7 @@ modelTrainBtn.addEventListener('click', async () => {
             // modelTrainResults.style.color = '#28a745';
             console.log('%c[UI] Training successful!', 'color: #28a745; font-weight: bold;');
             document.getElementById('epoch-progress-fill').style.width = `100%`;
-            document.getElementById('progress-label').textContent = `Overall Progress: 100%`;
+            document.getElementById('progress-label').textContent = `100%`;
 
             const summaryCard = document.getElementById('final-summary-card');
             summaryCard.style.display = 'block';
@@ -2174,6 +2437,11 @@ modelTrainBtn.addEventListener('click', async () => {
                 modelSettings.chartHistory = cloneChartState(completedChartState);
                 modelSettings.lastTrained = timestamp;
                 modelSettings.lastTrainedFramework = toggle;
+                modelSettings.lastTrainedProjectType = projectType;
+                modelSettings.trainedClassCounts = {
+                    ...(modelSettings.trainedClassCounts || {}),
+                    [toggle]: Object.keys(modelSettings.labels || {}).length
+                };
                 updateLastTrainedFrameworkDisplays();
                 syncRuntimeFrameworkToggles(toggle);
                 await persistModelSettings(currentModelName, modelSettings);
@@ -2185,15 +2453,17 @@ modelTrainBtn.addEventListener('click', async () => {
             // modelTrainResults.style.color = '#dc3545';
             console.error('%c[UI] Training failed!', 'color: #dc3545; font-weight: bold;');
             console.error('[UI] Error:', result.error);
+            updateTrainButtonLabel('Training failed');
         }
     } catch (error) {
         console.error('%c[UI] IPC error:', 'color: #dc3545; font-weight: bold;', error);
         // modelTrainResults.textContent = `IPC Error: ${error.message}`;
         // modelTrainResults.style.color = '#dc3545';
+        updateTrainButtonLabel('Training failed');
     } finally {
         activeTrainingModelName = null;
         modelTrainBtn.disabled = false;
-        modelTrainBtn.textContent = 'Train Model';
+        updateTrainButtonLabel('Train Model');
     }
 });
 
@@ -2204,31 +2474,63 @@ runTestButton.addEventListener('click',async ()=> {
     const testAccuracyVal = document.getElementById('test-accuracy-val');
     const testLossVal = document.getElementById('test-loss-val');
     const testCountVal = document.getElementById('test-count-val');
+    const selectedFramework = getSelectedRuntimeFramework('test');
 
-    if (testMessage) {
-        testMessage.textContent = 'Running evaluation...';
-    }
+    const isReady = await checkRuntimeFrameworkReadiness('test', selectedFramework);
+    if (!isReady) return;
+
+    renderTestResultState({
+        ...getCachedTestResult(selectedFramework),
+        status: 'running',
+        message: `Running ${getFrameworkDisplayName(selectedFramework)} evaluation...`
+    });
 
     const result = await window.electronAPI.invoke('test-model', {
         modelName: modelName,
-        modelType: getSelectedRuntimeFramework('test')
+        modelType: selectedFramework
     });
     if (result.success) {
         console.log(result);
-        if (testAccuracyVal) testAccuracyVal.textContent = (result.accuracy * 100).toFixed(2) + "%";
-        if (testLossVal) testLossVal.textContent = result.loss.toFixed(4);
-        if (testCountVal) testCountVal.textContent = result.total_images;
-        if (testMessage) {
-            testMessage.textContent = result.model_classes && result.dataset_classes
+        const resultState = {
+            framework: selectedFramework,
+            status: 'success',
+            message: result.model_classes && result.dataset_classes
                 ? `Evaluated ${result.dataset_classes} labels against a ${result.model_classes}-class model.`
-                : '';
-        }
+                : `${getFrameworkDisplayName(selectedFramework)} evaluation completed.`,
+            accuracy: Number(result.accuracy),
+            loss: Number(result.loss),
+            totalImages: Number(result.total_images),
+            modelClasses: result.model_classes === null ? null : Number(result.model_classes),
+            datasetClasses: result.dataset_classes === null ? null : Number(result.dataset_classes),
+            testedAt: new Date().toISOString()
+        };
+
+        renderTestResultState(resultState);
+        await saveTestResultForFramework(modelName, selectedFramework, resultState);
     } else {
         const errorMessage = result.error || 'Evaluation failed.';
+        const resultState = {
+            framework: selectedFramework,
+            status: 'error',
+            message: errorMessage,
+            accuracy: null,
+            loss: null,
+            totalImages: null,
+            modelClasses: null,
+            datasetClasses: null,
+            testedAt: new Date().toISOString()
+        };
+
+        renderTestResultState(resultState);
+        await saveTestResultForFramework(modelName, selectedFramework, resultState);
+
         if (testAccuracyVal) testAccuracyVal.textContent = 'Error';
         if (testLossVal) testLossVal.textContent = '—';
         if (testCountVal) testCountVal.textContent = '—';
         if (testMessage) testMessage.textContent = errorMessage;
+        if (isClassMismatchMessage(errorMessage)) {
+            openRuntimeFrameworkModal('Retraining Needed', errorMessage);
+        }
         console.error(errorMessage);
     }
 })
@@ -2267,6 +2569,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupChartResizeSync();
     requestChartResize();
     const epochRegex = /epoch\s*=\s*(\d+)\s*train_loss\s*=\s*([\d.]+)\s*train_acc\s*=\s*([\d.]+)\s*val_loss\s*=\s*([\d.]+)\s*val_acc\s*=\s*([\d.]+)/i;
+    const trainingStepsRegex = /^(?:Loading images from JSON dataset.*|Building PyTorch.*|Building TensorFlow.*|Starting TensorFlow training.*|Starting PyTorch training|Converting model to ONNX format.*|Converting ONNX model to TF format.*|Wrapping TensorFlow model with resize and center crop preprocessing.*|Finalizing TFLite model output.*|TFLite model conversion completed successfully|Converting model to TFLite format.*|Model conversion completed successfully)$/i;
     let stdoutBuffer = '';
     let stderrBuffer = '';
 
@@ -2313,7 +2616,40 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const percent = Math.round((currentEpoch / totalEpochs) * 100);
 
                 document.getElementById('epoch-progress-fill').style.width = `${percent}%`;
-                document.getElementById('progress-label').textContent = `Overall Progress: ${percent}% (Epoch ${currentEpoch}/${totalEpochs})`;
+                document.getElementById('progress-label').textContent = `${percent}%`;
+            }
+
+            const matchStep = trimmedLine.match(trainingStepsRegex);
+            if(matchStep){
+                if (matchStep) {
+                    const step = matchStep[0];
+
+                    if (step.startsWith('Loading images from JSON dataset')) {
+                        updateTrainButtonLabel('Loading Dataset...');
+
+                    } else if (step.startsWith('Building PyTorch') || step.startsWith('Building TensorFlow')) {
+                        updateTrainButtonLabel('Building Model...');
+
+                    } else if (step.startsWith('Starting PyTorch training') || step.startsWith('Starting TensorFlow training')) {
+                        updateTrainButtonLabel('Training...');
+
+                    } else if (step.startsWith('Converting model to ONNX format')) {
+                        updateTrainButtonLabel('Converting to ONNX...');
+
+                    } else if (step.startsWith('Converting ONNX model to TF format')) {
+                        updateTrainButtonLabel('Converting to TensorFlow...');
+
+                    } else if (step.startsWith('Wrapping TensorFlow model with resize and center crop preprocessing')) {
+                        updateTrainButtonLabel('Wrapping TensorFlow model...');
+
+                    } else if (step.startsWith('Finalizing TFLite model output') || step.startsWith('Converting model to TFLite format')) {
+                        updateTrainButtonLabel('Finalizing TFLite model...');
+
+                    } else if (step.startsWith('TFLite model conversion completed successfully') || step.startsWith('Model conversion completed successfully')) {
+                        updateTrainButtonLabel('TFLite Conversion Completed!');
+
+                    }
+                }
             }
         });
     };
@@ -2412,10 +2748,16 @@ dropZone.addEventListener('drop', (e) => {
 });
 
 const predictFileInput = document.getElementById('predict-file-input');
+predictionPreview.style.display = 'none';
 
-// delete
+function isPredictionPreviewVisible() {
+    return predictionPreview.style.display !== 'none'
+        && Boolean(predictionPreview.getAttribute('src'));
+}
+
+// Open the file picker while the drop zone is empty.
 dropZone.addEventListener('click', () => {
-    if (predictionPreview.style.display === 'none') {
+    if (!isPredictionPreviewVisible()) {
         predictFileInput.click();
     }
 });
@@ -2445,6 +2787,10 @@ predictionPreview.addEventListener('click', (e) => {
 });
 
 async function processPrediction(imagePath) {
+    const selectedFramework = getSelectedRuntimeFramework('prediction');
+    const isReady = await checkRuntimeFrameworkReadiness('prediction', selectedFramework);
+    if (!isReady) return;
+
     predictionPreview.src = `file://${imagePath}`;
     predictionPreview.style.display = 'block';
     document.querySelector('.drop-zone-content').style.display = 'none';
@@ -2457,7 +2803,7 @@ async function processPrediction(imagePath) {
     const result = await window.electronAPI.invoke('predict-image', {
         modelName: currentModelName,
         imagePath: imagePath,
-        modelType: getSelectedRuntimeFramework('prediction')
+        modelType: selectedFramework
     });
 
 
@@ -2472,9 +2818,47 @@ async function processPrediction(imagePath) {
         document.getElementById('confidence-text').textContent = `Model Confidence: ${confidencePct}%`;
     } else {
         document.getElementById('predicted-label').textContent = "Error during prediction";
+        if (isClassMismatchMessage(result.error)) {
+            openRuntimeFrameworkModal('Retraining Needed', result.error);
+        }
         console.error(result.error);
     }
 }
+
+// ============================================================
+// Help Tooltip Positioning
+// Tooltips use position:fixed so they escape overflow:hidden
+// containers anywhere in the layout.
+// ============================================================
+document.querySelectorAll('.help-icon-wrapper').forEach(wrapper => {
+    const tooltip = wrapper.querySelector('.help-tooltip');
+    if (!tooltip) return;
+
+    wrapper.addEventListener('mouseenter', () => {
+        const rect = wrapper.getBoundingClientRect();
+        const ttWidth = 240;
+        const gap = 10;
+        const goDown = wrapper.dataset.tooltipDirection === 'down';
+
+        // Centre above/below the icon, clamped to viewport edges
+        let left = rect.left + rect.width / 2 - ttWidth / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - ttWidth - 8));
+
+        tooltip.style.left = `${left}px`;
+        if (goDown) {
+            tooltip.style.top = `${rect.bottom + gap}px`;
+            tooltip.style.transform = 'none';
+        } else {
+            tooltip.style.top = `${rect.top - gap}px`;
+            tooltip.style.transform = 'translateY(-100%)';
+        }
+        tooltip.classList.add('is-visible');
+    });
+
+    wrapper.addEventListener('mouseleave', () => {
+        tooltip.classList.remove('is-visible');
+    });
+});
 
 const importVideoBtn = document.getElementById('import-video-btn');
 const importFolderBtn = document.getElementById('import-folder-btn');

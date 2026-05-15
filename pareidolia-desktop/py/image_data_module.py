@@ -149,6 +149,8 @@ class ImageDataModule(pl.LightningDataModule):
     def load_images_from_json(self, labels_json):
         """Load images from a JSON mapping of label names to arrays of folder paths."""
 
+        print("Loading images from JSON dataset...")
+
         if isinstance(labels_json, str):
             labels_json = labels_json.strip()
             if labels_json.startswith("{"):
