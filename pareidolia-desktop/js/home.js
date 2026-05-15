@@ -74,15 +74,21 @@ const predictionFrameworkInputs = document.querySelectorAll('input[name="predict
 const stepOutputAreaWrapper = document.getElementsByClassName('step-output-area-wrapper');
 const stepOutputAreaLabel = document.getElementById('step-output-area-label');
 
-function updateTrainButtonLabel(label) {
+function updateTrainButtonLabel(label, options = {}) {
+    const shouldShowLoader = options.loading ?? label.endsWith('...');
+    const displayLabel = shouldShowLoader ? label.replace(/\.\.\.$/, '') : label;
+
     if (stepOutputAreaLabel) {
-        stepOutputAreaLabel.textContent = label;
+        stepOutputAreaLabel.textContent = displayLabel;
         stepOutputAreaLabel.title = label;
-        return;
     }
 
     if (modelTrainBtn) {
-        modelTrainBtn.textContent = label;
+        modelTrainBtn.classList.toggle('is-loading', shouldShowLoader);
+
+        if (!stepOutputAreaLabel) {
+            modelTrainBtn.textContent = displayLabel;
+        }
     }
 }
 
@@ -1939,7 +1945,7 @@ modelTrainBtn.addEventListener('click', async () => {
 
     try {
         modelTrainBtn.disabled = true;
-        updateTrainButtonLabel('Training in progress...');
+        updateTrainButtonLabel('Loading Processes...');
         // modelTrainResults.textContent = 'Training in progress...';
         // modelTrainResults.style.color = '#FFA500';
 

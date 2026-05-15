@@ -911,21 +911,58 @@ body, html {
   align-items: center;
   justify-content: center;
   height: 56px;
-  min-width: 220px;
-  max-width: 320px;
+  min-width: 330px;
+  max-width: 330px;
   padding: 0 18px;
   box-sizing: border-box;
   gap: 1px;
 }
 
+.train-btn-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-width: 0;
+  gap: 7px;
+}
+
 .train-btn-label {
   display: block;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.94rem;
   line-height: 1.2;
+}
+
+.loader {
+  width: 16px;
+  aspect-ratio: 1;
+  --_g: no-repeat radial-gradient(farthest-side,currentColor 94%,#0000);
+  background:
+    var(--_g) 0    0,
+    var(--_g) 100% 0,
+    var(--_g) 100% 100%,
+    var(--_g) 0    100%;
+  background-size: 40% 40%;
+  animation: l38 .5s infinite;
+}
+
+.train-btn-loader {
+  display: none;
+  flex: 0 0 auto;
+  color: var(--white-smoke);
+}
+
+.train-btn-main.is-loading .train-btn-loader {
+  display: block;
+}
+
+@keyframes l38 {
+  100% {background-position: 100% 0,100% 100%,0 100%,0 0}
 }
 
 .footer-setting h3 {
@@ -1057,6 +1094,10 @@ body, html {
   .dataset-add-btn::before,
   .add-label-btn::before {
     display: none;
+  }
+
+  .loader {
+    animation: none;
   }
 }
 /* CAROUSEL STYLE */
