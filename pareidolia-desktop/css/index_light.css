@@ -2268,6 +2268,7 @@ body.dragging-outside-canvas .model-block {
   display: flex;
   gap: 10px;
   margin: 0 20px;
+  box-shadow: none;
 }
 
 .tab-btn {
@@ -2276,22 +2277,31 @@ body.dragging-outside-canvas .model-block {
   padding: 10px 20px;
   font-size: 1rem;
   cursor: pointer;
-  border-bottom: 3px solid transparent;
   border-radius: 999px;
   transition: all 0.2s ease;
   color: var(--dim-grey);
+  box-shadow: none !important;
+  text-shadow: none;
+  filter: none;
 }
 
 .tab-btn:hover {
-  background: rgba(0, 132, 255, 0.08);
+  background: rgba(115, 115, 118, 0.12);
   color: var(--onyx);
+  box-shadow: none !important;
+  filter: none;
 }
 
-.tab-btn.active {
+.tab-btn.active,
+.tab-btn:active,
+.tab-btn:focus,
+.tab-btn:focus-visible {
   color: var(--onyx);
   font-weight: bold;
-  background: rgba(0, 132, 255, 0.12);
-  border-bottom-color: rgba(0, 132, 255, 0.32);
+  background: rgba(115, 115, 118, 0.18);
+  box-shadow: none !important;
+  outline: none;
+  filter: none;
 }
 
 .tab-content {
@@ -2577,7 +2587,9 @@ body.dragging-outside-canvas .model-block {
   align-self: flex-end;
   height: calc(36px + 1rem + 6px);
   padding-top: 0;
+  padding-right: 28px;
   padding-bottom: 0;
+  padding-left: 28px;
 }
 
 .test-metrics-cards {
